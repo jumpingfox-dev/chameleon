@@ -4,8 +4,6 @@ Chameleon is a free and open-source, deeply customizable Jellyfin client built t
 
 Most clients lock you into a rigid layout. Chameleon gives you complete control over your interface while maximizing direct play to keep your server quiet and cool.
 
----
-
 ## Highlights
 
 * **Adaptive Interfaces:** Completely customize your home shelf rows, metadata layouts, and poster aspect ratios to match your library aesthetic.
@@ -14,8 +12,6 @@ Most clients lock you into a rigid layout. Chameleon gives you complete control 
 * **Advanced Subtitle Engine:** Native support for styled anime subtitles (`.ass`/`.ssa`) with fine-grained control over typography, sizing, and vertical offsets.
 * **Multi-Account & Server Switching:** Instant switching between local and remote server profiles without having to re-authenticate.
 * **Zero Telemetry:** Completely private with no analytics, trackers, or middleman servers—your device communicates strictly with your Jellyfin instance.
-
----
 
 ## Platforms & Downloads
 
@@ -34,8 +30,6 @@ Join our community testing pool on TestFlight:
 [<img src="https://img.shields.io/badge/Apple_TestFlight-Join_Beta-0D96F6?style=for-the-badge&logo=apple&logoColor=white" alt="TestFlight" />](https://testflight.apple.com)
 [<img src="https://img.shields.io/badge/App_Store-Coming_Soon-0D96F6?style=for-the-badge&logo=app-store&logoColor=white" alt="App Store" />](#)
 
----
-
 ## Development & Building
 
 ### Prerequisites
@@ -47,5 +41,5 @@ Join our community testing pool on TestFlight:
 
 1. **Clone the repository:**
    ```bash
-   git clone [https://github.com/jumpingfox-dev/chameleon.git](https://github.com/jumpingfox-dev/chameleon.git)
+   git clone https://github.com/jumpingfox-dev/chameleon.git
    cd chameleon
