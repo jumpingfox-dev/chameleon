@@ -1,64 +1,50 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:forui/forui.dart';
+import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 
-String primaryFont = 'Outfit';
-String secondaryFont = 'Instrument Sans';
-String tertiaryFont = 'JetBrains Mono';
-String loremIpsum = 'Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum.';
+import 'screens/settings.dart';
+import 'theme/theme.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
-
-  runApp(MaterialApp(
-    home: Home(),
-  ));
+  runApp(const Application());
 }
 
-class Home extends StatelessWidget {
-  const Home({super.key});
+// Router configuration
+final GoRouter _router = GoRouter(
+  initialLocation: '/settings',
+  routes: [
+    GoRoute(
+      path: '/settings',
+      builder: (context, state) => const SettingsScreen(),
+    ),
+  ],
+);
+
+class Application extends StatelessWidget {
+  const Application({super.key});
 
   @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: Colors.grey[200],
-      appBar: AppBar(
-        title: Text(
-          selectionColor: Colors.black,
-          'Welcome',
-          style:
-          GoogleFonts.getFont(
-            primaryFont,
-            fontSize: 30.0,
-            fontWeight: FontWeight.bold,
-            letterSpacing: 2.0,
-            color: Colors.grey[600],
-          ),
-        ),
+  Widget build(BuildContext context) => MaterialApp.router(
+    debugShowCheckedModeBanner: false,
+    supportedLocales: const [
+      Locale('en', 'US'),
+      ...FLocalizations.supportedLocales,
+    ],
+    localizationsDelegates: GlobalMaterialLocalizations.delegates,
+    theme: lightTheme.toApproximateMaterialTheme(),
+    darkTheme: darkTheme.toApproximateMaterialTheme(),
+    builder: (context, child) => FTheme(
+      data: Theme.brightnessOf(context) == Brightness.light
+          ? lightTheme
+          : darkTheme,
+      child: FToaster(
+        child: FTooltipGroup(child: child!),
       ),
-      body: Center(
-        child: Text(
-          loremIpsum,
-          style: GoogleFonts.getFont(
-            secondaryFont,
-            fontSize: 30.0,
-            fontWeight: FontWeight.bold,
-            letterSpacing: 2.0,
-            color: Colors.black,
-          ),
-          selectionColor: Colors.white,
-        ),
+    ),
 
-      ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: () {},
-        child: Text(
-          'Click',
-          style: GoogleFonts.getFont(
-            tertiaryFont,
-          )
-        ),
-      ),
-    );
-  }
+    // 3. Router Configuration
+    routerConfig: _router,
+  );
 }
