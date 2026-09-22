@@ -5,9 +5,12 @@ import 'package:google_fonts/google_fonts.dart';
 
 import 'screens/settings.dart';
 import 'theme/theme.dart';
+import 'utils/theme_controller.dart';
+import 'utils/theme_presets.dart';
 
-void main() {
+Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  themeController = await ThemeController.load();
   runApp(const Application());
 }
 
@@ -26,25 +29,29 @@ class Application extends StatelessWidget {
   const Application({super.key});
 
   @override
-  Widget build(BuildContext context) => MaterialApp.router(
-    debugShowCheckedModeBanner: false,
-    supportedLocales: const [
-      Locale('en', 'US'),
-      ...FLocalizations.supportedLocales,
-    ],
-    localizationsDelegates: GlobalMaterialLocalizations.delegates,
-    theme: lightTheme.toApproximateMaterialTheme(),
-    darkTheme: darkTheme.toApproximateMaterialTheme(),
-    builder: (context, child) => FTheme(
-      data: Theme.brightnessOf(context) == Brightness.light
-          ? lightTheme
-          : darkTheme,
-      child: FToaster(
-        child: FTooltipGroup(child: child!),
-      ),
-    ),
+  Widget build(BuildContext context) => ValueListenableBuilder<ThemePreset>(
+    valueListenable: themeController,
+    builder: (context, preset, _) {
+      final light = buildTheme(preset.light);
+      final dark = buildTheme(preset.dark);
 
-    // 3. Router Configuration
-    routerConfig: _router,
+      return MaterialApp.router(
+        debugShowCheckedModeBanner: false,
+        supportedLocales: const [
+          Locale('en', 'US'),
+          ...FLocalizations.supportedLocales,
+        ],
+        localizationsDelegates: GlobalMaterialLocalizations.delegates,
+        theme: light.toApproximateMaterialTheme(),
+        darkTheme: dark.toApproximateMaterialTheme(),
+        builder: (context, child) => FTheme(
+          data: Theme.brightnessOf(context) == Brightness.light ? light : dark,
+          child: FToaster(
+            child: FTooltipGroup(child: child!),
+          ),
+        ),
+        routerConfig: _router,
+      );
+    },
   );
 }
