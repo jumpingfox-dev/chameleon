@@ -43,7 +43,6 @@ dependencies:
   forui: ^0.26.0
   forui_phosphor: ^0.26.1
   shared_preferences: ^2.5.5
-
 dev_dependencies:
   flutter_test:
     sdk: flutter

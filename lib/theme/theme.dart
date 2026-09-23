@@ -3,19 +3,21 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:forui_phosphor/forui_phosphor.dart';
 
-import '../utils/theme_parser.dart';
-import '../utils/theme_presets.dart';
-
 part 'colors.dart';
 part 'typography.dart';
 part 'style.dart';
 part 'icons.dart';
 
-FThemeData buildTheme(FColors colors) {
+FThemeData buildTheme(FColors colors, {required String displayFont, required String bodyFont}) {
   // Change this to false to use the desktop variant of this theme.
   const touch = false;
 
-  final typography = _typography(colors: colors, touch: touch);
+  final typography = _typography(
+    colors: colors,
+    touch: touch,
+    displayFont: displayFont,
+    bodyFont: bodyFont,
+  );
 
   final icons = _icons();
 
