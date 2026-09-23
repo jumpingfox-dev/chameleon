@@ -1,6 +1,7 @@
 import 'package:forui/forui.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:visibility_detector/visibility_detector.dart';
 
 import '../utils/font_controller.dart';
 import '../utils/theme_controller.dart';
@@ -12,8 +13,8 @@ typedef _SettingsTab = ({String label, Widget Function() build});
 
 final _tabs = <_SettingsTab>[
   (label: 'Appearance', build: () => const _AppearanceCard()),
-  // (label: 'Account', build: () => const _AccountCard()),
-  // (label: 'Playback', build: () => const _PlaybackCard()),
+  (label: 'Account', build: () => const _AccountCard()),
+  (label: 'Playback', build: () => const _PlaybackCard()),
 ];
 
 class SettingsScreen extends StatefulWidget {
@@ -28,36 +29,29 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   @override
   Widget build(BuildContext context) => FScaffold(
-    header: FHeader(
-      title: Row(
-        children: [
-          const Text('Settings'),
-          const SizedBox(width: 16),
-          Expanded(
-            // Scrolls sideways if there are more pills than fit.
-            child: SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
-              child: Row(
-                spacing: 8,
-                children: [
-                  for (var i = 0; i < _tabs.length; i++)
-                    FButton(
-                      variant: i == _index ? .primary : .outline,
-                      size: .sm,
-                      mainAxisSize: .min,
-                      onPress: () => setState(() => _index = i),
-                      child: Text(_tabs[i].label),
-                    ),
-                ],
-              ),
-            ),
-          ),
-        ],
-      ),
-    ),
     child: ListView(
       padding: const EdgeInsets.symmetric(vertical: 8),
-      children: [_tabs[_index].build()],
+      children: [
+        // Tab pills, above the card.
+        SingleChildScrollView(
+          scrollDirection: Axis.horizontal, // scrolls sideways if there are more pills than fit
+          child: Row(
+            spacing: 8,
+            children: [
+              for (var i = 0; i < _tabs.length; i++)
+                FButton(
+                  variant: i == _index ? .primary : .outline,
+                  size: .sm,
+                  mainAxisSize: .min,
+                  onPress: () => setState(() => _index = i),
+                  child: Text(_tabs[i].label),
+                ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 12),
+        _tabs[_index].build(),
+      ],
     ),
   );
 }
@@ -89,6 +83,56 @@ class _SettingsCard extends StatelessWidget {
   );
 }
 
+class _FontPreview extends StatefulWidget {
+  const _FontPreview(this.font);
+
+  final String font;
+
+  @override
+  State<_FontPreview> createState() => _FontPreviewState();
+}
+
+class _FontPreviewState extends State<_FontPreview> {
+  TextStyle? _style;
+  bool _requested = false;
+
+  @override
+  void initState() {
+    super.initState();
+    // Fonts preloaded by the search show immediately, with no placeholder.
+    if (loadedFonts.contains(widget.font)) {
+      _style = GoogleFonts.getFont(widget.font);
+      _requested = true;
+    }
+  }
+
+  void _load() {
+    if (_requested) return;
+    _requested = true;
+    preloadFonts([widget.font]).then((_) {
+      if (mounted) setState(() => _style = GoogleFonts.getFont(widget.font));
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) => VisibilityDetector(
+    key: ValueKey('font-preview-${widget.font}'),
+    onVisibilityChanged: (info) {
+      if (info.visibleFraction > 0) _load();
+    },
+    child: AnimatedSwitcher(
+      duration: const Duration(milliseconds: 200),
+      child: _style == null
+          ? Text(
+        widget.font,
+        key: const ValueKey('placeholder'),
+        style: TextStyle(color: context.theme.colors.mutedForeground),
+      )
+          : Text(widget.font, key: const ValueKey('loaded'), style: _style),
+    ),
+  );
+}
+
 /// A font selector FSelect reusable widget
 class _FontSelect extends StatelessWidget {
   const _FontSelect({required this.label, required this.value, required this.onChange});
@@ -104,12 +148,7 @@ class _FontSelect extends StatelessWidget {
     filter: searchFonts,
     searchFieldProperties: const FSelectSearchFieldProperties(hint: 'Search Google Fonts'),
     contentBuilder: (context, _, fonts) => [
-      for (final font in fonts)
-            .item(
-          // Each option is drawn in its own font as a live preview.
-          title: Text(font, style: GoogleFonts.getFont(font)),
-          value: font,
-        ),
+      for (final font in fonts) .item(title: _FontPreview(font), value: font),
     ],
     control: FSelectControl.lifted(
       value: value,
@@ -136,7 +175,7 @@ class _AppearanceCard extends StatelessWidget {
         children: [
           /// START: Font Picker
           _FontSelect(
-            label: 'Heading Font',
+            label: 'Header Font',
             value: fontController.display,
             onChange: fontController.setDisplay,
           ),
@@ -169,4 +208,36 @@ class _AppearanceCard extends StatelessWidget {
       );
     },
   );
+}
+
+/// Account Settings Tab
+class _AccountCard extends StatelessWidget {
+  const _AccountCard();
+
+  @override
+  Widget build(BuildContext context) {
+    return _SettingsCard(
+      title: 'Account',
+      subtitle: 'Choose fonts and a theme, or select "Custom" to build your own theme.',
+      children: [
+
+      ],
+    );
+  }
+}
+
+/// Account Settings Tab
+class _PlaybackCard extends StatelessWidget {
+  const _PlaybackCard();
+
+  @override
+  Widget build(BuildContext context) {
+    return _SettingsCard(
+      title: 'Playback',
+      subtitle: 'Choose fonts and a theme, or select "Custom" to build your own theme.',
+      children: [
+
+      ],
+    );
+  }
 }

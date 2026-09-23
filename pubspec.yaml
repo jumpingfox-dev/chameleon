@@ -44,6 +44,8 @@ dependencies:
   forui_phosphor: ^0.26.1
   shared_preferences: ^2.5.5
   path_provider: ^2.1.6
+  visibility_detector: ^0.4.0+2
+  flutter_svg: ^2.3.0
 dev_dependencies:
   flutter_test:
     sdk: flutter
@@ -70,6 +72,7 @@ flutter:
   # To add assets to your application, add an assets section, like this:
   assets:
     - assets/
+    - assets/images/
   fonts:
     - family: Instrument Sans
       fonts:

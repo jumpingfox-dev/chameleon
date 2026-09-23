@@ -10,8 +10,8 @@ final allFonts = GoogleFonts.asMap().keys.toList()..sort();
 
 /// Shown when the search box is empty.
 const suggestedFonts = [
-  'Instrument Sans',
   'Space Grotesk',
+  'Instrument Sans',
   'Inter',
   'DM Sans',
   'Manrope',
@@ -56,8 +56,12 @@ Future<void> pruneFontCache(Iterable<String> keepFamilies) async {
   }
 }
 
-/// Search: names starting with the query first, then names containing it.
-Future<Iterable<String>> searchFonts(String query, {int limit = 40}) async {
+/// Fonts known to be downloaded and ready this session.
+final loadedFonts = <String>{};
+
+const _preloadCount = 8; // about one screen of results
+
+List<String> _matchFonts(String query, int limit) {
   if (query.trim().isEmpty) return suggestedFonts;
   final q = query.trim().toLowerCase();
   final starts = <String>[];
@@ -70,7 +74,29 @@ Future<Iterable<String>> searchFonts(String query, {int limit = 40}) async {
       contains.add(font);
     }
   }
-  return [...starts, ...contains].take(limit);
+  return [...starts, ...contains].take(limit).toList();
+}
+
+/// Starts downloading [fonts] and waits until they're ready, or until the timeout.
+Future<void> preloadFonts(Iterable<String> fonts) async {
+  final toLoad = fonts.where((f) => !loadedFonts.contains(f)).toList();
+  if (toLoad.isEmpty) return;
+  for (final font in toLoad) {
+    GoogleFonts.getFont(font); // starts the download
+  }
+  try {
+    await GoogleFonts.pendingFonts().timeout(const Duration(seconds: 4));
+  } catch (_) {
+    // Offline or slow: show the list anyway and let rows fall back.
+  }
+  loadedFonts.addAll(toLoad);
+}
+
+/// Search, then wait for the first screenful of fonts before returning.
+Future<Iterable<String>> searchFonts(String query, {int limit = 60}) async {
+  final results = _matchFonts(query, limit);
+  await preloadFonts(results.take(_preloadCount));
+  return results;
 }
 
 class FontController extends ChangeNotifier {
