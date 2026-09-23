@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:material_ui/material_ui.dart';
 import 'package:forui/forui.dart';
 import 'package:go_router/go_router.dart';
@@ -5,13 +7,17 @@ import 'package:go_router/go_router.dart';
 import 'screens/settings.dart';
 import 'theme/theme.dart';
 import 'utils/theme_controller.dart';
-import 'utils/theme_presets.dart';
 import 'utils/font_controller.dart';
+
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   themeController = await ThemeController.load();
   fontController = await FontController.load();
+
+  // Clean up in the background so it doesn't delay startup.
+  unawaited(pruneFontCache([fontController.display, fontController.body]));
+
   runApp(const Application());
 }
 

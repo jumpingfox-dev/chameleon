@@ -1,6 +1,9 @@
+import 'dart:io';
+
 import 'package:flutter/foundation.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:path_provider/path_provider.dart';
 
 /// Every Google Fonts family, alphabetical.
 final allFonts = GoogleFonts.asMap().keys.toList()..sort();
@@ -23,6 +26,35 @@ const suggestedFonts = [
   'Lora',
   'JetBrains Mono',
 ];
+
+/// Deletes cached Google Fonts files except those for [keepFamilies].
+Future<void> pruneFontCache(Iterable<String> keepFamilies) async {
+  if (kIsWeb) return; // the web has no font file cache to clean
+
+  final dir = await getApplicationSupportDirectory();
+  if (!await dir.exists()) return;
+
+  // "Space Grotesk" -> "spacegrotesk_" to match cached names like "SpaceGrotesk_700.ttf".
+  String normalize(String s) => s.replaceAll(' ', '').toLowerCase();
+  final keep = [for (final f in keepFamilies) '${normalize(f)}_'];
+
+  await for (final entity in dir.list()) {
+    if (entity is! File) continue;
+
+    final name = entity.uri.pathSegments.last;
+    final lower = name.toLowerCase();
+    // Only touch font files. Other data lives in this folder too, such as shared_preferences on Linux.
+    if (!lower.endsWith('.ttf') && !lower.endsWith('.otf')) continue;
+
+    if (keep.any((prefix) => normalize(name).startsWith(prefix))) continue;
+
+    try {
+      await entity.delete();
+    } catch (_) {
+      // A file in use or already gone isn't worth crashing over.
+    }
+  }
+}
 
 /// Search: names starting with the query first, then names containing it.
 Future<Iterable<String>> searchFonts(String query, {int limit = 40}) async {

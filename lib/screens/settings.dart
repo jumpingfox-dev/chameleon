@@ -120,7 +120,7 @@ class _FontSelect extends StatelessWidget {
   );
 }
 
-/// Appearance Settings
+/// Appearance Settings Tab
 class _AppearanceCard extends StatelessWidget {
   const _AppearanceCard();
 
@@ -132,7 +132,7 @@ class _AppearanceCard extends StatelessWidget {
 
       return _SettingsCard(
         title: 'Appearance',
-        subtitle: 'Choose a theme and fonts, or pick Custom to build your own colors.',
+        subtitle: 'Choose fonts and a theme, or select "Custom" to build your own theme.',
         children: [
           /// START: Font Picker
           _FontSelect(
@@ -146,7 +146,7 @@ class _AppearanceCard extends StatelessWidget {
             value: fontController.body,
             onChange: fontController.setBody,
           ),
-          /// START: Font Picker
+          /// END: Font Picker
           const SizedBox(height: 16),
           /// START: Theme Select
           FSelect<ThemePreset>(
