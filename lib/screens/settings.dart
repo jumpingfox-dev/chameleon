@@ -15,6 +15,8 @@ final _tabs = <_SettingsTab>[
   (label: 'Appearance', build: () => const _AppearanceCard()),
   (label: 'Account', build: () => const _AccountCard()),
   (label: 'Playback', build: () => const _PlaybackCard()),
+  (label: 'Server', build: () => const _ServerCard()),
+  (label: 'About', build: () => const _AboutCard()),
 ];
 
 class SettingsScreen extends StatefulWidget {
@@ -190,7 +192,7 @@ class _AppearanceCard extends StatelessWidget {
           /// START: Theme Select
           FSelect<ThemePreset>(
             label: const Text('Theme'),
-            hint: 'Default',
+            hint: 'Prism',
             items: {for (final p in themeController.allPresets) p.label: p},
             control: FSelectControl.lifted(
               value: preset,
@@ -226,7 +228,7 @@ class _AccountCard extends StatelessWidget {
   }
 }
 
-/// Account Settings Tab
+/// Playback Settings Tab
 class _PlaybackCard extends StatelessWidget {
   const _PlaybackCard();
 
@@ -234,6 +236,38 @@ class _PlaybackCard extends StatelessWidget {
   Widget build(BuildContext context) {
     return _SettingsCard(
       title: 'Playback',
+      subtitle: 'Choose fonts and a theme, or select "Custom" to build your own theme.',
+      children: [
+
+      ],
+    );
+  }
+}
+
+/// Server Settings Tab
+class _ServerCard extends StatelessWidget {
+  const _ServerCard();
+
+  @override
+  Widget build(BuildContext context) {
+    return _SettingsCard(
+      title: 'Server',
+      subtitle: 'Choose fonts and a theme, or select "Custom" to build your own theme.',
+      children: [
+
+      ],
+    );
+  }
+}
+
+/// About Settings Tab
+class _AboutCard extends StatelessWidget {
+  const _AboutCard();
+
+  @override
+  Widget build(BuildContext context) {
+    return _SettingsCard(
+      title: 'About',
       subtitle: 'Choose fonts and a theme, or select "Custom" to build your own theme.',
       children: [
 
