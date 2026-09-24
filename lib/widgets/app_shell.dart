@@ -138,7 +138,7 @@ class _TopNavBarState extends State<_TopNavBar> {
           child: Row(
             children: [
               const AppLogo(height: 28),
-              const SizedBox(width: 6),
+              const SizedBox(width: 8),
 
               // Home + libraries + Genres, then search filling any leftover space
               Expanded(

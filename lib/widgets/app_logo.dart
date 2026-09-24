@@ -4,7 +4,7 @@ import 'package:material_ui/material_ui.dart';
 
 /// The app logo, filled with a gradient from the current theme.
 class AppLogo extends StatelessWidget {
-  const AppLogo({super.key, this.asset = 'assets/images/text_logo.svg', this.height = 32});
+  const AppLogo({super.key, this.asset = 'assets/images/logo.svg', this.height = 32});
 
   final String asset;
   final double height;
