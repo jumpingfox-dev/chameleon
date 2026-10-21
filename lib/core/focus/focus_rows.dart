@@ -125,10 +125,73 @@ bool isOnTopPage(FocusNode node) {
 }
 
 /// Replaces Flutter's "nearest thing in that direction" arrow navigation for everything below it.
-class RowFocusNavigation extends StatelessWidget {
+///
+/// Also keeps your place: when the focused item goes away while you're on it (a Home row
+/// refreshing, say), Flutter leaves focus on the page itself, with nothing highlighted, and the
+/// next arrow would start over at the top. Instead, focus goes straight back to that item if
+/// it's still there, or else to whatever now sits nearest to where it was.
+class RowFocusNavigation extends StatefulWidget {
   const RowFocusNavigation({super.key, required this.child});
 
   final Widget child;
+
+  @override
+  State<RowFocusNavigation> createState() => _RowFocusNavigationState();
+}
+
+/// The item last focused in each page (focus scope), and where it was on screen.
+final _lastOnPage = Expando<(FocusNode, Rect)>('RowFocusNavigation.last');
+
+class _RowFocusNavigationState extends State<RowFocusNavigation> {
+  @override
+  void initState() {
+    super.initState();
+    FocusManager.instance.addListener(_onFocusChange);
+  }
+
+  @override
+  void dispose() {
+    FocusManager.instance.removeListener(_onFocusChange);
+    super.dispose();
+  }
+
+  void _onFocusChange() {
+    final focused = FocusManager.instance.primaryFocus;
+    if (focused == null) return;
+    if (focused is! FocusScopeNode) {
+      final scope = focused.nearestScope;
+      if (scope != null && focused.context != null) _lastOnPage[scope] = (focused, focused.rect);
+      return;
+    }
+    // Focus fell back to a page. Only with a keyboard or remote: on a touch screen nothing
+    // shows focus anyway.
+    if (FocusManager.instance.highlightMode != FocusHighlightMode.traditional) return;
+    final last = _lastOnPage[focused];
+    if (last == null) return; // a page just opened: it picks its own first item
+    // After this frame, once whatever replaced the item is built.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (FocusManager.instance.primaryFocus != focused) return; // focus went somewhere already
+      final (node, rect) = last;
+      if (node.context != null && node.canRequestFocus && node.nearestScope == focused) {
+        node.requestFocus();
+        return;
+      }
+      final nearest = _best(
+        focused.traversalDescendants.where(
+          (n) =>
+              n is! FocusScopeNode &&
+              n.canRequestFocus &&
+              !n.skipTraversal &&
+              isOnTopPage(n) &&
+              _isLaidOut(n) &&
+              !n.rect.isEmpty &&
+              _columnOf(n) == null,
+        ),
+        (r) => (r.center - rect.center).distance,
+      );
+      nearest?.requestFocus();
+    });
+  }
 
   @override
   Widget build(BuildContext context) => Actions(
@@ -140,7 +203,7 @@ class RowFocusNavigation extends StatelessWidget {
         },
       ),
     },
-    child: child,
+    child: widget.child,
   );
 }
 

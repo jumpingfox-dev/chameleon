@@ -10,9 +10,10 @@ import '../../core/focus/focus_rows.dart';
 import 'home_layout.dart';
 import '../../core/format/item_format.dart';
 import '../../core/jellyfin/jellyfin_controller.dart';
+import '../../core/jellyfin/list_each.dart';
 import '../../core/platform/page_insets.dart';
 import '../../core/storage/app_cache.dart';
-import '../../core/platform/orientation.dart';
+import '../../core/platform/screen_type.dart';
 import '../detail/detail_page.dart';
 import '../library/poster_card.dart';
 import '../../core/focus/scroll_into_view.dart';
@@ -87,6 +88,7 @@ final homeModuleSpecs = <HomeModuleType, HomeModuleSpec>{
     view: LibraryView.thumbnail,
     load: (client, _) async => HomeModuleContent(
       (await client.tvShows.nextUp(
+        enableTotalRecordCount: false,
         limit: 20,
         enableResumable: false,
       )) // in-progress episodes are in Continue Watching
@@ -100,14 +102,13 @@ final homeModuleSpecs = <HomeModuleType, HomeModuleSpec>{
     description: 'Your favorite movies and shows',
     icon: (i) => i.favorite,
     load: (client, _) async => HomeModuleContent(
-      (await client.items.list(
+      await client.items.listEach(
         filters: const ['IsFavorite'],
-        includeItemTypes: const [..._moviesAndShows, 'BoxSet'],
-        recursive: true,
+        types: const [..._moviesAndShows, 'BoxSet'],
         sortBy: const['Random'],
         limit: 30,
         fields: const ['RecursiveItemCount'],
-      )).items,
+      ),
     ),
   ),
   HomeModuleType.recentlyAdded: HomeModuleSpec(
@@ -115,14 +116,13 @@ final homeModuleSpecs = <HomeModuleType, HomeModuleSpec>{
     description: 'The newest movies and shows on your server',
     icon: (i) => i.recentlyAdded,
     load: (client, _) async => HomeModuleContent(
-      (await client.items.list(
-        includeItemTypes: _moviesAndShows,
-        recursive: true,
+      await client.items.listEach(
+        types: _moviesAndShows,
         sortBy: const ['DateCreated'],
         descending: true,
         limit: 30,
         fields: const ['RecursiveItemCount'],
-      )).items,
+      ),
     ),
   ),
   HomeModuleType.recentlyAddedMovies: HomeModuleSpec(
@@ -131,6 +131,7 @@ final homeModuleSpecs = <HomeModuleType, HomeModuleSpec>{
     icon: (i) => i.movies,
     load: (client, _) async => HomeModuleContent(
       (await client.items.list(
+        enableTotalRecordCount: false,
         includeItemTypes: const [JellyfinItemKind.movie],
         recursive: true,
         sortBy: const ['DateCreated'],
@@ -145,6 +146,7 @@ final homeModuleSpecs = <HomeModuleType, HomeModuleSpec>{
     icon: (i) => i.shows,
     load: (client, _) async => HomeModuleContent(
       (await client.items.list(
+        enableTotalRecordCount: false,
         includeItemTypes: const [JellyfinItemKind.series],
         recursive: true,
         sortBy: const ['DateLastContentAdded'],
@@ -184,14 +186,13 @@ final homeModuleSpecs = <HomeModuleType, HomeModuleSpec>{
 
 /// A random handful of movies and shows that have backdrop art to show off.
 Future<HomeModuleContent> _featured(JellyfinClient client, HomeModule _) async {
-  final page = await client.items.list(
-    includeItemTypes: _moviesAndShows,
-    recursive: true,
+  final items = await client.items.listEach(
+    types: _moviesAndShows,
     sortBy: const ['Random'],
     limit: 30, // more than needed, since some won't have a backdrop
     fields: const ['Overview'],
   );
-  final withArt = page.items
+  final withArt = items
       .where(
         (item) => (item.raw['BackdropImageTags'] as List?)?.isNotEmpty ?? false,
   )
@@ -206,18 +207,18 @@ Future<HomeModuleContent> _suggested(
     HomeModule _,
     ) async {
   var items = (await client.suggestions.list(
+    enableTotalRecordCount: false,
     mediaType: const ['Video'],
     type: _moviesAndShows,
     limit: 30,
   )).items;
   if (items.isEmpty) {
-    items = (await client.items.list(
-      includeItemTypes: _moviesAndShows,
-      recursive: true,
+    items = await client.items.listEach(
+      types: _moviesAndShows,
       sortBy: const ['Random'],
       limit: 30,
       fields: const ['RecursiveItemCount'],
-    )).items;
+    );
   }
   return HomeModuleContent(items);
 }
@@ -228,6 +229,7 @@ Future<HomeModuleContent> _becauseYouWatched(
     HomeModule _,
     ) async {
   final last = (await client.items.list(
+    enableTotalRecordCount: false,
     filters: const ['IsPlayed'],
     includeItemTypes: const [JellyfinItemKind.movie, JellyfinItemKind.episode],
     recursive: true,
@@ -251,6 +253,7 @@ Future<HomeModuleContent> _becauseYouWatched(
   if (genres.isEmpty) return HomeModuleContent(const [], title: title);
 
   final similar = await client.items.list(
+    enableTotalRecordCount: false,
     genres: genres,
     includeItemTypes: [
       isEpisode ? JellyfinItemKind.series : JellyfinItemKind.movie,
@@ -272,6 +275,7 @@ Future<HomeModuleContent> _collection(
   final id = module.param;
   if (id == null) return const HomeModuleContent([]);
   final page = await client.items.list(
+    enableTotalRecordCount: false,
     parentId: id,
     sortBy: const ['ProductionYear', 'SortName'],
     limit: 50,
@@ -287,15 +291,14 @@ Future<HomeModuleContent> _genre(
     ) async {
   final genre = module.param;
   if (genre == null) return const HomeModuleContent([]);
-  final page = await client.items.list(
+  final items = await client.items.listEach(
     genres: [genre],
-    includeItemTypes: _moviesAndShows,
-    recursive: true,
+    types: _moviesAndShows,
     sortBy: const ['Random'],
     limit: 30,
     fields: const ['RecursiveItemCount'],
   );
-  return HomeModuleContent(page.items, title: genre);
+  return HomeModuleContent(items, title: genre);
 }
 
 // ─── Cache ───────────────────────────────────────────────────────────────────
@@ -309,6 +312,26 @@ final homeVisible = ValueNotifier<int>(0);
 
 /// Forgets every section's content, e.g. on sign-out.
 void clearHomeCache() => appCache.invalidateWhere((key) => key.startsWith('home:'));
+
+/// Bumped after something's been watched, so the sections that follow your progress reload.
+final watchProgressChanged = ValueNotifier<int>(0);
+
+/// After playing something: Continue Watching and Next Up reload, since your progress changed.
+/// Everything else keeps what it showed (the random sections especially), so Home looks the
+/// same as when you left it.
+void refreshWatchProgress() {
+  final ids = {
+    for (final module in homeLayout.value)
+      if (module.type.followsProgress) module.id,
+  };
+  appCache.invalidateWhere((key) => ids.any((id) => key == _cacheKey(id)));
+  watchProgressChanged.value++;
+}
+
+extension on HomeModuleType {
+  /// Shows what you're partway through or up to next, so it changes as you watch.
+  bool get followsProgress => this == HomeModuleType.continueWatching || this == HomeModuleType.nextUp;
+}
 
 // ─── Section view ────────────────────────────────────────────────────────────
 
@@ -335,6 +358,7 @@ class _HomeModuleViewState extends State<HomeModuleView>
     with AutomaticKeepAliveClientMixin {
   HomeModuleContent? _content;
   String? _error;
+  final _rowScroll = ScrollController();
 
   HomeModuleSpec get _spec => homeModuleSpecs[widget.module.type]!;
 
@@ -343,7 +367,7 @@ class _HomeModuleViewState extends State<HomeModuleView>
   LibraryView _viewFor(BuildContext context) =>
       LibraryView.values.asNameMap()[widget.module.view] ??
           _spec.view ??
-          (isPhoneLayout(context)
+          (ScreenType.of(context).isPhone
               ? LibraryView.poster
               : LibraryView.thumbnail);
 
@@ -356,6 +380,7 @@ class _HomeModuleViewState extends State<HomeModuleView>
     super.initState();
     favoritesChanged.addListener(_load);
     homeVisible.addListener(_refreshIfStale);
+    watchProgressChanged.addListener(_onWatched);
 
     _content = appCache.peek(_cacheKey(widget.module.id), fromJson: HomeModuleContent.fromJson);
     if (!appCache.isFresh(_cacheKey(widget.module.id))) _load();
@@ -365,7 +390,13 @@ class _HomeModuleViewState extends State<HomeModuleView>
   void dispose() {
     favoritesChanged.removeListener(_load);
     homeVisible.removeListener(_refreshIfStale);
+    watchProgressChanged.removeListener(_onWatched);
+    _rowScroll.dispose();
     super.dispose();
+  }
+
+  void _onWatched() {
+    if (widget.module.type.followsProgress) _load();
   }
 
   void _refreshIfStale() {
@@ -502,7 +533,7 @@ class _HomeModuleViewState extends State<HomeModuleView>
   }
 
   Widget _carousel(BuildContext context) {
-    final isPhone = isPhoneLayout(context);
+    final isPhone = ScreenType.of(context).isPhone;
     final items = _content?.items;
     final muted = context.text.bodyMedium?.copyWith(
       color: context.colors.onSurfaceVariant,
@@ -536,7 +567,7 @@ class _HomeModuleViewState extends State<HomeModuleView>
     );
     final items = _content?.items;
 
-    final Widget content;
+    Widget content;
     if (widget.editing || (items == null && _error == null)) {
       // Editing (just the layout, no artwork) or still loading: tiles' shapes in their place.
       content = _Pulsing(
@@ -565,17 +596,26 @@ class _HomeModuleViewState extends State<HomeModuleView>
     } else {
       content = FocusRow(
         child: ListView.separated(
+          controller: _rowScroll,
           scrollDirection: Axis.horizontal,
           // Inside the list, so the first card starts in line with the title
           // but cards can still scroll right to the screen's edge.
           padding: pageSides(context),
           itemCount: items.length,
-          separatorBuilder: (_, _) => const SizedBox(width: 4),
+          separatorBuilder: (_, _) => const SizedBox(width: _rowGap),
           itemBuilder: (context, i) {
-            final card = PosterCard(
-              item: items[i],
-              view: view,
-              onPress: () => openItem(context, items[i]),
+            final card = Focus(
+              // Doesn't take focus itself: notices the card getting it, and scrolls the row.
+              canRequestFocus: false,
+              skipTraversal: true,
+              onFocusChange: (focused) {
+                if (focused) _keepInSlot(context, i, tileWidth);
+              },
+              child: PosterCard(
+                item: items[i],
+                view: view,
+                onPress: () => openItem(context, items[i]),
+              ),
             );
             return SizedBox(
               width: tileWidth,
@@ -594,13 +634,37 @@ class _HomeModuleViewState extends State<HomeModuleView>
       );
     }
 
+    // Scrolled along with a remote, the card before the first one in view would peek out of
+    // the margin as a sliver. Phones keep rows running to the edge, for swiping.
+    if (!ScreenType.of(context).isPhone) {
+      content = ClipRect(clipper: _LeftMarginClipper(pageSides(context).left / 2), child: content);
+    }
     return SizedBox(height: rowHeight, child: content);
+  }
+
+  /// The space between a row's tiles.
+  static const _rowGap = 4.0;
+
+  /// With a remote or keyboard, scrolls the row so card [index] sits where the last card that
+  /// fits whole on screen sits when the row is at its start (the third, say). Focus moves along
+  /// the first few without the row moving; after that, each next card slides into that same
+  /// spot, and going back works the same way.
+  void _keepInSlot(BuildContext context, int index, double tileWidth) {
+    if (FocusManager.instance.highlightMode != FocusHighlightMode.traditional) return;
+    if (!_rowScroll.hasClients) return;
+    final position = _rowScroll.position;
+    final step = tileWidth + _rowGap;
+    final start = pageSides(context).left; // the row's padding before the first card
+    final slot = math.max(0, ((position.viewportDimension - start - tileWidth) / step).floor());
+    final offset = ((index - slot) * step).clamp(position.minScrollExtent, position.maxScrollExtent);
+    if ((offset - position.pixels).abs() < 0.5) return;
+    position.animateTo(offset, duration: const Duration(milliseconds: 200), curve: Curves.easeOutCubic);
   }
 
   /// A tile's width in a row. Bigger on wider screens (a TV is watched from across the room);
   /// phones keep theirs.
   static double _tileWidth(BuildContext context, LibraryView view) {
-    final isPhone = isPhoneLayout(context);
+    final isPhone = ScreenType.of(context).isPhone;
     return switch (view) {
       LibraryView.poster => isPhone ? 150.0 : 180.0,
       LibraryView.thumbnail => isPhone ? 280.0 : 340.0,
@@ -631,6 +695,7 @@ class AddHomeModules extends StatelessWidget {
           title: 'Choose a collection',
           options: client.items
               .list(
+            enableTotalRecordCount: false,
             includeItemTypes: const ['BoxSet'],
             recursive: true,
             sortBy: const ['SortName'],
@@ -1000,7 +1065,7 @@ class _CarouselSlide extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final client = jellyfin.client!;
-    final isPhone = isPhoneLayout(context);
+    final isPhone = ScreenType.of(context).isPhone;
     final backdropTag = (item.raw['BackdropImageTags'] as List).first as String;
     final logoTag = item.imageTags['Logo'];
     final overview = (item.raw['Overview'] as String?)?.trim();
@@ -1116,6 +1181,7 @@ class _CarouselSlide extends StatelessWidget {
                           spacing: 8,
                           children: [
                             FilledButton(
+                              style: actionButtonStyle,
                               focusNode: playFocus,
                               onPressed: () => playItem(context, item),
                               child: Row(
@@ -1125,6 +1191,7 @@ class _CarouselSlide extends StatelessWidget {
                               ),
                             ),
                             FilledButton.tonal(
+                              style: actionButtonStyle,
                               focusNode: infoFocus,
                               onPressed: () => openItem(context, item),
                               child: Row(
@@ -1339,4 +1406,18 @@ class _PlaceholderBanner extends StatelessWidget {
       ),
     ],
   );
+}
+
+/// Hides everything in the first [left] pixels of a row, and nothing else (a focused card can
+/// still grow past the row's top and bottom).
+class _LeftMarginClipper extends CustomClipper<Rect> {
+  const _LeftMarginClipper(this.left);
+
+  final double left;
+
+  @override
+  Rect getClip(Size size) => Rect.fromLTRB(left, -size.height, size.width * 2, size.height * 2);
+
+  @override
+  bool shouldReclip(_LeftMarginClipper old) => old.left != left;
 }

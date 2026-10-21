@@ -107,6 +107,13 @@ String _googleFamily(String name) => GoogleFonts.getFont(name).fontFamily!;
 /// The outline for search boxes: a pill, like the sidebar's links.
 const searchFieldBorder = OutlineInputBorder(borderRadius: BorderRadius.all(Radius.circular(999)));
 
+/// Play, More info, Favorite and the like on Home's carousel and the detail pages: rounded
+/// rectangles rather than Material's pills, like the genre buttons. Pass as a button's `style`;
+/// the theme's colors and focus ring still apply.
+const actionButtonStyle = ButtonStyle(
+  shape: WidgetStatePropertyAll(RoundedRectangleBorder(borderRadius: BorderRadius.all(Radius.circular(8)))),
+);
+
 /// Genre buttons: rounded rectangles on the card color with light text, rather than Material's
 /// accent-colored pills, which look busy in a grid or a row of genres. The theme's focus ring
 /// still applies.

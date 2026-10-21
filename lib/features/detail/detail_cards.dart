@@ -13,7 +13,7 @@ class _BackdropBanner extends StatelessWidget {
   Widget build(BuildContext context) {
     final client = jellyfin.client!;
     final colors = context.colors;
-    final isPhone = isPhoneLayout(context);
+    final isPhone = ScreenType.of(context).isPhone;
 
     final backdrops = item.raw['BackdropImageTags'] as List?;
     final backdropTag = backdrops != null && backdrops.isNotEmpty
@@ -103,8 +103,8 @@ class _BackdropBanner extends StatelessWidget {
                     ),
                   ),
                 ),
-                // ── Close (popouts only) ──
-                if (_PopoutScope.of(context))
+                // ── Close (popouts on touch screens only; TVs have Back, desktops Esc) ──
+                if (_PopoutScope.of(context) && ScreenType.of(context).isTouch)
                   Positioned(
                     top: 10,
                     left: 10,
@@ -247,7 +247,7 @@ class _CollectionInfoCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colors = context.colors;
-    final isPhone = isPhoneLayout(context);
+    final isPhone = ScreenType.of(context).isPhone;
     final muted = context.text.bodyMedium?.copyWith(
       color: colors.onSurfaceVariant,
     );
@@ -280,6 +280,7 @@ class _CollectionInfoCard extends StatelessWidget {
               runSpacing: 8,
               children: [
                 FilledButton(
+                  style: actionButtonStyle,
                   onPressed: items.isEmpty
                       ? null
                       : () => playQueue(GoRouter.of(context), collectionQueue(items)),
@@ -290,6 +291,7 @@ class _CollectionInfoCard extends StatelessWidget {
                   ),
                 ),
                 OutlinedButton(
+                  style: actionButtonStyle,
                   onPressed: items.length < 2
                       ? null
                       : () => playQueue(GoRouter.of(context), collectionQueue(items, shuffle: true)),
@@ -345,7 +347,7 @@ class _MovieInfoCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colors = context.colors;
-    final isPhone = isPhoneLayout(context);
+    final isPhone = ScreenType.of(context).isPhone;
     final muted = context.text.bodyMedium?.copyWith(
       color: colors.onSurfaceVariant,
     );
@@ -389,6 +391,7 @@ class _MovieInfoCard extends StatelessWidget {
               runSpacing: 8,
               children: [
                 FilledButton(
+                  style: actionButtonStyle,
                   onPressed: () => context.push('/play/${movie.id}'),
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
@@ -515,7 +518,7 @@ class _SeriesInfoCardState extends State<_SeriesInfoCard> {
   Widget build(BuildContext context) {
     final series = widget.series;
     final colors = context.colors;
-    final isPhone = isPhoneLayout(context);
+    final isPhone = ScreenType.of(context).isPhone;
     final muted = context.text.bodyMedium?.copyWith(
       color: colors.onSurfaceVariant,
     );
@@ -680,7 +683,7 @@ class _EpisodeTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colors = context.colors;
-    final isPhone = isPhoneLayout(context);
+    final isPhone = ScreenType.of(context).isPhone;
     final number = episode.raw['IndexNumber'];
     final tag = episode.imageTags['Primary']; // an episode's Primary image is its 16:9 thumbnail
     final overview = (episode.raw['Overview'] as String?)?.trim();
@@ -938,8 +941,8 @@ class _FavoriteButtonState extends State<_FavoriteButton> {
     );
     final label = Text(_favorite ? 'Favorited' : 'Favorite');
     return _favorite
-        ? FilledButton.tonalIcon(onPressed: _toggle, icon: icon, label: label)
-        : OutlinedButton.icon(onPressed: _toggle, icon: icon, label: label);
+        ? FilledButton.tonalIcon(style: actionButtonStyle, onPressed: _toggle, icon: icon, label: label)
+        : OutlinedButton.icon(style: actionButtonStyle, onPressed: _toggle, icon: icon, label: label);
   }
 }
 
@@ -969,6 +972,7 @@ class _SeriesPlayButtonState extends State<_SeriesPlayButton> {
     try {
       // Jellyfin's "Next Up": the next episode after the last one you watched.
       final nextUp = await client.tvShows.nextUp(
+        enableTotalRecordCount: false,
         seriesId: widget.series.id,
         limit: 1,
         enableResumable: true,
@@ -996,6 +1000,7 @@ class _SeriesPlayButtonState extends State<_SeriesPlayButton> {
     final label = se == null ? 'Play' : 'Play $se';
 
     return FilledButton(
+      style: actionButtonStyle,
       onPressed: next == null
           ? null
           : () => context.push('/play/${next.id}'), // disabled until found

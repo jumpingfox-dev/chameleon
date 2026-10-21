@@ -12,20 +12,24 @@ import 'core/cast/sync_play_controller.dart';
 import 'core/focus/focus_rows.dart';
 import 'core/jellyfin/jellyfin_controller.dart';
 import 'core/platform/orientation.dart';
+import 'core/platform/screen_type.dart';
 import 'core/storage/app_cache.dart';
 import 'core/storage/storage.dart';
 import 'features/home/home_layout.dart';
 import 'features/player/playback_settings.dart';
+import 'features/screensaver/screensaver.dart';
+import 'features/screensaver/screensaver_settings.dart';
 import 'theme/app_icons.dart';
 import 'theme/font_controller.dart';
 import 'theme/theme.dart';
 import 'theme/theme_controller.dart';
 
 Future<void> main() async {
+  _quietMediaKit();
   // Keeps the system splash up while everything below loads, instead of a blank first frame.
   FlutterNativeSplash.preserve(widgetsBinding: WidgetsFlutterBinding.ensureInitialized());
-  await detectTv(); // before the first frame, which already picks phone or TV layout
-  if (isTv) {
+  await ScreenType.detect(); // before the first frame, which already picks phone or TV layout
+  if (ScreenType.isTvDevice) {
     // No touchscreen, so always show where focus is. (Flutter otherwise waits for a key it's
     // sure came from a hardware keyboard, and some remotes don't look like one.)
     FocusManager.instance.highlightStrategy = FocusHighlightStrategy.alwaysTraditional;
@@ -45,6 +49,7 @@ Future<void> main() async {
   fontController = await FontController.load();
   iconController = await IconController.load();
   playbackSettings = await PlaybackSettings.load();
+  screensaverSettings = await ScreensaverSettings.load();
   homeLayout = await HomeLayoutController.load();
   // Everyone has their own settings: load theirs whenever someone else signs in.
   storage.user.addListener(() {
@@ -52,6 +57,7 @@ Future<void> main() async {
     fontController.reload();
     iconController.reload();
     playbackSettings.reload();
+    screensaverSettings.reload();
     homeLayout.reload();
   });
 
@@ -101,10 +107,26 @@ class Application extends StatelessWidget {
         scrollBehavior: const MaterialScrollBehavior().copyWith(scrollbars: false),
         theme: theme,
         builder: (context, child) => TextFieldArrowEscape(
-          child: RowFocusNavigation(child: UiScaler(child: child!)),
+          child: RowFocusNavigation(child: UiScaler(child: ScreensaverHost(child: child!))),
         ),
         routerConfig: appRouter,
       );
     },
   );
+}
+
+/// media_kit logs every video output change it makes ("VideoOutput.Resize" and the like).
+/// Drops those, so the log only has the app's own messages.
+void _quietMediaKit() {
+  final print = debugPrint;
+  debugPrint = (String? message, {int? wrapWidth}) {
+    final m = message ?? '';
+    final chatter = m.startsWith('media_kit:') ||
+        m.startsWith('VideoOutput.') ||
+        m.startsWith('NativeVideoController:') ||
+        m.startsWith('AndroidVideoController:') ||
+        (m.startsWith('{') && m.contains('handle')) ||
+        RegExp(r'^\d+$').hasMatch(m); // a video output's handle on its own
+    if (!chatter) print(message, wrapWidth: wrapWidth);
+  };
 }

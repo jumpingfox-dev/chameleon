@@ -23,12 +23,17 @@ import '../../core/format/item_format.dart';
 import '../../core/jellyfin/jellyfin_controller.dart';
 import '../../core/platform/media_support.dart';
 import '../../core/platform/orientation.dart';
+import '../../core/platform/screen_type.dart';
+import '../../core/platform/video_surface.dart';
+import '../../core/playback/exo_engine.dart';
+import '../../core/playback/playback_engine.dart';
 import '../../core/jellyfin/playback_reporter.dart';
 import 'playback_settings.dart';
 import '../../core/cast/sync_play_controller.dart';
 import 'cast_widgets.dart';
 import '../settings/choice_picker.dart';
 import '../home/home_modules.dart';
+import '../screensaver/screensaver.dart';
 import '../../theme/theme.dart';
 import '../../widgets/tappable.dart';
 
@@ -67,14 +72,24 @@ class _PlayerScreenState extends State<PlayerScreen> {
   /// The item playing. Starts as the one opened, and changes when the next episode plays.
   late String _itemId = widget.itemId;
 
-  final _player = Player(
-    // Twice media_kit's default read-ahead, so high-bitrate files (4K remuxes) don't run dry.
-    configuration: const PlayerConfiguration(bufferSize: 64 * 1024 * 1024),
+  /// mpv to begin with; ExoPlayer for Dolby Vision, or when mpv can't open the file (see
+  /// [_wantsExo] and [_fallBackToExo]).
+  final _player = Playback(
+    Player(
+      // Twice media_kit's default read-ahead, so high-bitrate files (4K remuxes) don't run dry.
+      configuration: const PlayerConfiguration(bufferSize: 64 * 1024 * 1024),
+    ),
   );
 
+  /// Where the video opened from, for opening it again in the other engine if one can't play it.
+  Duration _openedAt = Duration.zero;
+  bool _fellBack = false; // once per screen, so the two never hand it back and forth
+  bool _fallingBack = false;
+
   /// Made when the first video opens, since how it draws depends on the file (see
-  /// [_videoConfiguration]). Null until then.
+  /// [_useVideoSurface]): one or the other. Null until then.
   VideoController? _video;
+  VideoSurface? _surface;
   final _videoKey = GlobalKey<VideoState>();
   final _focus = FocusNode();
   final _subscriptions = <StreamSubscription<Object?>>[];
@@ -110,7 +125,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
   static const _controlsClearance = 150.0;
   static const _controlsClearancePhone = 146.0;
 
-  bool get _isPhone => isPhoneLayout(context);
+  bool get _isPhone => ScreenType.of(context).isPhone;
 
   EdgeInsets _subtitlePadding({required bool lifted}) {
     lifted = lifted && playbackSettings.liftSubtitles; // "Move up when controls show" in Settings
@@ -214,15 +229,22 @@ class _PlayerScreenState extends State<PlayerScreen> {
   @override
   void initState() {
     super.initState();
+    screensaverBlocks.value++; // never over a video, even a paused one
     // Full screen, sideways: most things played are movies and episodes. Other videos
     // (home videos and the like) are let free to turn once the item has loaded.
     _holdTo(AppOrientation.landscape);
     _followTilt();
     _subscriptions
       ..add(
-        _player.stream.error.listen((message) {
-          // Only treat it as fatal if nothing has loaded; mpv also reports minor stream hiccups.
-          if (mounted && _player.state.duration == Duration.zero) setState(() => _error = message);
+        _player.stream.error.listen((message) async {
+          if (!mounted || _fallingBack) return;
+          // mpv also reports minor stream hiccups, so only treat its errors as fatal if nothing
+          // has loaded. ExoPlayer only reports errors that stop it.
+          final exo = _player.usingExo;
+          if (!exo && _player.state.duration != Duration.zero) return;
+          // One engine couldn't play it: the other may manage.
+          if (await _fallBack(toExo: !exo)) return;
+          if (mounted) setState(() => _error = message);
         }),
       )
       ..add(
@@ -254,7 +276,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
 
   Future<void> _applyAudioSettings() async {
     // mpv's own options, set straight on it (media_kit doesn't wrap these).
-    final dynamic mpv = _player.platform;
+    final dynamic mpv = _player.mpv.player.platform;
     if (mpv == null) return;
     final s = playbackSettings;
     try {
@@ -262,6 +284,10 @@ class _PlayerScreenState extends State<PlayerScreen> {
       // the TV or receiver says it takes: anything else (often TrueHD) mpv decodes itself,
       // instead of sending something the output can't play, which leaves it silent and stuck.
       final formats = s.passthrough ? await MediaSupport.passthroughFormats() : const <String>{};
+      // Android's AudioTrack output, not media_kit's OpenSL ES one (kept as a fallback): OpenSL
+      // ES only plays stereo PCM, so surround was mixed down to stereo and passthrough never
+      // reached the receiver. AudioTrack passes Dolby and DTS through, and plays multichannel.
+      if (Platform.isAndroid) await mpv.setProperty('ao', 'audiotrack,opensles');
       await mpv.setProperty('audio-spdif', formats.join(','));
       await mpv.setProperty('audio-channels', s.passthrough ? 'auto' : (s.downmix ? 'stereo' : 'auto-safe'));
       // Night mode: a gentle compressor that lowers loud peaks and lifts quiet parts.
@@ -390,11 +416,15 @@ builder: (context) => Dialog(child: Padding(
     final transcode = await _planTranscode(item);
     if (!mounted) return;
     _transcode = transcode;
-    if (_video == null) {
-      final configuration = await _videoConfiguration(item, transcode);
-      if (!mounted) return;
-      setState(() => _video = VideoController(_player, configuration: configuration));
+    if (_video == null && _surface == null) {
+      if (await _wantsExo(item, transcode)) {
+        await _switchToExo();
+      } else {
+        await _attachMpv(item, transcode);
+      }
     }
+    if (!mounted) return;
+    _openedAt = start;
 
     // Open directly at the start position, so there's no seek afterwards.
     // In a group, it waits paused until everyone has loaded; the group then starts it.
@@ -420,13 +450,13 @@ builder: (context) => Dialog(child: Padding(
     _startReporter(client, item);
   }
 
-  /// How video gets to the screen. On Android, fastest is the hardware decoder drawing
-  /// straight to the screen (mpv's mediacodec_embed): without it, every frame is copied out of
-  /// the decoder and drawn again, which is too slow for 4K HEVC on a TV. It only works for
-  /// formats the decoder handles (nothing falls back to software that way), so any other file
-  /// keeps mpv's usual route. Decided by the first video; the next episode is almost always the
-  /// same format.
-  Future<VideoControllerConfiguration> _videoConfiguration(JellyfinItem item, _Transcode? transcode) async {
+  /// How video gets to the screen. On Android, best is the hardware decoder drawing straight
+  /// to a surface of its own ([VideoSurface]): HDR stays HDR, and nothing is copied. Otherwise
+  /// every frame is copied out of the decoder and drawn again by Flutter, in SDR, which is too
+  /// slow for 4K HEVC on a TV. It only works for formats the decoder handles (nothing falls back
+  /// to software that way), so any other file keeps mpv's usual route through media_kit's
+  /// `Video`. Decided by the first video; the next episode is almost always the same format.
+  Future<bool> _useVideoSurface(JellyfinItem item, _Transcode? transcode) async {
     final video = _streamsOf(item, 'Video', external: false).firstOrNull;
     final codec = video?['Codec'] as String?;
     final bitDepth = video?['BitDepth'] as int?;
@@ -435,10 +465,112 @@ builder: (context) => Dialog(child: Padding(
         ? 'avc'
         : MediaSupport.decoderName(codec, bitDepth);
     final decoders = await MediaSupport.hardwareDecoders();
-    if (name != null && decoders.contains(name)) {
-      return const VideoControllerConfiguration(vo: 'mediacodec_embed', hwdec: 'mediacodec');
+    return name != null && decoders.contains(name);
+  }
+
+  /// Gives mpv somewhere to draw: its own surface, or media_kit's `Video` (see [_useVideoSurface]).
+  Future<void> _attachMpv(JellyfinItem item, _Transcode? transcode) async {
+    if (await _useVideoSurface(item, transcode)) {
+      final surface = await VideoSurface.attach(_player.mpv.player);
+      if (!mounted) return;
+      setState(() => _surface = surface);
+    } else {
+      if (!mounted) return;
+      setState(() => _video = VideoController(_player.mpv.player));
     }
-    return const VideoControllerConfiguration();
+  }
+
+  // ── ExoPlayer ──
+
+  /// Whether ExoPlayer plays [item] rather than mpv (Settings › Playback › Video engine). By
+  /// default only Dolby Vision files, on devices with a Dolby Vision decoder: ExoPlayer can use
+  /// it, and mpv can't. Only files played as they are, and only when ExoPlayer can play the
+  /// audio too. Decided by the first video, like [_useVideoSurface].
+  Future<bool> _wantsExo(JellyfinItem item, _Transcode? transcode) async {
+    if (!Platform.isAndroid || transcode != null) return false;
+    final engine = playbackSettings.engine;
+    if (engine == VideoEngine.mpv) return false;
+    final support = await ExoEngine.support();
+    if (engine == VideoEngine.auto && !(support.dolbyVision && _isDolbyVision(item))) return false;
+    return _exoPlaysAudio(item, support);
+  }
+
+  static bool _isDolbyVision(JellyfinItem item) {
+    final video = _streamsOf(item, 'Video', external: false).firstOrNull;
+    final range = (video?['VideoRangeType'] as String?) ?? '';
+    return range.startsWith('DOVI') || video?['DvProfile'] != null;
+  }
+
+  /// Whether ExoPlayer can play the audio that'll be picked: the account's language, or the
+  /// file's default.
+  Future<bool> _exoPlaysAudio(JellyfinItem item, ExoSupport support) async {
+    final streams = _streamsOf(item, 'Audio', external: false);
+    if (streams.isEmpty) return true;
+    final prefs = await _fetchTrackPrefs();
+    final picked = prefs == null ? null : _pickAudio(streams, prefs);
+    final audio = picked != null
+        ? streams[picked]
+        : (streams.where((s) => s['IsDefault'] == true).firstOrNull ?? streams.first);
+    final passthrough = playbackSettings.passthrough ? await MediaSupport.passthroughFormats() : const <String>{};
+    return support.playsAudio(audio['Codec'] as String?, passthrough);
+  }
+
+  /// Hands playback to ExoPlayer, drawing on a surface of its own.
+  Future<void> _switchToExo() async {
+    await _player.useExo(passthrough: playbackSettings.passthrough);
+    final old = _surface;
+    if (mounted) {
+      setState(() {
+        _surface = null;
+        _video = null;
+      });
+    }
+    await old?.release();
+    final surface = await VideoSurface.attachForExo();
+    if (!mounted) {
+      await surface.release();
+      return;
+    }
+    setState(() => _surface = surface);
+  }
+
+  /// One engine couldn't play the file: tries it in the other ([toExo]: ExoPlayer, otherwise
+  /// mpv), from the same spot. False when there's nothing to try: already tried once, converting
+  /// (only mpv plays converted streams), or ExoPlayer can't play this file either.
+  Future<bool> _fallBack({required bool toExo}) async {
+    final item = _item;
+    if (_fellBack || item == null || !Platform.isAndroid || _transcode != null || _casting) return false;
+    if (toExo && playbackSettings.engine == VideoEngine.mpv) return false;
+    _fellBack = true;
+    _fallingBack = true;
+    try {
+      if (toExo && !await _exoPlaysAudio(item, await ExoEngine.support())) return false;
+      final position = _player.state.position;
+      final from = position > Duration.zero ? position : _openedAt;
+      if (toExo) {
+        await _switchToExo();
+      } else {
+        await _switchToMpv(item);
+      }
+      if (!mounted) return true;
+      await _player.open(
+        Media(jellyfin.streamUrl(item.id), httpHeaders: jellyfin.authHeaders, start: from > Duration.zero ? from : null),
+        play: !_inGroup,
+      );
+      unawaited(_applyDefaultTracks(item));
+      return true;
+    } finally {
+      _fallingBack = false;
+    }
+  }
+
+  /// Hands playback back to mpv, after ExoPlayer couldn't play the file.
+  Future<void> _switchToMpv(JellyfinItem item) async {
+    await _player.useMpv();
+    final old = _surface;
+    if (mounted) setState(() => _surface = null);
+    await old?.release();
+    if (mounted) await _attachMpv(item, null);
   }
 
   // ── Converting (transcoding) ──
@@ -766,7 +898,7 @@ builder: (context) => Dialog(child: Padding(
 
     final ids = {_itemId, item?.raw['SeriesId'], item?.raw['SeasonId']}.whereType<String>();
     await reporter.stop();
-    clearHomeCache();
+    refreshWatchProgress();
     appCache.invalidateWhere((key) => ids.any((id) => key.endsWith(':$id')));
   }
 
@@ -1015,6 +1147,7 @@ builder: (context) => Dialog(child: Padding(
 
   @override
   void dispose() {
+    screensaverBlocks.value--;
     _hideTimer?.cancel();
     _countdownTimer?.cancel();
     _noticeTimer?.cancel();
@@ -1033,6 +1166,7 @@ builder: (context) => Dialog(child: Padding(
     // Report where playback stopped (the player is read straight away, before it's disposed).
     unawaited(_finishItem());
 
+    if (_player.usingExo) unawaited(_surface?.release());
     _player.dispose();
     _focus.dispose();
     for (final node in _allButtons) {
@@ -1547,7 +1681,7 @@ builder: (context) => Dialog(child: Padding(
   @override
   Widget build(BuildContext context) {
     final rating = _item?.raw['OfficialRating'] as String?;
-    final compact = isPhoneLayout(context);
+    final compact = ScreenType.of(context).isPhone;
 
     return PopScope(
       // Phones: Back (or the back swipe) leaves straight away. TV remotes: the first Back
@@ -1574,14 +1708,17 @@ builder: (context) => Dialog(child: Padding(
                 : SystemMouseCursors.none,
             onHover: (_) => _showControls(),
             child: ColoredBox(
-              color: _black,
+              // See-through where the video's own surface is: it's behind the app.
+              color: _surface != null ? const Color(0x00000000) : _black,
               child: Stack(
                 fit: StackFit.expand,
                 children: [
                   GestureDetector(
                     behavior: HitTestBehavior.opaque,
                     onTapUp: (details) => _onVideoTapUp(details, compact: compact),
-                    child: _video == null
+                    child: _surface != null
+                        ? VideoSurfaceView(surface: _surface!, player: _player, fit: _fit)
+                        : _video == null
                         ? const SizedBox.expand()
                         : Video(
                       key: _videoKey,
@@ -1656,10 +1793,10 @@ builder: (context) => Dialog(child: Padding(
                             AnimatedPositioned(
                               duration: const Duration(milliseconds: 200), // the same speed as the controls' fade
                               curve: Curves.easeOut,
-                              // Below the logo, lined up with it, while the controls show; up in the
-                              // corner once they're hidden.
-                              left: _controlsVisible ? playerTitleLeft(compact: compact) : (compact ? 16 : 32),
-                              top: _controlsVisible ? _topBarTop(compact: compact) + (compact ? 102 : 128) : (compact ? 12 : 24),
+                              // Lined up with the back arrow. Below the top bar while the controls
+                              // show; up in the corner once they're hidden.
+                              left: playerRatingLeft(compact: compact),
+                              top: _controlsVisible ? _topBarTop(compact: compact) + (compact ? 84 : 108) : (compact ? 12 : 24),
                               child: _RatingIntro(rating: rating, visible: _ratingVisible),
                             ),
 

@@ -1,6 +1,8 @@
 package dev.jumpingfox.chameleon
 
 import android.content.Context
+import android.graphics.Color
+import android.graphics.drawable.ColorDrawable
 import android.media.AudioAttributes
 import android.media.AudioDeviceInfo
 import android.media.AudioFormat
@@ -10,14 +12,38 @@ import android.media.MediaCodecInfo
 import android.media.MediaCodecInfo.CodecProfileLevel
 import android.media.MediaCodecList
 import android.os.Build
+import android.os.Bundle
 import android.view.View
 import android.view.ViewGroup
 import io.flutter.embedding.android.FlutterActivity
+import io.flutter.embedding.android.FlutterActivityLaunchConfigs.BackgroundMode
+import io.flutter.embedding.android.RenderMode
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.embedding.engine.renderer.FlutterRenderer
 import io.flutter.plugin.common.MethodChannel
 
 class MainActivity : FlutterActivity() {
+    // See-through, so the video's own surface (VideoSurface, behind Flutter) shows where the
+    // player leaves a gap for it. Everywhere else the app paints over every pixel.
+    override fun getBackgroundMode() = BackgroundMode.transparent
+
+    // A see-through FlutterActivity otherwise draws through a TextureView, which costs a copy of
+    // every frame. A see-through SurfaceView sits on top of the video's surface just the same.
+    override fun getRenderMode() = RenderMode.surface
+
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        // A see-through Flutter view makes the window see-through too, so keep the splash there
+        // until Flutter's first frame (Android 11 and older show it through the window).
+        window.setBackgroundDrawableResource(R.drawable.launch_background)
+    }
+
+    override fun onFlutterUiDisplayed() {
+        super.onFlutterUiDisplayed()
+        // Black around the video when it doesn't fill the screen.
+        window.setBackgroundDrawable(ColorDrawable(Color.BLACK))
+    }
+
     override fun onPostResume() {
         super.onPostResume()
         // With a D-pad or keyboard, Android outlines the focused view, which here is the whole
@@ -34,9 +60,12 @@ class MainActivity : FlutterActivity() {
         // Video frames reach Flutter through a SurfaceTexture rather than an ImageReader. Flutter
         // draws an ImageReader's whole buffer, ignoring the decoder's crop, so a decoder that pads
         // its frames (many TV chips round 2160 up to 2176, say) shows the padding as green edges.
-        // A SurfaceTexture applies the crop. Only the video player (media_kit) creates these.
+        // A SurfaceTexture applies the crop. Only the video player (media_kit) creates these, for
+        // files the hardware decoder can't play (the rest go to VideoSurface).
         FlutterRenderer.debugForceSurfaceProducerGlTextures = true
         super.configureFlutterEngine(flutterEngine)
+        val videoSurface = VideoSurface(this, flutterEngine.dartExecutor.binaryMessenger)
+        ExoEngine(this, flutterEngine.dartExecutor.binaryMessenger, videoSurface)
         // What this device can do with video and audio, so the player picks how to play each file
         // (see lib/core/platform/media_support.dart).
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "chameleon/media").setMethodCallHandler { call, result ->

@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:dart_jellyfin/dart_jellyfin.dart';
 import 'package:go_router/go_router.dart';
@@ -13,10 +14,12 @@ import '../../core/format/item_format.dart';
 import '../../theme/theme_controller.dart';
 import '../../theme/theme_presets.dart';
 import '../../core/jellyfin/jellyfin_controller.dart';
-import '../../core/platform/orientation.dart';
+import '../../core/platform/screen_type.dart';
 import '../../core/cast/sync_play_controller.dart';
 import '../../core/jellyfin/account_settings.dart';
 import '../player/playback_settings.dart';
+import '../screensaver/screensaver.dart';
+import '../screensaver/screensaver_settings.dart';
 import 'custom_theme_editor.dart';
 import 'choice_picker.dart';
 import '../../widgets/app_logo.dart';
@@ -30,6 +33,8 @@ import '../../theme/theme.dart';
 import '../../widgets/tappable.dart';
 import '../../core/platform/page_insets.dart';
 
+part 'screensaver_tab.dart';
+part 'server_tab.dart';
 part 'sync_play_settings.dart';
 
 
@@ -40,6 +45,7 @@ final _tabs = <_SettingsTab>[
   (label: 'Appearance', build: () => const _AppearanceCard()),
   (label: 'Account', build: () => const _AccountCard()),
   (label: 'Playback', build: () => const _PlaybackCard()),
+  (label: 'Screensaver', build: () => const _ScreensaverCard()),
   (label: 'Server', build: () => const _ServerCard()),
   (label: 'SyncPlay', build: () => const _SyncPlayCard()),
   (label: 'About', build: () => const _AboutCard()),
@@ -90,7 +96,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         padding: EdgeInsets.fromLTRB(4, pageTop(context), 4, 16),
         children: [
           // Tab pills, above the card. Phones only: wider screens pick the page from the sidebar.
-          if (isPhoneLayout(context)) ...[
+          if (ScreenType.of(context).isPhone) ...[
             SingleChildScrollView(
               scrollDirection: Axis.horizontal, // scrolls sideways if there are more pills than fit
               child: Row(
@@ -572,7 +578,7 @@ class _PickerSetting<T> extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    if (isPhoneLayout(context)) {
+    if (ScreenType.of(context).isPhone) {
       return DropdownMenu<T>(
         label: label == null ? null : Text(label!),
         initialSelection: value,
@@ -841,6 +847,22 @@ class _PlaybackCard extends StatelessWidget {
             value: s.trickplay,
             onChange: (v) => update((s) => s.trickplay = v),
           ),
+
+          // ── Engine (Android only: ExoPlayer is Android's own player) ──
+          if (Platform.isAndroid) ...[
+            const _SectionTitle(
+              'Video engine',
+              description: 'mpv plays nearly anything. ExoPlayer plays Dolby Vision as Dolby Vision, and takes '
+                  'over if mpv can\'t open a file. Night mode and stereo mix-down only work with mpv.',
+            ),
+            _PickerSetting<VideoEngine>(
+              label: 'Engine',
+              value: s.engine,
+              options: VideoEngine.values,
+              format: (e) => e.label,
+              onChange: (e) => update((s) => s.engine = e),
+            ),
+          ],
         ],
       );
     },
@@ -871,22 +893,6 @@ class _SubtitlePreview extends StatelessWidget {
   );
 }
 
-/// Server Settings Tab
-class _ServerCard extends StatelessWidget {
-  const _ServerCard();
-
-  @override
-  Widget build(BuildContext context) {
-    // Just a placeholder for now, kept as its own tab since it already has a spot reserved
-    // in the sidebar and the icon style.
-    return const _SettingsCard(
-      children: [
-        _SectionTitle('Server', description: 'Coming soon.', first: true),
-      ],
-    );
-  }
-}
-
 /// About Settings Tab
 class _AboutCard extends StatefulWidget {
   const _AboutCard();
@@ -898,7 +904,6 @@ class _AboutCard extends StatefulWidget {
 class _AboutCardState extends State<_AboutCard> {
   // Fetched once when the tab opens, not on every rebuild.
   late final Future<PackageInfo> _app = PackageInfo.fromPlatform();
-  late final Future<({String name, String version})?> _server = _serverInfo();
   late Future<int> _cacheSize = storage.cacheSize();
 
   /// Deletes every account's saved pages. They load again from the server as you go.
@@ -906,23 +911,6 @@ class _AboutCardState extends State<_AboutCard> {
     appCache.invalidateWhere((_) => true);
     await storage.clearAllCache();
     if (mounted) setState(() => _cacheSize = storage.cacheSize());
-  }
-
-  /// The server's public info. Needs no sign-in, so it works even if the session expired.
-  static Future<({String name, String version})?> _serverInfo() async {
-    try {
-      final json = await jellyfin.getJson(
-        '/System/Info/Public',
-        auth: false,
-        timeout: const Duration(seconds: 5),
-      ) as Map<String, dynamic>;
-      return (
-      name: json['ServerName'] as String? ?? 'Jellyfin',
-      version: json['Version'] as String? ?? 'Unknown',
-      );
-    } catch (_) {
-      return null; // offline, timed out, or not a Jellyfin server
-    }
   }
 
   @override
@@ -966,24 +954,6 @@ class _AboutCardState extends State<_AboutCard> {
         onPressed: _clearCache,
         child: const Text('Clear saved pages'),
       ),
-
-      // ── Server ──
-      const _SectionTitle('Server'),
-      FutureBuilder(
-        future: _server,
-        builder: (context, snap) {
-          final waiting = snap.connectionState != ConnectionState.done;
-          final info = snap.data;
-          return Column(
-            crossAxisAlignment: .stretch,
-            children: [
-              _InfoRow(label: 'Server', value: waiting ? '…' : info?.name ?? 'Unreachable'),
-              _InfoRow(label: 'Server version', value: waiting ? '…' : info?.version ?? '—'),
-            ],
-          );
-        },
-      ),
-      _InfoRow(label: 'Address', value: jellyfin.client?.baseUrl ?? 'Not connected'),
 
       // ── Licenses ──
       const _SectionTitle('Licenses', description: 'The open-source packages this app is built on.'),

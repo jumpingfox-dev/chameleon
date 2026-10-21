@@ -7,7 +7,8 @@ import '../../widgets/hover_lift.dart';
 import '../../theme/theme.dart';
 import '../../widgets/tappable.dart';
 
-/// A round photo with the person's name underneath. Lifts on hover or remote focus.
+/// A round photo with the person's name underneath. Lifts and gets a ring on hover or remote
+/// focus, like a poster.
 class PersonTile extends StatelessWidget {
   const PersonTile({
     super.key,
@@ -33,7 +34,18 @@ class PersonTile extends StatelessWidget {
               scale: active ? 1.0 : 0.94,
               duration: const Duration(milliseconds: 150),
               curve: Curves.easeOut,
-              child: PersonPhoto(person: person, size: size),
+              // Hovered or focused: a ring over the photo's edge, like the posters' border.
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 150),
+                foregroundDecoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  border: Border.all(
+                    color: active ? context.colors.primary : const Color(0x00000000),
+                    width: 2.5,
+                  ),
+                ),
+                child: PersonPhoto(person: person, size: size),
+              ),
             ),
             Flexible(
               // Takes only the space that's left, and truncates the name instead of overflowing.

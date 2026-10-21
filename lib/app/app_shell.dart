@@ -15,7 +15,7 @@ import '../theme/theme.dart';
 import '../core/focus/focus_rows.dart';
 import '../features/home/home_layout.dart';
 import '../core/jellyfin/jellyfin_controller.dart';
-import '../core/platform/orientation.dart';
+import '../core/platform/screen_type.dart';
 import '../widgets/app_logo.dart';
 import '../widgets/tappable.dart';
 import '../features/auth/profile_actions.dart';
@@ -347,7 +347,7 @@ class _AppShellState extends State<AppShell> {
       // since every page here needs a connected client.
       if (!jellyfin.isConnected) return const SizedBox.shrink();
 
-      final isPhone = isPhoneLayout(context);
+      final isPhone = ScreenType.of(context).isPhone;
 
       return Scaffold(
         bottomNavigationBar: isPhone

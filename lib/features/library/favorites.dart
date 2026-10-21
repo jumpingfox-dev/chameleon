@@ -4,6 +4,7 @@ import 'package:material_ui/material_ui.dart';
 import '../../theme/app_icons.dart';
 import '../../core/storage/app_cache.dart';
 import '../../core/jellyfin/jellyfin_controller.dart';
+import '../../core/jellyfin/list_each.dart';
 import '../detail/detail_page.dart';
 import 'poster_card.dart';
 import '../../theme/theme.dart';
@@ -58,22 +59,21 @@ class _FavoritesScreenState extends State<FavoritesScreen> {
     final client = jellyfin.client;
     if (client == null) return;
     try {
-      final page = await client.items.list(
+      final items = await client.items.listEach(
         filters: const ['IsFavorite'],
-        includeItemTypes: const [
+        types: const [
           JellyfinItemKind.movie,
           JellyfinItemKind.series,
           'BoxSet',
         ],
-        recursive: true,
         sortBy: const ['SortName'],
         limit: 500,
         fields: const ['RecursiveItemCount'],
       );
-      appCache.put(_cacheKey, page.items, toJson: itemsToJson);
+      appCache.put(_cacheKey, items, toJson: itemsToJson);
       if (!mounted) return;
       setState(() {
-        _show(page.items);
+        _show(items);
         _error = null;
       });
     } on JellyfinException catch (e) {

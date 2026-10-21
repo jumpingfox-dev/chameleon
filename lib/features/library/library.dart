@@ -4,6 +4,7 @@ import 'package:material_ui/material_ui.dart';
 import '../../core/focus/focus_rows.dart';
 import '../../core/jellyfin/jellyfin_controller.dart';
 import '../../core/jellyfin/library_cache.dart';
+import '../../core/jellyfin/list_each.dart';
 import '../../core/storage/app_cache.dart';
 import '../detail/detail_page.dart';
 import 'poster_card.dart';
@@ -61,6 +62,12 @@ class _LibraryScreenState extends State<LibraryScreen> {
   /// Loads what this page needs: the first titles if there are none yet, or, if what's here is
   /// old, a fresh copy of it (swapped in place, so nothing jumps).
   void _loadOrRefresh() {
+    if (widget.genre != null) {
+      // (A genre saved by an older version may be only partly loaded.)
+      final partial = _cache.total != _items.length;
+      if (_items.isEmpty || partial || !appCache.isFresh(_keyFor(widget))) _loadGenre();
+      return;
+    }
     if (_items.isEmpty) {
       _loadMore();
     } else if (!appCache.isFresh(_keyFor(widget))) {
@@ -151,7 +158,44 @@ class _LibraryScreenState extends State<LibraryScreen> {
     super.dispose();
   }
 
+  /// A genre's titles, all at once: movies and shows each asked for on their own, which the
+  /// server answers far faster than both together (see [ListEach]). A genre is small enough
+  /// to load whole, and then the letter bar comes from what's loaded, with no extra requests.
+  Future<void> _loadGenre() async {
+    final client = jellyfin.client;
+    final genre = widget.genre;
+    if (_loading || client == null || genre == null) return;
+    final entry = _cache;
+    setState(() => _loading = true);
+    try {
+      final items = await client.items.listEach(
+        genres: [genre],
+        types: _itemTypes,
+        sortBy: const ['SortName'],
+        fields: const ['SortName'], // to group by letter the same way the server sorts
+      );
+      if (!mounted || !identical(entry, _cache)) return;
+      setState(() {
+        _items
+          ..clear()
+          ..addAll(items);
+        _cache.total = items.length;
+        _cache.letters = {for (final item in items) _letterFor(item)};
+        _error = null;
+      });
+      _save();
+    } on JellyfinException catch (e) {
+      if (mounted && _items.isEmpty) setState(() => _error = describeJellyfinError(e));
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
   Future<void> _loadMore() async {
+    if (widget.genre != null) {
+      if (_items.isEmpty) await _loadGenre();
+      return;
+    }
     final client = jellyfin.client;
     if (_loading || !_hasMore || client == null) return;
     setState(() => _loading = true);

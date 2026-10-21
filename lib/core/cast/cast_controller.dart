@@ -78,8 +78,8 @@ class CastController extends ChangeNotifier {
         );
       supported = true;
       notifyListeners();
-    } catch (e) {
-      debugPrint('Cast unavailable: $e'); // e.g. no Google Play services
+    } catch (_) {
+      // Unavailable, e.g. no Google Play services: there's just no cast button.
     }
   }
 

@@ -10,7 +10,8 @@ import '../../core/focus/focus_rows.dart';
 import '../../core/format/format.dart';
 import '../../core/format/item_format.dart';
 import '../../core/jellyfin/jellyfin_controller.dart';
-import '../../core/platform/orientation.dart';
+import '../../core/jellyfin/list_each.dart';
+import '../../core/platform/screen_type.dart';
 import 'expandable_text.dart';
 import '../../widgets/hover_lift.dart';
 import 'person_tile.dart';
@@ -126,6 +127,7 @@ Future<JellyfinItem?> nextEpisodeFor(String seriesId) async {
   final client = jellyfin.client!;
 
   final nextUp = await client.tvShows.nextUp(
+    enableTotalRecordCount: false,
     seriesId: seriesId,
     limit: 1,
     enableResumable: true,
@@ -186,7 +188,7 @@ Future<void> showDetailPopout(
     barrierColor: barrierColor,
     transitionDuration: const Duration(milliseconds: 200),
     pageBuilder: (context, _, _) {
-      final isPhone = isPhoneLayout(context);
+      final isPhone = ScreenType.of(context).isPhone;
       // Size to the space the tab actually has, not the whole screen.
       return _CloseOnNavigation(
         child: Padding(
@@ -273,6 +275,7 @@ DetailLoader collectionDetails(String id) => (client) async {
   final (collection, page) = await (
   client.items.byId(id),
   client.items.list(
+    enableTotalRecordCount: false,
     parentId: id,
     sortBy: const ['ProductionYear', 'SortName'],
     limit: 200,
@@ -285,15 +288,14 @@ DetailLoader collectionDetails(String id) => (client) async {
 DetailLoader personDetails(String id) => (client) async {
   final (person, page) = await (
   client.items.byId(id),
-  client.items.list(
+  client.items.listEach(
     personIds: [id],
-    includeItemTypes: const [JellyfinItemKind.movie, JellyfinItemKind.series],
-    recursive: true,
+    types: const [JellyfinItemKind.movie, JellyfinItemKind.series],
     sortBy: const ['ProductionYear', 'SortName'],
     descending: true,
   ),
   ).wait;
-  return DetailData(item: person!, children: page.items);
+  return DetailData(item: person!, children: page);
 };
 
 DetailLoader seriesDetails(String id) => (client) async {
@@ -521,6 +523,7 @@ class _DetailPageState extends State<DetailPage> {
     if (cached != null) {
       _data = cached;
       _loading = false;
+      _focusFirst();
     }
     if (key == null || !appCache.isFresh(key)) _load(silent: cached != null);
   }
@@ -546,7 +549,11 @@ class _DetailPageState extends State<DetailPage> {
       if (widget.cacheKey case final key?) {
         appCache.put(key, data, toJson: data.extra.isEmpty ? DetailData.toJson : null);
       }
-      if (mounted) setState(() => _data = data);
+      if (mounted) {
+        final first = _data == null;
+        setState(() => _data = data);
+        if (first) _focusFirst();
+      }
     } on JellyfinException catch (e) {
       if (mounted && !silent) setState(() => _error = describeJellyfinError(e)); // keep cached content on failure
     } finally {
@@ -554,9 +561,23 @@ class _DetailPageState extends State<DetailPage> {
     }
   }
 
+  /// TVs have no on-screen Back or Close here (the remote has its own), so once the content is
+  /// in, focus goes to the first thing on the page, usually Play, unless the remote already
+  /// moved it somewhere on the page.
+  void _focusFirst() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || !ScreenType.of(context).isTv) return;
+      final scope = FocusScope.of(context);
+      final focused = FocusManager.instance.primaryFocus;
+      if (focused != null && focused != scope && focused.ancestors.contains(scope)) return;
+      scope.nextFocus();
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     final topPadding = widget.layout.topPadding;
+    final tv = ScreenType.of(context).isTv;
 
     final Widget body;
     if (_loading) {
@@ -589,7 +610,7 @@ class _DetailPageState extends State<DetailPage> {
     // Popout: tapping any empty space closes it (cards absorb their own taps), and each
     // info card shows its own close button.
     if (widget.popout) {
-      final isPhone = isPhoneLayout(context);
+      final isPhone = ScreenType.of(context).isPhone;
       return GestureDetector(
         behavior: HitTestBehavior.opaque,
         onTap: () => Navigator.of(context).pop(),
@@ -612,16 +633,17 @@ class _DetailPageState extends State<DetailPage> {
           child: Stack(
           children: [
             body,
-            Positioned(
-              top: topPadding + widget.layout.backButtonOffset.dy,
-              left: widget.layout.backButtonOffset.dx,
-              child: _FloatingIconButton(
-                icon: appIcons.back,
-                label: 'Back',
-                filled: _scrolled,
-                onPress: () => context.pop(),
+            if (!tv) // TVs go back with the remote
+              Positioned(
+                top: topPadding + widget.layout.backButtonOffset.dy,
+                left: widget.layout.backButtonOffset.dx,
+                child: _FloatingIconButton(
+                  icon: appIcons.back,
+                  label: 'Back',
+                  filled: _scrolled,
+                  onPress: () => context.pop(),
+                ),
               ),
-            ),
           ],
         ),
         ),
@@ -637,7 +659,9 @@ class _DetailPageState extends State<DetailPage> {
         child: Padding(
           padding: EdgeInsets.only(top: pageTop(context) - 12),
           child: AppBar(
-            leading: BackButton(onPressed: () => context.pop()),
+            // TVs go back with the remote.
+            automaticallyImplyLeading: false,
+            leading: tv ? null : BackButton(onPressed: () => context.pop()),
             title: title == null ? null : Text(title),
           ),
         ),

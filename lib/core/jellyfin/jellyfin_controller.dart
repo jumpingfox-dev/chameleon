@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:dart_jellyfin/dart_jellyfin.dart';
@@ -308,11 +309,57 @@ class JellyfinController extends ChangeNotifier {
     await _switchSession(newClient, account.server, account.token, account.userId, account.deviceId);
   }
 
+  Future<void>? _checking;
+
+  /// Asks the server about every other account saved on this device: one whose sign-in it no
+  /// longer accepts (the user was deleted, or signed out everywhere) is removed, and the rest
+  /// pick up any new name or picture. Accounts on a server that can't be reached are left as
+  /// they are. Runs in the background; listeners hear about any change.
+  Future<void> checkAccounts() => _checking ??= _checkAccounts().whenComplete(() => _checking = null);
+
+  Future<void> _checkAccounts() async {
+    final others = [
+      for (final a in accounts)
+        if (!(currentAccount?.isSame(a.server, a.userId) ?? false)) a,
+    ];
+    var changed = false;
+    await Future.wait([
+      for (final account in others)
+        () async {
+          try {
+            final probe = await _createClient(account.server, deviceId: account.deviceId)
+              ..setSession(token: account.token, userId: account.userId);
+            final user = await probe.user.currentUser().timeout(const Duration(seconds: 10));
+            if (user.id.isNotEmpty && user.id != account.userId) return; // not what we asked about
+            if (user.name != account.name || user.primaryImageTag != account.imageTag) {
+              await _rememberAccount(SavedAccount(
+                server: account.server,
+                userId: account.userId,
+                token: account.token,
+                deviceId: account.deviceId,
+                name: user.name.isEmpty ? account.name : user.name,
+                imageTag: user.primaryImageTag,
+              ));
+              changed = true;
+            }
+          } on JellyfinException catch (e) {
+            if (!e.isAuthError) return; // offline or a server error: try again another time
+            await _forgetAccount(account.server, account.userId);
+            changed = true;
+          } catch (_) {
+            // Unreachable (timed out, no network): leave it.
+          }
+        }(),
+    ]);
+    if (changed) notifyListeners();
+  }
+
   /// Restores a saved session at startup. With more than one account on this device,
   /// it stays signed out so the app opens on "Who's watching?".
   Future<void> load() async {
     lastServer = storage.getString(_kServer);
     accounts = await _readAccounts();
+    unawaited(checkAccounts()); // tidy up accounts that no longer exist, in the background
     if (accounts.length > 1) return;
 
     final token = storage.getString(_kToken);

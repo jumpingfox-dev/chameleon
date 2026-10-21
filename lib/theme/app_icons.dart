@@ -421,6 +421,13 @@ class AppIconSet {
       CupertinoIcons.paintbrush_fill,
       FluentIcons.color_24_filled)
   ;
+  IconData get refresh => _pick(
+      Symbols.refresh_rounded,
+      FPhosphorFillIcons.arrowClockwise,
+      FLucideIcons.refreshCw,
+      CupertinoIcons.refresh,
+      FluentIcons.arrow_sync_24_filled
+  );
   IconData get server => _pick(
       Symbols.dns_rounded,
       FPhosphorFillIcons.hardDrives,

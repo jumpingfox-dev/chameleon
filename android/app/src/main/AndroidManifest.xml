@@ -9,7 +9,11 @@
         android:label="Chameleon"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher"
-        android:banner="@drawable/tv_banner">
+        android:banner="@drawable/tv_banner"
+        android:usesCleartextTraffic="true">
+        <!-- usesCleartextTraffic: most Jellyfin servers are plain http:// on the home network,
+             and ExoPlayer (unlike mpv) goes through Android's networking, which blocks that
+             unless allowed. -->
         <activity
             android:name=".MainActivity"
             android:exported="true"

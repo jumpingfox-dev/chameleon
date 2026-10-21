@@ -144,7 +144,7 @@ class _PlayerControls extends StatelessWidget {
     required this.onCast,
   });
 
-  final Player player;
+  final PlaybackEngine player;
   final JellyfinItem? item;
   final _Trickplay? trickplay;
   final Duration? preview; // the D-pad scrub position, if scrubbing
@@ -173,7 +173,7 @@ class _PlayerControls extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final previewChapter = preview == null ? null : _chapterAt(chapters, preview!);
-    final compact = isPhoneLayout(context);
+    final compact = ScreenType.of(context).isPhone;
 
     // Previous, play/pause, next. Big and in the middle on phones (easy to reach with a thumb);
     // under the seek bar elsewhere.
@@ -423,11 +423,15 @@ double _backIconSize({required bool compact}) => compact ? 28 : 24;
 /// How far the top bar (back, logo and title) sits below the top edge.
 double _topBarTop({required bool compact}) => compact ? 20 : 36;
 
-/// Where the title (the logo) starts, after the back button. Whatever is shown under the
-/// title (the age rating) starts here too, so they line up.
-double playerTitleLeft({required bool compact}) =>
-    _topBarLeft + _backIconSize(compact: compact) + 2 * _ControlButton.paddingFor(compact: compact) + _topBarSpacing;
 const _topBarSpacing = 8.0;
+
+/// Where the age rating card sits, so its colored bar lines up with the back arrow's point
+/// (the arrow is drawn about 4/24 of the icon in from its edge; the card has 12 of padding
+/// before the bar).
+double playerRatingLeft({required bool compact}) {
+  final size = _backIconSize(compact: compact);
+  return _topBarLeft + _ControlButton.paddingFor(compact: compact) + size * 4 / 24 - _RatingIntro.barInset;
+}
 
 /// A round icon button. Focused (remote or keyboard): a solid white circle with a dark icon.
 /// Hovered: a soft translucent circle. Otherwise: just the white icon.
@@ -458,7 +462,7 @@ class _ControlButton extends StatelessWidget {
       onPress: onPress,
       builder: (context, states, _) {
         final highlighted = isHighlighted(states);
-        final compact = isPhoneLayout(context);
+        final compact = ScreenType.of(context).isPhone;
         return AnimatedContainer(
           duration: const Duration(milliseconds: 120),
           padding: EdgeInsets.all(paddingFor(compact: compact)),
@@ -548,7 +552,7 @@ class _PlayerTitle extends StatelessWidget {
 class _TimeRow extends StatelessWidget {
   const _TimeRow({required this.player, required this.preview, this.chapter});
 
-  final Player player;
+  final PlaybackEngine player;
   final Duration? preview;
   final String? chapter;
 
@@ -600,7 +604,7 @@ class _SeekBar extends StatefulWidget {
     this.focusNode,
   });
 
-  final Player player;
+  final PlaybackEngine player;
   final _Trickplay? trickplay;
   final List<({String name, Duration start})> chapters;
   final Duration? preview;
@@ -641,7 +645,7 @@ class _SeekBarState extends State<_SeekBar> {
       final buffered = fractionOf(state.buffer);
       final primary = context.colors.primary;
       // Phones: a thicker bar, a bigger handle and a taller touch area, for thumbs.
-      final compact = isPhoneLayout(context);
+      final compact = ScreenType.of(context).isPhone;
       final thickness = compact ? 6.0 : 4.0;
       final handle = compact
           ? (preview != null ? 26.0 : 20.0)
@@ -689,16 +693,22 @@ class _SeekBarState extends State<_SeekBar> {
                   children: [
                     _bar(width, const Color(0x40FFFFFF), thickness),
                     _bar(width * buffered, const Color(0x66FFFFFF), thickness),
-                    _bar(x, _white, thickness),
+                    // White, like YouTube's, and the theme's color while scrubbing.
+                    _bar(x, preview != null ? primary : _white, thickness),
+                    // The handle only shows while the bar has focus or is being dragged.
                     Positioned(
                       left: math.max(0, x - handle / 2),
-                      child: AnimatedContainer(
+                      child: AnimatedScale(
+                        scale: _focused || preview != null ? 1 : 0,
                         duration: const Duration(milliseconds: 120),
-                        width: handle,
-                        height: handle,
-                        decoration: BoxDecoration(
-                          color: preview != null ? primary : _white,
-                          shape: BoxShape.circle,
+                        child: AnimatedContainer(
+                          duration: const Duration(milliseconds: 120),
+                          width: handle,
+                          height: handle,
+                          decoration: BoxDecoration(
+                            color: preview != null ? primary : _white,
+                            shape: BoxShape.circle,
+                          ),
                         ),
                       ),
                     ),

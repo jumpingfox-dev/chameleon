@@ -82,6 +82,16 @@ enum SubtitleBackground {
   final String label;
 }
 
+/// Which of the two video engines plays things (Android only; elsewhere it's always mpv).
+enum VideoEngine {
+  auto('Automatic (ExoPlayer for Dolby Vision)'),
+  mpv('Always mpv'),
+  exo('ExoPlayer whenever it can play the file');
+
+  const VideoEngine(this.label);
+  final String label;
+}
+
 enum AspectMode {
   fit('Fit (show the whole picture)'),
   fill('Fill (zoom to cover the screen)');
@@ -189,6 +199,9 @@ class PlaybackSettings extends ChangeNotifier {
   bool showRating = true;
   bool trickplay = true;
   AspectMode aspect = AspectMode.fit;
+
+  // Engine
+  VideoEngine engine = VideoEngine.auto;
 
   /// Episodes played in a row by the Up Next countdown, with no button pressed in between.
   /// Not saved: it starts over each time the app opens.
@@ -299,6 +312,7 @@ class PlaybackSettings extends ChangeNotifier {
     'showRating': showRating,
     'trickplay': trickplay,
     'aspect': aspect.name,
+    'engine': engine.name,
   };
 
   void _read(Map<String, dynamic> j) {
@@ -336,6 +350,7 @@ class PlaybackSettings extends ChangeNotifier {
     showRating = flag('showRating', showRating);
     trickplay = flag('trickplay', trickplay);
     aspect = pick(AspectMode.values, j['aspect'], aspect);
+    engine = pick(VideoEngine.values, j['engine'], engine);
   }
 }
 

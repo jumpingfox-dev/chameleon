@@ -82,11 +82,13 @@ class _Sidebar extends StatelessWidget {
                               selected: loc == '/home',
                               onPress: () => goTo('/home'),
                             ),
-                            _SidebarSearch(
-                              open: open,
+                            _SidebarLink(
+                              label: 'Search',
+                              icon: appIcons.search,
                               focusNode: nodeFor('Search'),
+                              open: open,
                               selected: loc.startsWith('/search'),
-                              onSearched: onLeave,
+                              onPress: () => goTo('/search'),
                             ),
                             _SidebarLink(
                               label: 'Favorites',
@@ -297,103 +299,6 @@ class _SidebarSection extends StatelessWidget {
     // arrow hides).
     children: showPages ? children : const [],
   );
-}
-
-/// Search in the sidebar: looks like the other links until you select it, then turns into a
-/// search box in its place. Submitting opens the Search page with the results.
-///
-/// It only becomes a box when selected, not just when the remote passes over it, so the
-/// on-screen keyboard doesn't pop up every time you move down the sidebar.
-class _SidebarSearch extends StatefulWidget {
-  const _SidebarSearch({required this.open, required this.selected, required this.onSearched, this.focusNode});
-
-  final bool open;
-  final FocusNode? focusNode;
-  final bool selected; // on the Search page
-  final VoidCallback onSearched;
-
-  @override
-  State<_SidebarSearch> createState() => _SidebarSearchState();
-}
-
-class _SidebarSearchState extends State<_SidebarSearch> {
-  final _text = TextEditingController();
-  final _field = FocusNode(debugLabel: 'Sidebar search');
-  bool _typing = false;
-
-  @override
-  void initState() {
-    super.initState();
-    // Moving away from the box (↑/↓, or the sidebar closing) turns it back into the link.
-    _field.addListener(() {
-      if (!_field.hasFocus && _typing && mounted) setState(() => _typing = false);
-    });
-  }
-
-  @override
-  void didUpdateWidget(covariant _SidebarSearch old) {
-    super.didUpdateWidget(old);
-    if (!widget.open && _typing) _typing = false;
-  }
-
-  @override
-  void dispose() {
-    _text.dispose();
-    _field.dispose();
-    super.dispose();
-  }
-
-  void _start() {
-    setState(() => _typing = true);
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) _field.requestFocus();
-    });
-  }
-
-  void _submit(String text) {
-    final query = text.trim();
-    if (query.isEmpty) return;
-    context.go(Uri(path: '/search', queryParameters: {'q': query}).toString());
-    _text.clear();
-    setState(() => _typing = false);
-    widget.onSearched(); // into the results
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    if (!(_typing && widget.open)) {
-      return _SidebarLink(
-        label: 'Search',
-        icon: appIcons.search,
-        focusNode: widget.focusNode,
-        open: widget.open,
-        selected: widget.selected,
-        // Closed (a tap on a touch screen): straight to the Search page instead.
-        onPress: widget.open ? _start : () => context.go('/search'),
-      );
-    }
-    // Round like the links' highlight, and exactly a link's height, so the links below stay put.
-    return SizedBox(
-      height: _SidebarItem.height,
-      child: TextField(
-        controller: _text,
-        focusNode: _field,
-        textInputAction: TextInputAction.search,
-        expands: true, // fills the height above, with the text centered in it
-        maxLines: null,
-        textAlignVertical: TextAlignVertical.center,
-        decoration: InputDecoration(
-          hintText: 'Search',
-          prefixIcon: Icon(appIcons.search, size: 18, fill: 1),
-          prefixIconConstraints: const BoxConstraints(minWidth: 44),
-          isDense: true,
-          contentPadding: EdgeInsets.zero,
-          border: searchFieldBorder,
-        ),
-        onSubmitted: _submit,
-      ),
-    );
-  }
 }
 
 /// One sidebar link. Its label fades out when the sidebar closes, leaving just the icon.

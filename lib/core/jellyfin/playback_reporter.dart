@@ -1,7 +1,7 @@
 import 'dart:async';
 
 import 'package:dart_jellyfin/dart_jellyfin.dart';
-import 'package:media_kit/media_kit.dart';
+import '../playback/playback_engine.dart';
 
 /// Tells Jellyfin what's playing and where, so progress, Continue Watching and Next Up
 /// stay current in this app and every other Jellyfin client.
@@ -18,7 +18,7 @@ class PlaybackReporter {
 
   final JellyfinClient client;
   final String itemId;
-  final Player player;
+  final PlaybackEngine player;
   final String? mediaSourceId;
 
   /// While the server converts the video: its session id (so the dashboard shows it, and

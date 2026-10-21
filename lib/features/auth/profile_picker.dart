@@ -111,6 +111,7 @@ class _ProfilePickerState extends State<ProfilePicker> {
   void initState() {
     super.initState();
     _loadPublicUsers();
+    jellyfin.checkAccounts(); // drops accounts that no longer exist, and updates renamed ones
   }
 
   Future<void> _loadPublicUsers() async {

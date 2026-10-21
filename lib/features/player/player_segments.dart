@@ -264,7 +264,6 @@ Future<List<_Segment>> _loadSegments(
           _Segment(kind, start, end),
     ]..sort((a, b) => a.start.compareTo(b.start));
 
-    debugPrint('Skip segments: ${result.items.length} from the server');
     if (segments.isNotEmpty) return _plausibleSegments(segments, item);
   } on JellyfinException catch (e) {
     debugPrint(
@@ -272,12 +271,7 @@ Future<List<_Segment>> _loadSegments(
     );
   }
 
-  final fromChapters = _plausibleSegments(
-    _segmentsFromChapterNames(item),
-    item,
-  );
-  debugPrint('Skip segments: ${fromChapters.length} from chapter names');
-  return fromChapters;
+  return _plausibleSegments(_segmentsFromChapterNames(item), item);
 }
 
 /// Drops segments that can't be right for this file, so a bad community timestamp
@@ -331,6 +325,9 @@ List<_Segment> _segmentsFromChapterNames(JellyfinItem item) {
 class _RatingIntro extends StatelessWidget {
   const _RatingIntro({required this.rating, required this.visible});
 
+  /// The card's padding before its colored bar.
+  static const barInset = 12.0;
+
   final String rating;
   final bool visible;
 
@@ -349,7 +346,7 @@ class _RatingIntro extends StatelessWidget {
             borderRadius: BorderRadius.circular(8),
           ),
           child: Padding(
-            padding: const EdgeInsets.fromLTRB(12, 10, 20, 10),
+            padding: const EdgeInsets.fromLTRB(barInset, 10, 20, 10),
             child: Row(
               mainAxisSize: MainAxisSize.min,
               spacing: 12,

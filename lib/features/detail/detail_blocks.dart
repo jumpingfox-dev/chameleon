@@ -23,7 +23,7 @@ class SliverDetailCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final isPhone = isPhoneLayout(context);
+    final isPhone = ScreenType.of(context).isPhone;
     final text = description?.trim();
 
     final details = [
@@ -239,7 +239,7 @@ class _TapShield extends StatelessWidget {
 }
 
 /// The card used by every detail layout. It absorbs taps, and in a popout shows a
-/// close button in its top-right corner.
+/// close button in its top-right corner (touch screens only; TVs and desktops have Back and Esc).
 class _DetailCard extends StatelessWidget {
   const _DetailCard({required this.child, this.showClose = true, this.edgeToEdge = false});
 
@@ -266,7 +266,7 @@ class _DetailCard extends StatelessWidget {
               )
             else
               Padding(padding: padding, child: child),
-            if (showClose && _PopoutScope.of(context))
+            if (showClose && _PopoutScope.of(context) && ScreenType.of(context).isTouch)
               Positioned(
                 top: 8,
                 right: 8,

@@ -36,18 +36,41 @@ audio-track switch during direct play doesn't need that.
 What the device can do comes from Android, through the `chameleon/media` channel in
 `MainActivity.kt` (`core/platform/media_support.dart` on the Dart side):
 
-- **Video.** `_videoConfiguration` checks the file's video codec and bit depth against the
+- **Video.** `_useVideoSurface` checks the file's video codec and bit depth against the
   hardware decoders Android lists. If one fits, mpv uses `vo=mediacodec_embed` with
-  `hwdec=mediacodec`: the decoder draws straight to the screen, which is what keeps 4K HEVC
-  smooth on a TV. Otherwise it keeps media_kit's default (`vo=gpu`), which can fall back to
-  software decoding. Subtitles aren't affected either way: the app draws them itself. The
-  video controller is made when the first video opens, so it can't change for later episodes
-  in the same player.
+  `hwdec=mediacodec`, drawing on a native `SurfaceView` behind the (see-through) Flutter view
+  (`VideoSurface.kt` and `core/platform/video_surface.dart`). The display gets the decoder's
+  frames as they are, so HDR10, HLG and HDR10+ play as HDR, and 4K HEVC stays smooth.
+  `VideoSurfaceView` marks where the video goes and moves the surface there; it also keeps the
+  screen on while playing. Otherwise mpv keeps media_kit's `Video` (`vo=gpu`, a Flutter
+  texture, SDR), which can fall back to software decoding. Subtitles aren't affected either
+  way: the app draws them itself. How video is drawn is decided when the first video opens.
 - **Passthrough.** With "Surround sound passthrough" on, mpv's `audio-spdif` lists only the
   formats Android says the current output (HDMI, a soundbar) takes as they are. Anything else,
   often TrueHD, is decoded by mpv instead of being sent somewhere that can't play it.
 - **Transcoding** never copies TrueHD, which doesn't fit the stream's container. With
   passthrough on, the server converts surround audio to Dolby Digital Plus.
+
+## Two engines: mpv and ExoPlayer (Android)
+
+The player talks to `Playback` (`core/playback/playback_engine.dart`), which passes everything
+on to one of two engines that both describe themselves in media_kit's terms (`PlayerState`,
+`PlayerStream`, `Tracks`):
+
+- **mpv** (`MpvEngine`, through media_kit): the main engine. It plays nearly anything, and the
+  audio settings (passthrough formats, stereo mix-down, night mode) are mpv options.
+- **ExoPlayer** (`ExoEngine`; native half in `ExoEngine.kt`): Android's own player. It's the
+  only way to play Dolby Vision as Dolby Vision, since it uses Android's Dolby Vision decoder,
+  which mpv can't. It draws on the same `VideoSurface`; text subtitles come back to Dart as
+  lines and are drawn as usual, while picture subtitles (PGS, VobSub) are drawn natively by a
+  `SubtitleView` just above the video.
+
+`_wantsExo` picks ExoPlayer for a direct-played Dolby Vision file (`VideoRangeType` starting
+`DOVI`) when the device has a Dolby Vision decoder and ExoPlayer can play the audio that'll be
+picked (`ExoSupport.playsAudio`: a decoder on the device, or passthrough). Settings › Playback ›
+Video engine can make that "always mpv" or "ExoPlayer whenever it can". Each engine backs up
+the other: if the first can't open the file, `_fallBack` reopens it in the other from the same
+spot, once per player screen. Converted streams always play in mpv.
 
 ## Reporting progress
 

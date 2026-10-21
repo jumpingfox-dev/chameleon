@@ -77,7 +77,7 @@ String? _externalSubtitleUrl(JellyfinItem? item, Map<String, dynamic> stream) {
       '?api_key=${client.token}';
 }
 
-List<_TrackChoice> _audioChoices(Player player, JellyfinItem? item) {
+List<_TrackChoice> _audioChoices(PlaybackEngine player, JellyfinItem? item) {
   final streams = _streamsOf(item, 'Audio', external: false);
   final tracks = player.state.tracks.audio
       .where((t) => _isRealTrack(t.id))
@@ -92,7 +92,7 @@ List<_TrackChoice> _audioChoices(Player player, JellyfinItem? item) {
   ];
 }
 
-List<_TrackChoice> _subtitleChoices(Player player, JellyfinItem? item) {
+List<_TrackChoice> _subtitleChoices(PlaybackEngine player, JellyfinItem? item) {
   final streams = _streamsOf(item, 'Subtitle', external: false);
   final external = _streamsOf(item, 'Subtitle', external: true);
   final tracks = player.state.tracks.subtitle
@@ -135,10 +135,10 @@ List<_TrackChoice> _subtitleChoices(Player player, JellyfinItem? item) {
 }
 
 /// The keys of the current choices, matching the keys above.
-String _currentAudioKey(Player player) =>
+String _currentAudioKey(PlaybackEngine player) =>
     'audio:${player.state.track.audio.id}';
 
-String _currentSubtitleKey(Player player) {
+String _currentSubtitleKey(PlaybackEngine player) {
   final id = player.state.track.subtitle.id;
   if (!_isRealTrack(id)) return 'off';
   return id.startsWith('http') ? id : 'sub:$id';

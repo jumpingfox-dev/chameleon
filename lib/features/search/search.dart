@@ -5,6 +5,7 @@ import 'package:material_ui/material_ui.dart';
 
 import '../../core/storage/app_cache.dart';
 import '../../core/jellyfin/jellyfin_controller.dart';
+import '../../core/jellyfin/list_each.dart';
 import '../detail/detail_page.dart';
 import '../detail/person_tile.dart';
 import '../library/poster_card.dart';
@@ -93,13 +94,12 @@ class _SearchScreenState extends State<SearchScreen> {
     setState(() => _loading = true);
     try {
       final (page, people) = await (
-      client.items.list(
+      client.items.listEach(
         searchTerm: query,
-        includeItemTypes: const [
+        types: const [
           JellyfinItemKind.movie,
           JellyfinItemKind.series,
         ],
-        recursive: true,
         sortBy: const ['SortName'],
         limit: 60,
       ),
@@ -111,7 +111,7 @@ class _SearchScreenState extends State<SearchScreen> {
       ).wait;
       if (!mounted || id != _requestId) return;
       setState(() {
-        _results = page.items;
+        _results = page;
         _people = people.items;
         _error = null;
       });
@@ -135,6 +135,7 @@ class _SearchScreenState extends State<SearchScreen> {
     if (client == null) return;
     try {
       var items = (await client.suggestions.list(
+        enableTotalRecordCount: false,
         mediaType: const ['Video'],
         type: const [JellyfinItemKind.movie, JellyfinItemKind.series],
         limit: 24,
@@ -142,15 +143,14 @@ class _SearchScreenState extends State<SearchScreen> {
 
       // Little or no watch history: show a random mix instead.
       if (items.isEmpty) {
-        items = (await client.items.list(
-          includeItemTypes: const [
+        items = await client.items.listEach(
+          types: const [
             JellyfinItemKind.movie,
             JellyfinItemKind.series,
           ],
-          recursive: true,
           sortBy: const ['Random'],
           limit: 24,
-        )).items;
+        );
       }
       appCache.put(cacheKey, items);
       if (mounted) setState(() => _suggestions = items);

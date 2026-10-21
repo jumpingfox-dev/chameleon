@@ -64,3 +64,11 @@ kotlin {
 flutter {
     source = "../.."
 }
+
+dependencies {
+    // ExoPlayer, the second video engine (see ExoEngine.kt): Dolby Vision, and a fallback for
+    // files mpv can't open.
+    val media3 = "1.8.0"
+    implementation("androidx.media3:media3-exoplayer:$media3")
+    implementation("androidx.media3:media3-ui:$media3")
+}

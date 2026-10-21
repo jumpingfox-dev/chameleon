@@ -6,7 +6,7 @@ import '../../theme/app_icons.dart';
 import '../../core/jellyfin/jellyfin_controller.dart';
 import 'home_layout.dart';
 import '../../core/platform/page_insets.dart';
-import '../../core/platform/orientation.dart';
+import '../../core/platform/screen_type.dart';
 import '../../widgets/nav_button.dart';
 import 'home_modules.dart';
 import '../../theme/theme.dart';
@@ -30,11 +30,26 @@ class _HomeScreenState extends State<HomeScreen> {
     _router!.routerDelegate.addListener(_onNavigate);
   }
 
+  String? _lastPath;
+
+  /// Something was played since Home last showed.
+  bool _watched = false;
+
   /// Leaving Home (to a library, another tab, the player, ...) ends edit mode.
   void _onNavigate() {
     final path = _router!.routerDelegate.currentConfiguration.uri.path;
+    final from = _lastPath;
+    _lastPath = path;
+    if (path.startsWith('/play/')) _watched = true;
     if (homeEditing.value && path != '/home') homeEditing.value = false;
-    if (path == '/home') homeVisible.value++; // lets sections older than 10 minutes refresh
+    if (path != '/home' || from == path) return;
+    // Back on Home: sections older than 10 minutes may refresh. Not after watching something,
+    // though: Home stays as you left it, and only your progress updates (refreshWatchProgress).
+    if (_watched) {
+      _watched = false;
+    } else {
+      homeVisible.value++;
+    }
   }
 
   @override
@@ -51,7 +66,7 @@ class _HomeScreenState extends State<HomeScreen> {
         ListenableBuilder(
           listenable: Listenable.merge([jellyfin, homeLayout, homeEditing]),
           builder: (context, _) {
-            final isPhone = isPhoneLayout(context);
+            final isPhone = ScreenType.of(context).isPhone;
             final editing = homeEditing.value;
 
             return ListView(
@@ -131,7 +146,7 @@ class _HomeScreenState extends State<HomeScreen> {
         ),
 
         // ── Edit / Done ──
-        if (isPhoneLayout(context))
+        if (ScreenType.of(context).isPhone)
           Positioned(
             right: pageSides(context).right,
             bottom: 16,

@@ -3,7 +3,7 @@ import 'package:material_ui/material_ui.dart';
 
 import '../../theme/app_icons.dart';
 import '../../core/jellyfin/jellyfin_controller.dart';
-import '../../core/platform/orientation.dart';
+import '../../core/platform/screen_type.dart';
 import '../../widgets/hover_lift.dart';
 import '../../theme/theme.dart';
 import '../../widgets/tappable.dart';
@@ -16,7 +16,7 @@ final libraryViewOverride = ValueNotifier<LibraryView?>(null);
 
 LibraryView libraryViewFor(BuildContext context) =>
     libraryViewOverride.value ??
-    (isPhoneLayout(context)
+    (ScreenType.of(context).isPhone
         ? LibraryView.poster
         : LibraryView.thumbnail);
 
