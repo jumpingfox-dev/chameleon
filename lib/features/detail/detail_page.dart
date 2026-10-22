@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'dart:math' as math;
 
 import 'package:dart_jellyfin/dart_jellyfin.dart';
@@ -12,6 +13,9 @@ import '../../core/format/item_format.dart';
 import '../../core/jellyfin/jellyfin_controller.dart';
 import '../../core/jellyfin/list_each.dart';
 import '../../core/platform/screen_type.dart';
+import '../../core/platform/media_support.dart';
+import '../previews/trailer_preview.dart';
+import '../previews/trailer_screen.dart';
 import 'expandable_text.dart';
 import '../../widgets/hover_lift.dart';
 import 'person_tile.dart';
@@ -277,6 +281,8 @@ DetailLoader collectionDetails(String id) => (client) async {
   client.items.list(
     enableTotalRecordCount: false,
     parentId: id,
+    // Just what's in the collection: a show, not its seasons and every episode as well.
+    recursive: false,
     sortBy: const ['ProductionYear', 'SortName'],
     limit: 200,
     fields: const ['Genres', 'OfficialRating', 'ProductionYear'],

@@ -62,7 +62,7 @@ class PlayerScreen extends StatefulWidget {
   State<PlayerScreen> createState() => _PlayerScreenState();
 }
 
-class _PlayerScreenState extends State<PlayerScreen> {
+class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver {
   static const _hideAfter = Duration(seconds: 3);
   static const _scrubCommitAfter = Duration(milliseconds: 1500);
 
@@ -230,6 +230,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
   void initState() {
     super.initState();
     screensaverBlocks.value++; // never over a video, even a paused one
+    WidgetsBinding.instance.addObserver(this);
     // Full screen, sideways: most things played are movies and episodes. Other videos
     // (home videos and the like) are let free to turn once the item has loaded.
     _holdTo(AppOrientation.landscape);
@@ -1147,6 +1148,7 @@ builder: (context) => Dialog(child: Padding(
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     screensaverBlocks.value--;
     _hideTimer?.cancel();
     _countdownTimer?.cancel();
@@ -1326,6 +1328,19 @@ builder: (context) => Dialog(child: Padding(
   void _stopFollowingTilt() {
     _tilt?.cancel();
     _tilt = null;
+  }
+
+  /// Leaving the app (Home, another app, the screen turning off, or closing it): pauses, so
+  /// nothing keeps playing out of sight. It stays paused on coming back. Not while casting,
+  /// which plays on the Chromecast.
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed || state == AppLifecycleState.inactive) return;
+    if (_casting || !_player.state.playing) return;
+    // In a group, everyone pauses as if pause were pressed. Here it pauses straight away too:
+    // the group's word may not arrive before the app is closed.
+    if (_inGroup) unawaited(syncPlay.requestPause());
+    unawaited(_player.pause());
   }
 
   void _playOrPause() {

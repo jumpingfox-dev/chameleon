@@ -421,6 +421,13 @@ class AppIconSet {
       CupertinoIcons.paintbrush_fill,
       FluentIcons.color_24_filled)
   ;
+  IconData get trailer => _pick(
+      Symbols.movie_rounded,
+      FPhosphorFillIcons.filmStrip,
+      FLucideIcons.film,
+      CupertinoIcons.film_fill,
+      FluentIcons.movies_and_tv_24_filled
+  );
   IconData get refresh => _pick(
       Symbols.refresh_rounded,
       FPhosphorFillIcons.arrowClockwise,

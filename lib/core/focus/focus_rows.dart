@@ -348,7 +348,18 @@ bool moveFocus(TraversalDirection direction) {
   }
   }
 
-  if (target == null) return false;
+  if (target == null) {
+    // In a row that scrolls further that way: the next card just isn't built yet (pressed
+    // faster than the row can scroll). Scroll on and try again, rather than saying there's
+    // nothing there, which would send focus out of the row (into the sidebar, say).
+    if (row != null &&
+        (direction == TraversalDirection.left || direction == TraversalDirection.right) &&
+        _scrollRowOn(current, forward: direction == TraversalDirection.right)) {
+      WidgetsBinding.instance.addPostFrameCallback((_) => moveFocus(direction));
+      return true;
+    }
+    return false;
+  }
   if (row != null) {
     _lastInRow[row] = current; // remember where you left this row
   }
@@ -371,6 +382,19 @@ bool moveFocus(TraversalDirection direction) {
     if (direction == TraversalDirection.left) _scrollToStartIfFirst(target, Axis.horizontal, candidates);
     if (direction == TraversalDirection.up) _scrollToStartIfFirst(target, Axis.vertical, candidates);
   }
+  return true;
+}
+
+/// Jumps [current]'s sideways list on by one item, if it isn't at that end. Returns whether it moved.
+bool _scrollRowOn(FocusNode current, {required bool forward}) {
+  final context = current.context;
+  if (context == null) return false;
+  final position = Scrollable.maybeOf(context, axis: Axis.horizontal)?.position;
+  if (position == null) return false;
+  final target = (position.pixels + (forward ? 1 : -1) * current.rect.width)
+      .clamp(position.minScrollExtent, position.maxScrollExtent);
+  if ((target - position.pixels).abs() < 1) return false;
+  position.jumpTo(target);
   return true;
 }
 

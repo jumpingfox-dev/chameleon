@@ -70,9 +70,10 @@ class _HomeScreenState extends State<HomeScreen> {
             final editing = homeEditing.value;
 
             return ListView(
-              // Extra space at the bottom so the last module isn't hidden behind the Edit button.
+              // On phones, extra space at the bottom so the last module isn't hidden behind the
+              // Edit button (elsewhere it's in the sidebar; each section has its own gap below).
               // No side padding: rows scroll edge to edge, everything else adds pageSides.
-              padding: EdgeInsets.fromLTRB(0, pageTop(context), 0, 48),
+              padding: EdgeInsets.fromLTRB(0, pageTop(context), 0, isPhone ? 48 : 8),
               // While editing, every section is built, off screen too: moving one past the
               // edge would otherwise take it (and the button you're on) away, losing your place.
               scrollCacheExtent: editing ? const ScrollCacheExtent.pixels(100000) : null,

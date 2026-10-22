@@ -155,8 +155,7 @@ class _AppShellState extends State<AppShell> {
     if (loc.startsWith('/search')) return ('Search', null);
     if (loc == '/home/favorites') return ('Favorites', null);
     if (loc.startsWith('/home/library/')) return ('Libraries', 'Libraries/$last');
-    if (loc == '/home/genres') return ('Genres', 'Genres/All');
-    if (loc.startsWith('/home/genre/')) return ('Genres', 'Genres/$last');
+    if (loc.startsWith('/home/genre')) return ('Genres', null);
     if (loc == '/settings') return ('Settings', 'Settings/${widget.tab ?? settingsTabLabels.first}');
     if (loc == '/profile') return ('Settings', 'Settings/${widget.tab ?? 'Account'}');
     return ('Home', null); // home, and the pages opened from it (a movie, a show, ...)

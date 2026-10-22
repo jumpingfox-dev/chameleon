@@ -7,6 +7,8 @@ import '../../core/platform/screen_type.dart';
 import '../../widgets/hover_lift.dart';
 import '../../theme/theme.dart';
 import '../../widgets/tappable.dart';
+import '../previews/card_preview.dart';
+import '../previews/trailer_preview.dart';
 
 enum LibraryView { poster, thumbnail }
 
@@ -129,7 +131,7 @@ class WatchedBadge extends StatelessWidget {
         appIcons.check,
         size: size * 0.6,
         color: colors.onPrimary,
-        fill: 1
+        fill: 1,
       ),
     );
   }
@@ -163,17 +165,55 @@ class WatchProgressBar extends StatelessWidget {
   );
 }
 
-class PosterCard extends StatelessWidget {
+class PosterCard extends StatefulWidget {
   const PosterCard({
     super.key,
     required this.item,
     required this.onPress,
     this.view = LibraryView.poster,
+    this.trailer = true,
+    this.onPreviewShowing,
+    this.anchor = Alignment.center,
   });
 
   final JellyfinItem item;
   final VoidCallback onPress;
   final LibraryView view;
+
+  /// Whether the card plays the title's trailer after a moment on it (Settings › Playback).
+  /// Off where you're picking up something you've started (Continue Watching, Next Up).
+  final bool trailer;
+
+  /// Set where the card is big enough to play its trailer in itself (Home's rows): it does,
+  /// and this says when the trailer starts or stops showing (a poster widens to 16:9 for it).
+  /// Otherwise the trailer plays in a panel over the card.
+  final ValueChanged<bool>? onPreviewShowing;
+
+  /// What stays put as the card grows on focus: the middle, or a side (a row's first card grows
+  /// away from the sidebar, its last one away from the screen's edge).
+  final Alignment anchor;
+
+  /// How far in a resting card sits from each side, for a card [height] tall: the same on
+  /// posters and thumbnails (3% of a poster's width and height).
+  static EdgeInsets restInset(
+    double height, {
+    Alignment anchor = Alignment.center,
+  }) {
+    final x = height * 0.02;
+    final y = height * 0.03;
+    return EdgeInsets.fromLTRB(x * (1 + anchor.x), y, x * (1 - anchor.x), y);
+  }
+
+  @override
+  State<PosterCard> createState() => _PosterCardState();
+}
+
+class _PosterCardState extends State<PosterCard> {
+  /// The trailer is playing in the card: no focus border over it.
+  bool _previewing = false;
+
+  JellyfinItem get item => widget.item;
+  LibraryView get view => widget.view;
 
   /// Posters use the Primary image. Thumbnails prefer the landscape Thumb image,
   /// then a Backdrop, then fall back to the poster (cropped to fit).
@@ -214,6 +254,11 @@ class PosterCard extends StatelessWidget {
     );
   }
 
+  void _onPreviewShowing(bool showing) {
+    if (mounted) setState(() => _previewing = showing);
+    widget.onPreviewShowing?.call(showing);
+  }
+
   @override
   Widget build(BuildContext context) {
     final client = jellyfin.client; // null for a moment right after sign-out
@@ -225,46 +270,75 @@ class PosterCard extends StatelessWidget {
       button: true,
       child: HoverLift(
         builder: (context, active) => Tappable(
-          onPress: onPress,
-          child: AnimatedScale(
-            scale: active ? 1.0 : 0.94,
-            duration: const Duration(milliseconds: 150),
-            curve: Curves.easeOut,
-            child: AnimatedContainer(
+          onPress: widget.onPress,
+          // Resting cards sit in a little from their tile's edges; focused, they fill it.
+          child: LayoutBuilder(
+            builder: (context, constraints) => AnimatedPadding(
+              padding: active
+                  ? EdgeInsets.zero
+                  : PosterCard.restInset(
+                      constraints.maxHeight,
+                      anchor: widget.anchor,
+                    ),
               duration: const Duration(milliseconds: 150),
-              // Hovered or focused: a border drawn over the artwork's edge (it takes up no space).
-              foregroundDecoration: BoxDecoration(
-                border: Border.all(
-                  color: active ? context.colors.primary : const Color(0x00000000),
-                  width: 2.5,
+              curve: Curves.easeOut,
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 150),
+                // Hovered or focused: a border drawn over the artwork's edge (it takes up no space),
+                // until the trailer plays there.
+                foregroundDecoration: BoxDecoration(
+                  border: Border.all(
+                    color: active && !_previewing
+                        ? context.colors.primary
+                        : const Color(0x00000000),
+                    width: 2.5,
+                  ),
+                  borderRadius: BorderRadius.circular(8),
                 ),
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(8),
-                child: Stack(
-                  fit: StackFit.expand,
-                  children: [
-                    url == null
-                        ? _placeholder(context, colors)
-                        : Image.network(
-                            url,
-                            fit: BoxFit.cover,
-                            width: double.infinity,
-                            height: double.infinity,
-                            errorBuilder: (_, _, _) =>
-                                _placeholder(context, colors),
-                          ),
-                    if (watchProgress(item) case final progress?)
-                      Positioned(
-                        left: 8,
-                        right: 8,
-                        bottom: 8,
-                        child: WatchProgressBar(progress),
-                      ),
-                    if (isWatched(item))
-                      const Positioned(top: 8, right: 8, child: WatchedBadge()),
-                  ],
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(8),
+                  child: Stack(
+                    fit: StackFit.expand,
+                    children: [
+                      url == null
+                          ? _placeholder(context, colors)
+                          : Image.network(
+                              url,
+                              fit: BoxFit.cover,
+                              width: double.infinity,
+                              height: double.infinity,
+                              errorBuilder: (_, _, _) =>
+                                  _placeholder(context, colors),
+                            ),
+                      if (watchProgress(item) case final progress?)
+                        Positioned(
+                          left: 8,
+                          right: 8,
+                          bottom: 8,
+                          child: WatchProgressBar(progress),
+                        ),
+                      if (isWatched(item))
+                        const Positioned(
+                          top: 8,
+                          right: 8,
+                          child: WatchedBadge(),
+                        ),
+                      // After a moment on the card, its trailer, in the card or in a panel over it
+                      // (see Settings › Playback), over the badges: nothing may cover a YouTube player.
+                      // Not on phones, which have no focus or hover.
+                      if (widget.trailer &&
+                          TrailerPreview.supports(item) &&
+                          !ScreenType.of(context).isPhone)
+                        CardPreview(
+                          item: item,
+                          active: active,
+                          inline: widget.onPreviewShowing != null,
+                          onShowing: widget.onPreviewShowing == null
+                              ? null
+                              : _onPreviewShowing,
+                        ),
+                    ],
+                  ),
                 ),
               ),
             ),

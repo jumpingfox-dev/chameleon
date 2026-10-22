@@ -42,6 +42,18 @@ class MediaSupport {
     }
   }
 
+  /// Opens [url] in the desktop's browser. False if nothing could open it.
+  static Future<bool> openUrl(String url) async {
+    try {
+      final opener = Platform.isLinux ? 'xdg-open' : Platform.isMacOS ? 'open' : null;
+      if (opener != null) return (await Process.run(opener, [url])).exitCode == 0;
+      if (Platform.isWindows) return (await Process.run('cmd', ['/c', 'start', '', url])).exitCode == 0;
+    } catch (e) {
+      debugPrint('Open $url: $e');
+    }
+    return false;
+  }
+
   /// The [hardwareDecoders] name for a Jellyfin video stream (its Codec and BitDepth), or
   /// null for a format there's no name for.
   static String? decoderName(String? codec, int? bitDepth) {

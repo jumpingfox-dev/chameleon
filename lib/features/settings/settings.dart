@@ -21,6 +21,7 @@ import '../player/playback_settings.dart';
 import '../screensaver/screensaver.dart';
 import '../screensaver/screensaver_settings.dart';
 import 'custom_theme_editor.dart';
+import '../previews/youtube_notice.dart';
 import 'choice_picker.dart';
 import '../../widgets/app_logo.dart';
 import '../auth/profile_actions.dart';
@@ -848,6 +849,44 @@ class _PlaybackCard extends StatelessWidget {
             onChange: (v) => update((s) => s.trickplay = v),
           ),
 
+          // ── Previews ──
+          const _SectionTitle(
+            'Previews',
+            description: 'Play a title\'s trailer in its card after a moment on it, with the remote or the mouse.',
+          ),
+          SwitchSetting(
+            label: 'Trailer previews',
+            value: s.previews,
+            onChange: (v) => update((s) => s.previews = v),
+          ),
+          if (s.previews) ...[
+            _gap,
+            _PickerSetting<int>(
+              label: 'Start after',
+              value: s.previewDelay,
+              options: previewDelayOptions,
+              format: (n) => n == 1 ? '1 second' : '$n seconds',
+              onChange: (n) => update((s) => s.previewDelay = n),
+            ),
+            _gap,
+            SwitchSetting(
+              label: 'Sound',
+              value: s.previewSound,
+              onChange: (v) => update((s) => s.previewSound = v),
+            ),
+            if (Platform.isAndroid || Platform.isIOS)
+              SwitchSetting(
+                label: 'YouTube trailers',
+                description: 'When the server has no trailer of its own.',
+                value: s.previewYouTube,
+                onChange: (v) => update((s) => s.previewYouTube = v),
+              ),
+            if (Platform.isAndroid || Platform.isIOS) ...[
+              _gap,
+              const YouTubeNotice(),
+            ],
+          ],
+
           // ── Engine (Android only: ExoPlayer is Android's own player) ──
           if (Platform.isAndroid) ...[
             const _SectionTitle(
@@ -977,6 +1016,8 @@ class _AboutCardState extends State<_AboutCard> {
             'Fonts from Google Fonts. Not affiliated with the Jellyfin project.',
         style: context.text.bodyMedium?.copyWith(color: context.colors.onSurfaceVariant),
       ),
+      const SizedBox(height: 12),
+      const YouTubeNotice(),
     ],
   );
 }

@@ -16,6 +16,8 @@ import '../../core/storage/app_cache.dart';
 import '../../core/platform/screen_type.dart';
 import '../detail/detail_page.dart';
 import '../library/poster_card.dart';
+import '../previews/card_preview.dart';
+import '../previews/trailer_preview.dart';
 import '../../core/focus/scroll_into_view.dart';
 import '../../theme/theme.dart';
 
@@ -277,6 +279,8 @@ Future<HomeModuleContent> _collection(
   final page = await client.items.list(
     enableTotalRecordCount: false,
     parentId: id,
+    // Just what's in the collection: a show, not its seasons and every episode as well.
+    recursive: false,
     sortBy: const ['ProductionYear', 'SortName'],
     limit: 50,
     fields: const ['RecursiveItemCount'],
@@ -355,10 +359,23 @@ class HomeModuleView extends StatefulWidget {
 }
 
 class _HomeModuleViewState extends State<HomeModuleView>
-    with AutomaticKeepAliveClientMixin {
+    with AutomaticKeepAliveClientMixin, SingleTickerProviderStateMixin {
   HomeModuleContent? _content;
   String? _error;
   final _rowScroll = ScrollController();
+
+  /// The poster playing its trailer, widening to 16:9 for it (and narrowing back after).
+  int? _widened;
+  late final _widen = AnimationController(vsync: this, duration: _widenDuration)
+    ..addListener(_onWidenTick)
+    ..addStatusListener((status) {
+      if (status == AnimationStatus.dismissed && mounted) setState(() => _widened = null);
+    });
+
+  /// Near the screen's right edge, a poster widens to the left instead: the row scrolls along
+  /// with it, from [_shiftFrom] by [_shift] in all, so its right edge stays where it is.
+  double _shiftFrom = 0;
+  double _shift = 0;
 
   HomeModuleSpec get _spec => homeModuleSpecs[widget.module.type]!;
 
@@ -391,6 +408,7 @@ class _HomeModuleViewState extends State<HomeModuleView>
     favoritesChanged.removeListener(_load);
     homeVisible.removeListener(_refreshIfStale);
     watchProgressChanged.removeListener(_onWatched);
+    _widen.dispose();
     _rowScroll.dispose();
     super.dispose();
   }
@@ -501,7 +519,7 @@ class _HomeModuleViewState extends State<HomeModuleView>
               Padding(
                 padding: pageSides(
                   context,
-                  extra: 16 + (isCarousel ? 0 : _cardInset(context, _viewFor(context))),
+                  extra: 16, // in line with the first card, which grows away from the sidebar
                 ),
                 child: Row(
                   children: [
@@ -574,7 +592,6 @@ class _HomeModuleViewState extends State<HomeModuleView>
         child: _PlaceholderRow(
           tileWidth: tileWidth,
           imageHeight: imageHeight,
-          inset: _cardInset(context, view),
           captions: captions,
         ),
       );
@@ -600,7 +617,7 @@ class _HomeModuleViewState extends State<HomeModuleView>
           scrollDirection: Axis.horizontal,
           // Inside the list, so the first card starts in line with the title
           // but cards can still scroll right to the screen's edge.
-          padding: pageSides(context),
+          padding: _rowSides(context),
           itemCount: items.length,
           separatorBuilder: (_, _) => const SizedBox(width: _rowGap),
           itemBuilder: (context, i) {
@@ -614,11 +631,22 @@ class _HomeModuleViewState extends State<HomeModuleView>
               child: PosterCard(
                 item: items[i],
                 view: view,
+                trailer: !widget.module.type.followsProgress, // no trailers in Continue Watching or Next Up
+                onPreviewShowing: (showing) => _onPreviewShowing(context, i, showing, view, imageHeight),
+                // The first card grows away from the sidebar, the last away from the screen's edge.
+                anchor: i == 0
+                    ? Alignment.centerLeft
+                    : i == items.length - 1
+                    ? Alignment.centerRight
+                    : Alignment.center,
                 onPress: () => openItem(context, items[i]),
               ),
             );
+            // A poster playing its trailer widens to 16:9 in its place, pushing the rest along.
             return SizedBox(
-              width: tileWidth,
+              width: view == LibraryView.poster && _widened == i
+                  ? tileWidth + (imageHeight * 16 / 9 - tileWidth) * _widenCurve.transform(_widen.value)
+                  : tileWidth,
               child: captions
                   ? Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -645,6 +673,41 @@ class _HomeModuleViewState extends State<HomeModuleView>
   /// The space between a row's tiles.
   static const _rowGap = 4.0;
 
+  static const _widenDuration = Duration(milliseconds: 250);
+
+  static const _widenCurve = Curves.easeOutCubic;
+
+  /// Card [index]'s trailer started or stopped showing. In a poster row, the poster widens for
+  /// it (or narrows back): to the right, or near the screen's edge, to the left.
+  void _onPreviewShowing(BuildContext context, int index, bool showing, LibraryView view, double imageHeight) {
+    if (!mounted || view != LibraryView.poster) return;
+    if (showing) {
+      _shift = 0;
+      if (_rowScroll.hasClients) {
+        final position = _rowScroll.position;
+        final sides = _rowSides(context);
+        final step = _tileWidth(context, view) + _rowGap;
+        final right = sides.left + index * step + imageHeight * 16 / 9 - position.pixels;
+        // Too near the edge to widen to the right: it widens to the left, all the way.
+        final overflows = right > position.viewportDimension - sides.right;
+        _shiftFrom = position.pixels;
+        _shift = overflows ? imageHeight * 16 / 9 - _tileWidth(context, view) : 0;
+      }
+      setState(() => _widened = index);
+      _widen.forward(from: 0);
+    } else if (_widened == index) {
+      _shift = 0;
+      _widen.reverse();
+    }
+  }
+
+  void _onWidenTick() {
+    setState(() {}); // the poster's width
+    if (_shift > 0 && _widen.status == AnimationStatus.forward && _rowScroll.hasClients) {
+      _rowScroll.jumpTo(_shiftFrom + _shift * _widenCurve.transform(_widen.value));
+    }
+  }
+
   /// With a remote or keyboard, scrolls the row so card [index] sits where the last card that
   /// fits whole on screen sits when the row is at its start (the third, say). Focus moves along
   /// the first few without the row moving; after that, each next card slides into that same
@@ -654,26 +717,31 @@ class _HomeModuleViewState extends State<HomeModuleView>
     if (!_rowScroll.hasClients) return;
     final position = _rowScroll.position;
     final step = tileWidth + _rowGap;
-    final start = pageSides(context).left; // the row's padding before the first card
+    final start = _rowSides(context).left; // the row's padding before the first card
     final slot = math.max(0, ((position.viewportDimension - start - tileWidth) / step).floor());
     final offset = ((index - slot) * step).clamp(position.minScrollExtent, position.maxScrollExtent);
     if ((offset - position.pixels).abs() < 0.5) return;
     position.animateTo(offset, duration: const Duration(milliseconds: 200), curve: Curves.easeOutCubic);
   }
 
-  /// A tile's width in a row. Bigger on wider screens (a TV is watched from across the room);
-  /// phones keep theirs.
+  /// A tile's width in a row. Bigger on wider screens (a TV is watched from across the room),
+  /// where posters and thumbnails are the same height: the least that plays a YouTube trailer
+  /// in the card (about 711 × 400 pixels for a thumbnail on a 1080p TV). Phones keep theirs.
   static double _tileWidth(BuildContext context, LibraryView view) {
     final isPhone = ScreenType.of(context).isPhone;
+    const height = CardPreview.minCardHeight; // 250
     return switch (view) {
-      LibraryView.poster => isPhone ? 150.0 : 180.0,
-      LibraryView.thumbnail => isPhone ? 280.0 : 340.0,
+      LibraryView.poster => isPhone ? 150.0 : height * 2 / 3,
+      LibraryView.thumbnail => isPhone ? 280.0 : height * 16 / 9,
     };
   }
 
-  /// How far a resting card's artwork sits in from its edge (PosterCard draws it at 0.94).
-  static double _cardInset(BuildContext context, LibraryView view) =>
-      _tileWidth(context, view) * (1 - 0.94) / 2;
+  /// A row's padding at its ends: the first card in line with the section's title, and the
+  /// same room after the last one when the row is scrolled to its end.
+  static EdgeInsets _rowSides(BuildContext context) {
+    final sides = pageSides(context);
+    return sides.copyWith(right: sides.left);
+  }
 }
 
 // ─── Adding sections ─────────────────────────────────────────────────────────
@@ -908,11 +976,42 @@ class _CarouselState extends State<_Carousel> {
   int _page = 0;
 
   bool _engaged = false; // focus or pointer is on the carousel
+  bool _trailer = false; // the showing slide's trailer is playing
+
+  /// The showing slide's trailer has played through: it isn't started again.
+  bool _trailerDone = false;
+
+  /// After a trailer: the slide stays one interval, then the next comes.
+  Timer? _afterTrailer;
+
+  /// How long a slide's trailer can hold the carousel, and the timer for it.
+  static const _longestTrailer = Duration(minutes: 3);
+  Timer? _trailerCap;
   DateTime _lastInteraction = DateTime.now();
 
-  /// Shared by whichever slide is showing, so the same button keeps focus when the slide changes.
-  final _playFocus = FocusNode();
-  final _infoFocus = FocusNode();
+  /// Each slide's own buttons. (Not one pair handed from slide to slide: a focused button whose
+  /// node is swapped can stay drawn as focused, leaving two lit at once.)
+  late var _playFocus = _nodes('Carousel Play');
+  late var _infoFocus = _nodes('Carousel More info');
+
+  List<FocusNode> _nodes(String label) => [for (final _ in widget.items) FocusNode(debugLabel: label)];
+
+  @override
+  void didUpdateWidget(_Carousel old) {
+    super.didUpdateWidget(old);
+    if (widget.items.length == old.items.length) return;
+    // A different number of slides (refreshed): new buttons for them, after this frame lets go
+    // of the old ones.
+    final stale = [..._playFocus, ..._infoFocus];
+    _playFocus = _nodes('Carousel Play');
+    _infoFocus = _nodes('Carousel More info');
+    if (_page >= widget.items.length) _page = 0;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      for (final node in stale) {
+        node.dispose();
+      }
+    });
+  }
 
   @override
   void initState() {
@@ -923,9 +1022,12 @@ class _CarouselState extends State<_Carousel> {
   @override
   void dispose() {
     _timer?.cancel();
+    _afterTrailer?.cancel();
+    _trailerCap?.cancel();
     _controller.dispose();
-    _playFocus.dispose();
-    _infoFocus.dispose();
+    for (final node in [..._playFocus, ..._infoFocus]) {
+      node.dispose();
+    }
     super.dispose();
   }
 
@@ -936,6 +1038,8 @@ class _CarouselState extends State<_Carousel> {
     _timer?.cancel();
     if (widget.items.length < 2) return;
     _timer = Timer.periodic(_interval, (_) {
+      // A trailer playing holds the slide until it's finished (see _onTrailerFinished).
+      if (_trailer || _trailerDone) return; // after a trailer, _afterTrailer moves on
       final idle = DateTime.now().difference(_lastInteraction);
       if (_engaged && idle < _idleResume) return; // someone's here: hold still
       _goTo(_page + 1);
@@ -943,9 +1047,22 @@ class _CarouselState extends State<_Carousel> {
   }
 
   void _setEngaged(bool engaged) {
-    _engaged = engaged;
+    if (engaged != _engaged && mounted) setState(() => _engaged = engaged); // the trailer follows it
     _touch();
     if (!engaged) _restartTimer(); // leaving: a full 8 seconds before the next slide
+  }
+
+  /// The showing slide's trailer has played through once: it stops, and the slide stays one
+  /// interval with its text back at full strength (time to press Play or More info), then the
+  /// next slide comes. Its own trailer starts after the usual moment.
+  void _onTrailerFinished() {
+    _trailerCap?.cancel();
+    setState(() {
+      _trailer = false;
+      _trailerDone = true;
+    });
+    _afterTrailer?.cancel();
+    _afterTrailer = Timer(_interval, () => _goTo(_page + 1));
   }
 
   /// Slides to a page, wrapping around at either end.
@@ -965,11 +1082,11 @@ class _CarouselState extends State<_Carousel> {
     if (event is! KeyDownEvent && event is! KeyRepeatEvent) return KeyEventResult.ignored;
     _touch(); // any key press counts as someone being here
     final key = event.logicalKey;
-    if (key == LogicalKeyboardKey.arrowRight && _infoFocus.hasFocus) {
+    if (key == LogicalKeyboardKey.arrowRight && _infoFocus[_page].hasFocus) {
       _goTo(_page + 1);
       return KeyEventResult.handled;
     }
-    if (key == LogicalKeyboardKey.arrowLeft && _playFocus.hasFocus) {
+    if (key == LogicalKeyboardKey.arrowLeft && _playFocus[_page].hasFocus) {
       _goTo(_page - 1);
       return KeyEventResult.handled;
     }
@@ -998,13 +1115,17 @@ class _CarouselState extends State<_Carousel> {
                 controller: _controller,
                 itemCount: count,
                 onPageChanged: (page) {
-                  // Remember which button had focus, so the new slide's matching one gets it.
-                  final refocus = _playFocus.hasFocus
-                      ? _playFocus
-                      : _infoFocus.hasFocus
-                      ? _infoFocus
+                  // The button that had focus: the new slide's matching one gets it.
+                  final refocus = _playFocus[_page].hasFocus
+                      ? _playFocus[page]
+                      : _infoFocus[_page].hasFocus
+                      ? _infoFocus[page]
                       : null;
                   setState(() => _page = page);
+                  _trailer = false; // the last slide's trailer stopped with it
+                  _trailerDone = false;
+                  _afterTrailer?.cancel();
+                  _trailerCap?.cancel();
                   _restartTimer();
                   if (refocus != null) {
                     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -1014,14 +1135,31 @@ class _CarouselState extends State<_Carousel> {
                 },
                 itemBuilder: (context, i) => _CarouselSlide(
                   item: widget.items[i],
-                  // Only the showing slide gets the shared nodes; the others build plain buttons.
-                  playFocus: i == _page ? _playFocus : null,
-                  infoFocus: i == _page ? _infoFocus : null,
+                  // The showing slide's trailer, while someone's on the carousel.
+                  previewing: _engaged && i == _page && !_trailerDone,
+                  onTrailer: (playing) {
+                    if (i != _page) return;
+                    setState(() => _trailer = playing); // the dots hide with it
+                    _trailerCap?.cancel();
+                    if (playing) {
+                      // Some "trailers" are whole films: give them a few minutes, not all of it.
+                      _trailerCap = Timer(_longestTrailer, () {
+                        if (_trailer) _onTrailerFinished();
+                      });
+                    } else {
+                      _restartTimer(); // a full interval before the next slide
+                    }
+                  },
+                  onTrailerFinished: () {
+                    if (i == _page) _onTrailerFinished();
+                  },
+                  playFocus: _playFocus[i],
+                  infoFocus: _infoFocus[i],
                 ),
               ),
 
-              // ── Dots ──
-              if (count > 1)
+              // ── Dots (hidden while a trailer plays: nothing over it) ──
+              if (count > 1 && !_trailer)
                 Positioned(
                   right: 16,
                   bottom: 16,
@@ -1055,15 +1193,39 @@ class _CarouselState extends State<_Carousel> {
 }
 
 /// One slide: the backdrop, a fade for readability, and the logo, details, Play and More info.
-class _CarouselSlide extends StatelessWidget {
-  const _CarouselSlide({required this.item, this.playFocus, this.infoFocus});
+class _CarouselSlide extends StatefulWidget {
+  const _CarouselSlide({
+    required this.item,
+    this.playFocus,
+    this.infoFocus,
+    this.previewing = false,
+    this.onTrailer,
+    this.onTrailerFinished,
+  });
 
   final JellyfinItem item;
+  final bool previewing;
+
+  /// Told when this slide's trailer starts (true) and stops (false) showing.
+  final ValueChanged<bool>? onTrailer;
+
+  /// Told when this slide's trailer has played through once.
+  final VoidCallback? onTrailerFinished;
   final FocusNode? playFocus;
   final FocusNode? infoFocus;
 
   @override
+  State<_CarouselSlide> createState() => _CarouselSlideState();
+}
+
+class _CarouselSlideState extends State<_CarouselSlide> {
+  /// The trailer is showing: nothing is drawn over it (the fades, text and buttons hide), as
+  /// YouTube requires of its player.
+  bool _trailer = false;
+
+  @override
   Widget build(BuildContext context) {
+    final item = widget.item;
     final client = jellyfin.client!;
     final isPhone = ScreenType.of(context).isPhone;
     final backdropTag = (item.raw['BackdropImageTags'] as List).first as String;
@@ -1106,103 +1268,130 @@ class _CarouselSlide extends StatelessWidget {
               errorBuilder: (_, _, _) =>
                   ColoredBox(color: context.colors.surfaceContainerHighest),
             ),
-            const DecoratedBox(
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.centerLeft,
-                  end: Alignment.centerRight,
-                  stops: [0.0, 0.65],
-                  colors: [Color(0xCC000000), Color(0x00000000)],
-                ),
+            // After a moment on the carousel, the trailer in place of the backdrop (under the
+            // fades, so the text stays readable). Not on phones, which have no focus or hover.
+            if (!isPhone && TrailerPreview.supports(item))
+              TrailerPreview(
+                item: item,
+                active: widget.previewing,
+                // Fits inside the banner (black bars, never cropped), so YouTube's logo and
+                // title always show when YouTube puts them up.
+                onShowing: (showing) {
+                  if (mounted) setState(() => _trailer = showing);
+                  widget.onTrailer?.call(showing);
+                },
+                onFinished: widget.onTrailerFinished,
               ),
-            ),
-            const DecoratedBox(
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.topCenter,
-                  end: Alignment.bottomCenter,
-                  stops: [0.5, 1.0],
-                  colors: [Color(0x00000000), Color(0x99000000)],
-                ),
-              ),
-            ),
-            Positioned(
-              left: isPhone ? 16 : 32,
-              bottom: isPhone ? 16 : 32,
-              right: isPhone ? 80 : null,
-              child: ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: 520),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  spacing: 8,
+            // Everything over the artwork: hidden while the trailer plays. The buttons still
+            // work (OK plays, as it would with them showing).
+            Positioned.fill(
+              child: AnimatedOpacity(
+                opacity: _trailer ? 0 : 1,
+                duration: const Duration(milliseconds: 400),
+                child: Stack(
+                  fit: StackFit.expand,
                   children: [
-                    ConstrainedBox(
-                      constraints: BoxConstraints(
-                        maxWidth: isPhone ? 180 : 360,
-                        maxHeight: isPhone ? 48 : 96,
-                      ),
-                      child: logoTag != null
-                          ? Image.network(
-                        client.images.url(
-                          itemId: item.id,
-                          type: JellyfinImagesApi.typeLogo,
-                          tag: logoTag,
-                          fillWidth: 720,
-                        ),
-                        fit: BoxFit.contain,
-                        alignment: Alignment.bottomLeft,
-                        // The name instead, if the logo won't load (a saved page can ask for
-                        // one the server has since replaced).
-                        errorBuilder: (_, _, _) => title,
-                      )
-                          : title,
+                const DecoratedBox(
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.centerLeft,
+                      end: Alignment.centerRight,
+                      stops: [0.0, 0.65],
+                      colors: [Color(0xCC000000), Color(0x00000000)],
                     ),
-                    if (facts.isNotEmpty)
-                      Text(
-                        facts,
-                        style: context.text.bodyMedium?.copyWith(
-                          color: const Color(0xCCFFFFFF),
-                        ),
-                      ),
-                    if (!isPhone && overview != null && overview.isNotEmpty)
-                      Text(
-                        overview,
-                        maxLines: 3,
-                        overflow: TextOverflow.ellipsis,
-                        style: context.text.bodyLarge?.copyWith(
-                          color: const Color(0xE6FFFFFF),
-                        ),
-                      ),
-                    if (!isPhone)
-                      FocusRow(
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          spacing: 8,
-                          children: [
-                            FilledButton(
-                              style: actionButtonStyle,
-                              focusNode: playFocus,
-                              onPressed: () => playItem(context, item),
-                              child: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                spacing: 8,
-                                children: [Icon(appIcons.play, size: 18, fill: 1), const Text('Play')],
-                              ),
+                  ),
+                ),
+                const DecoratedBox(
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.topCenter,
+                      end: Alignment.bottomCenter,
+                      stops: [0.5, 1.0],
+                      colors: [Color(0x00000000), Color(0x99000000)],
+                    ),
+                  ),
+                ),
+                Positioned(
+                  left: isPhone ? 16 : 32,
+                  bottom: isPhone ? 16 : 32,
+                  right: isPhone ? 80 : null,
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 520),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      spacing: 8,
+                      children: [
+                        ConstrainedBox(
+                          constraints: BoxConstraints(
+                            maxWidth: isPhone ? 180 : 360,
+                            maxHeight: isPhone ? 48 : 96,
+                          ),
+                          child: logoTag != null
+                              ? Image.network(
+                            client.images.url(
+                              itemId: item.id,
+                              type: JellyfinImagesApi.typeLogo,
+                              tag: logoTag,
+                              fillWidth: 720,
                             ),
-                            FilledButton.tonal(
-                              style: actionButtonStyle,
-                              focusNode: infoFocus,
-                              onPressed: () => openItem(context, item),
-                              child: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                spacing: 8,
-                                children: [Icon(appIcons.info, size: 18, fill: 1), const Text('More info')],
-                              ),
-                            ),
-                          ],
+                            fit: BoxFit.contain,
+                            alignment: Alignment.bottomLeft,
+                            // The name instead, if the logo won't load (a saved page can ask for
+                            // one the server has since replaced).
+                            errorBuilder: (_, _, _) => title,
+                          )
+                              : title,
                         ),
-                      ),
+                        if (facts.isNotEmpty)
+                          Text(
+                            facts,
+                            style: context.text.bodyMedium?.copyWith(
+                              color: const Color(0xCCFFFFFF),
+                            ),
+                          ),
+                        if (!isPhone && overview != null && overview.isNotEmpty)
+                          Text(
+                            overview,
+                            maxLines: 3,
+                            overflow: TextOverflow.ellipsis,
+                            style: context.text.bodyLarge?.copyWith(
+                              color: const Color(0xE6FFFFFF),
+                            ),
+                          ),
+                        if (!isPhone)
+                          FocusRow(
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              spacing: 8,
+                              children: [
+                                FilledButton(
+                                  style: actionButtonStyle,
+                                  focusNode: widget.playFocus,
+                                  onPressed: () => playItem(context, item),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    spacing: 8,
+                                    children: [Icon(appIcons.play, size: 18, fill: 1), const Text('Play')],
+                                  ),
+                                ),
+                                FilledButton.tonal(
+                                  style: actionButtonStyle,
+                                  focusNode: widget.infoFocus,
+                                  onPressed: () => openItem(context, item),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    spacing: 8,
+                                    children: [Icon(appIcons.info, size: 18, fill: 1), const Text('More info')],
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
+                ),
                   ],
                 ),
               ),
@@ -1337,30 +1526,29 @@ class _PlaceholderRow extends StatelessWidget {
   const _PlaceholderRow({
     required this.tileWidth,
     required this.imageHeight,
-    required this.inset,
     required this.captions,
   });
 
   final double tileWidth;
   final double imageHeight;
-  final double inset; // where a resting card's artwork starts (PosterCard draws it smaller)
   final bool captions;
 
   @override
   Widget build(BuildContext context) => ListView.separated(
     scrollDirection: Axis.horizontal,
     physics: const NeverScrollableScrollPhysics(),
-    padding: pageSides(context),
+    padding: _HomeModuleViewState._rowSides(context),
     itemCount: 12, // more than fit, so the row runs off the edge like a real one
     separatorBuilder: (_, _) => const SizedBox(width: 4),
-    itemBuilder: (context, _) => SizedBox(
+    itemBuilder: (context, i) => SizedBox(
       width: tileWidth,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Padding(
-            padding: EdgeInsets.all(inset),
-            child: _PlaceholderBlock(height: imageHeight - 2 * inset),
+            // Where a resting card's artwork sits (the first one's against the row's start).
+            padding: PosterCard.restInset(imageHeight, anchor: i == 0 ? Alignment.centerLeft : Alignment.center),
+            child: _PlaceholderBlock(height: imageHeight - PosterCard.restInset(imageHeight).vertical),
           ),
           if (captions) ...[
             // Where _TileCaption puts the title and the line under it.

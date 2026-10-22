@@ -52,7 +52,7 @@ class _Sidebar extends StatelessWidget {
           builder: (context, constraints) {
             final roomy = open && constraints.maxWidth >= inset + _openWidth - 0.5;
             return _SidebarFrame(
-              // Home, Search, Favorites, Libraries, Genres (if any), Settings, Edit home.
+              // Home, Search, Favorites, Genres (if any), Libraries, Settings, Edit home.
               entries: jellyfin.genres.isNotEmpty ? 7 : 6,
               header: Padding(
                 // On the left, the room that centers the mark in the rail, where it stays as
@@ -98,8 +98,18 @@ class _Sidebar extends StatelessWidget {
                               selected: loc == '/home/favorites',
                               onPress: () => goTo('/home/favorites'),
                             ),
-                            // Libraries, Genres and Settings fold up under one icon each. While the
-                            // sidebar is closed only those icons show; open it and they list their pages.
+                            // Genres: one link to the page listing them all.
+                            if (jellyfin.genres.isNotEmpty)
+                              _SidebarLink(
+                                label: 'Genres',
+                                icon: appIcons.genres,
+                                focusNode: nodeFor('Genres'),
+                                open: open,
+                                selected: loc.startsWith('/home/genre'),
+                                onPress: () => goTo('/home/genres'),
+                              ),
+                            // Libraries and Settings fold up under one icon each. While the sidebar
+                            // is closed only those icons show; open it and they list their pages.
                             _SidebarSection(
                               label: 'Libraries',
                               icon: appIcons.folder,
@@ -120,35 +130,6 @@ class _Sidebar extends StatelessWidget {
                                   ),
                               ],
                             ),
-                            // Genres: its own section between Libraries and Settings, listing each genre.
-                            if (jellyfin.genres.isNotEmpty)
-                              _SidebarSection(
-                                label: 'Genres',
-                                icon: appIcons.genres,
-                                focusNode: nodeFor('Genres'),
-                                open: open,
-                                closings: closings,
-                                forceOpen: forceOpen['Genres'] ?? 0,
-                                active: loc.startsWith('/home/genre'),
-                                showPages: roomy,
-                                children: [
-                                  _SidebarLink(
-                                    label: 'All genres',
-                                    focusNode: nodeFor('Genres/All'),
-                                    open: open,
-                                    selected: loc == '/home/genres',
-                                    onPress: () => goTo('/home/genres'),
-                                  ),
-                                  for (final genre in jellyfin.genres)
-                                    _SidebarLink(
-                                      label: genre,
-                                      focusNode: nodeFor('Genres/${Uri.encodeComponent(genre)}'),
-                                      open: open,
-                                      selected: loc == '/home/genre/${Uri.encodeComponent(genre)}',
-                                      onPress: () => goTo('/home/genre/${Uri.encodeComponent(genre)}'),
-                                    ),
-                                ],
-                              ),
                             _SidebarSection(
                               label: 'Settings',
                               icon: appIcons.settings,

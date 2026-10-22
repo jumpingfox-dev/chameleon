@@ -403,6 +403,7 @@ class _MovieInfoCard extends StatelessWidget {
                   ),
                 ),
                 _FavoriteButton(item: movie),
+                _TrailerButton(item: movie),
               ],
             ),
           ),
@@ -467,10 +468,21 @@ class _SeriesInfoCardState extends State<_SeriesInfoCard> {
   String? _loadingSeasonId;
   String? _error;
 
+  /// Whether a season's been picked here: then the next episode's season doesn't take over.
+  bool _picked = false;
+
   @override
   void initState() {
     super.initState();
     if (_season != null) _loadEpisodes(_season!);
+    // Opens on the season of the episode you're up to.
+    _nextEpisodeOf(widget.series, widget.seasons).then((next) {
+      final seasonId = next.episode?.raw['SeasonId'] as String?;
+      final season = widget.seasons.where((s) => s.id == seasonId).firstOrNull;
+      if (!mounted || _picked || season == null || season.id == _season?.id) return;
+      setState(() => _season = season);
+      _loadEpisodes(season);
+    });
   }
 
   Future<void> _loadEpisodes(JellyfinItem season) async {
@@ -568,6 +580,7 @@ class _SeriesInfoCardState extends State<_SeriesInfoCard> {
               children: [
                 _SeriesPlayButton(series: series, seasons: widget.seasons),
                 _FavoriteButton(item: series),
+                _TrailerButton(item: series),
               ],
             ),
           ),
@@ -597,6 +610,7 @@ class _SeriesInfoCardState extends State<_SeriesInfoCard> {
                   requestFocusOnTap: false, // a short list: no keyboard
                   onSelected: (picked) {
                     if (picked == null || picked.id == season.id) return;
+                    _picked = true;
                     setState(() => _season = picked);
                     _loadEpisodes(picked);
                   },
@@ -617,6 +631,7 @@ class _SeriesInfoCardState extends State<_SeriesInfoCard> {
                         selected: s.id == season.id, // the current season stands out
                         onSelected: (_) {
                           if (s.id == season.id) return;
+                          _picked = true;
                           setState(() => _season = s);
                           _loadEpisodes(s);
                         },
@@ -946,8 +961,86 @@ class _FavoriteButtonState extends State<_FavoriteButton> {
   }
 }
 
+/// Plays the title's trailer in the app: one on the server in the app's player, a YouTube one
+/// full screen in YouTube's player (in the browser on desktops). Only there once a trailer
+/// has been found.
+class _TrailerButton extends StatelessWidget {
+  const _TrailerButton({required this.item});
+
+  final JellyfinItem item;
+
+  Future<void> _play(BuildContext context, Trailer trailer) async {
+    switch (trailer) {
+      case ServerTrailer(:final itemId):
+        await context.push('/play/$itemId');
+      // In the app where there's a web view to play it in; elsewhere (Linux) in the browser.
+      case YouTubeTrailer(:final videoId) when Platform.isAndroid || Platform.isIOS:
+        await YouTubeTrailerScreen.open(context, videoId);
+      case YouTubeTrailer(:final watchUrl):
+        if (!await MediaSupport.openUrl(watchUrl) && context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text("Couldn't open YouTube on this device.")),
+          );
+        }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) => FutureBuilder<Trailer?>(
+    future: trailerFor(item),
+    builder: (context, snap) {
+      final trailer = snap.data;
+      if (trailer == null) return const SizedBox.shrink();
+      return OutlinedButton.icon(
+        style: actionButtonStyle,
+        onPressed: () => _play(context, trailer),
+        icon: Icon(appIcons.trailer, fill: 1),
+        label: const Text('Trailer'),
+      );
+    },
+  );
+}
+
 /// Plays the series from where you left off: the next unwatched episode,
 /// or the very first episode for a show you haven't started.
+/// The episode a show's Play button plays, and whether you've started the show.
+typedef _NextEpisode = ({JellyfinItem? episode, bool started});
+
+/// Each show page's next episode, looked up once and shared by its Play button and its season
+/// picker (which opens on that episode's season). Kept with the page's own copy of the show,
+/// so opening the page again asks again.
+final _nextEpisodes = Expando<Future<_NextEpisode>>('next episode');
+
+Future<_NextEpisode> _nextEpisodeOf(JellyfinItem series, List<JellyfinItem> seasons) =>
+    _nextEpisodes[series] ??= _findNextEpisode(series, seasons);
+
+Future<_NextEpisode> _findNextEpisode(JellyfinItem series, List<JellyfinItem> seasons) async {
+  final client = jellyfin.client!;
+  // Started: some of it watched. (Next Up suggests the first episode of a show you haven't
+  // started too, so that alone doesn't say.)
+  final watched = ((series.raw['UserData'] as Map?)?['PlayedPercentage'] as num? ?? 0) > 0;
+  try {
+    // Jellyfin's "Next Up": the next episode after the last one you watched.
+    final nextUp = await client.tvShows.nextUp(
+      enableTotalRecordCount: false,
+      seriesId: series.id,
+      limit: 1,
+      enableResumable: true,
+    );
+    final next = nextUp.items.firstOrNull;
+    if (next != null) {
+      final partway = ((next.raw['UserData'] as Map?)?['PlaybackPositionTicks'] as num? ?? 0) > 0;
+      return (episode: next, started: watched || partway);
+    }
+    // Not started, or all watched: the first episode of the first season.
+    if (seasons.isEmpty) return (episode: null, started: false);
+    final first = await client.tvShows.episodes(seriesId: series.id, seasonId: seasons.first.id);
+    return (episode: first.items.firstOrNull, started: false);
+  } on JellyfinException {
+    return (episode: null, started: false); // the button stays disabled
+  }
+}
+
 class _SeriesPlayButton extends StatefulWidget {
   const _SeriesPlayButton({required this.series, required this.seasons});
 
@@ -959,45 +1052,20 @@ class _SeriesPlayButton extends StatefulWidget {
 }
 
 class _SeriesPlayButtonState extends State<_SeriesPlayButton> {
-  JellyfinItem? _next;
+  _NextEpisode? _next;
 
   @override
   void initState() {
     super.initState();
-    _findNext();
-  }
-
-  Future<void> _findNext() async {
-    final client = jellyfin.client!;
-    try {
-      // Jellyfin's "Next Up": the next episode after the last one you watched.
-      final nextUp = await client.tvShows.nextUp(
-        enableTotalRecordCount: false,
-        seriesId: widget.series.id,
-        limit: 1,
-        enableResumable: true,
-      );
-      var next = nextUp.items.firstOrNull;
-
-      // Not started yet: fall back to the first episode of the first season.
-      if (next == null && widget.seasons.isNotEmpty) {
-        final first = await client.tvShows.episodes(
-          seriesId: widget.series.id,
-          seasonId: widget.seasons.first.id,
-        );
-        next = first.items.firstOrNull;
-      }
+    _nextEpisodeOf(widget.series, widget.seasons).then((next) {
       if (mounted) setState(() => _next = next);
-    } on JellyfinException {
-      // Leave the button disabled if nothing can be found.
-    }
+    });
   }
 
   @override
   Widget build(BuildContext context) {
-    final next = _next;
-    final se = next == null ? null : seasonEpisode(next.raw['ParentIndexNumber'], next.raw['IndexNumber']);
-    final label = se == null ? 'Play' : 'Play $se';
+    final next = _next?.episode;
+    final label = _next?.started ?? false ? 'Continue Watching' : 'Play';
 
     return FilledButton(
       style: actionButtonStyle,

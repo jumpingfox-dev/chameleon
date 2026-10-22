@@ -136,6 +136,9 @@ const countdownOptions = [5, 10, 15, 20, 30];
 /// 0 means never ask.
 const stillWatchingOptions = [0, 2, 3, 4, 5];
 
+/// Seconds on a card before its trailer starts.
+const previewDelayOptions = [1, 2, 3, 5];
+
 // ─── The settings ────────────────────────────────────────────────────────────
 
 /// Playback preferences for this device, saved between launches.
@@ -202,6 +205,12 @@ class PlaybackSettings extends ChangeNotifier {
 
   // Engine
   VideoEngine engine = VideoEngine.auto;
+
+  // Trailer previews on cards
+  bool previews = true;
+  int previewDelay = 2; // seconds on a card before it starts
+  bool previewSound = false;
+  bool previewYouTube = true; // when there's no trailer on the server
 
   /// Episodes played in a row by the Up Next countdown, with no button pressed in between.
   /// Not saved: it starts over each time the app opens.
@@ -313,6 +322,10 @@ class PlaybackSettings extends ChangeNotifier {
     'trickplay': trickplay,
     'aspect': aspect.name,
     'engine': engine.name,
+    'previews': previews,
+    'previewDelay': previewDelay,
+    'previewSound': previewSound,
+    'previewYouTube': previewYouTube,
   };
 
   void _read(Map<String, dynamic> j) {
@@ -351,6 +364,10 @@ class PlaybackSettings extends ChangeNotifier {
     trickplay = flag('trickplay', trickplay);
     aspect = pick(AspectMode.values, j['aspect'], aspect);
     engine = pick(VideoEngine.values, j['engine'], engine);
+    previews = flag('previews', previews);
+    previewDelay = number('previewDelay', previewDelay);
+    previewSound = flag('previewSound', previewSound);
+    previewYouTube = flag('previewYouTube', previewYouTube);
   }
 }
 
