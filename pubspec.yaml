@@ -97,6 +97,12 @@ dev_dependencies:
 # The following section is specific to Flutter packages.
 flutter:
 
+  # iOS plugins come from CocoaPods, not Swift Package Manager: under SPM, flutter_chrome_cast pulls
+  # the newest Google Cast SDK, which needs iOS 16 while the plugin declares 15, and Xcode refuses
+  # to build it. Its CocoaPods spec stays on 4.8.x. (Three other plugins are CocoaPods-only anyway.)
+  config:
+    enable-swift-package-manager: false
+
   # The following line ensures that the Material Icons font is
   # included with your application, so that you can use the icons in
   # the material Icons class.
