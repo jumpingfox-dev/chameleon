@@ -1,15 +1,27 @@
 # Checks every push to main, and releases when the version changes.
 #
 # Every push: analyze and test.
-# When pubspec.yaml's version has no v<version> tag yet: build the signed Android bundle (.aab, for
-# Google Play) and APK (to install directly), tag the commit, and publish a GitHub release with
-# docs/release-notes/<version>.md as its notes.
+# When pubspec.yaml's version has no v<version> tag yet:
+#   1. build the signed Android bundle (.aab, for Google Play) and APK (to install directly), and the
+#      signed iOS app (.ipa), side by side;
+#   2. once both have built, tag the commit and publish a GitHub release with
+#      docs/release-notes/<version>.md as its notes and the three files attached;
+#   3. upload the iOS build to TestFlight.
+#
+# Run it by hand from the Actions tab with "dry run" ticked to build and sign everything without
+# releasing: the files are kept on the run's page for a week.
 #
 # Secrets (Settings › Secrets and variables › Actions):
-#   ANDROID_KEYSTORE_BASE64    the upload keystore (.jks), base64-encoded
-#   ANDROID_KEYSTORE_PASSWORD  its store password
-#   ANDROID_KEY_ALIAS          the key's alias
-#   ANDROID_KEY_PASSWORD       the key's password
+#   ANDROID_KEYSTORE_BASE64      the upload keystore (.jks), base64-encoded
+#   ANDROID_KEYSTORE_PASSWORD    its store password
+#   ANDROID_KEY_ALIAS            the key's alias
+#   ANDROID_KEY_PASSWORD         the key's password
+#   IOS_DIST_CERT_P12_BASE64     the Apple Distribution certificate and key (.p12), base64-encoded
+#   IOS_DIST_CERT_PASSWORD       the .p12's password
+#   IOS_PROVISIONING_PROFILE_BASE64  the "Chameleon App Store" profile (.mobileprovision), base64-encoded
+#   APP_STORE_CONNECT_KEY_ID     the App Store Connect API key's ID
+#   APP_STORE_CONNECT_ISSUER_ID  its issuer ID
+#   APP_STORE_CONNECT_KEY_P8     the key itself (the .p8 file's contents)
 
 name: Release
 
@@ -17,6 +29,11 @@ on:
   push:
     branches: [main]
   workflow_dispatch:
+    inputs:
+      dry_run:
+        description: Build and sign, but don't tag, release or upload to TestFlight
+        type: boolean
+        default: true
 
 # One run at a time, so two quick pushes can't both release the same version.
 concurrency:
@@ -25,6 +42,7 @@ concurrency:
 
 env:
   FLUTTER_VERSION: 3.47.5
+  DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run }}
 
 jobs:
   check:
@@ -57,33 +75,29 @@ jobs:
           build=${full#*+}
           echo "version=$version" >> "$GITHUB_OUTPUT"
           echo "build=$build" >> "$GITHUB_OUTPUT"
-          if git rev-parse -q --verify "refs/tags/v$version" >/dev/null; then
+          if [ "$DRY_RUN" = true ]; then
+            echo "Dry run: building $version (build $build) without releasing it."
+            echo "release=true" >> "$GITHUB_OUTPUT"
+          elif git rev-parse -q --verify "refs/tags/v$version" >/dev/null; then
             echo "v$version is already released; nothing to release."
             echo "release=false" >> "$GITHUB_OUTPUT"
           else
+            notes="docs/release-notes/$version.md"
+            if [ ! -s "$notes" ]; then
+              echo "::error::$notes is missing. Write the release notes for $version, then push again."
+              exit 1
+            fi
             echo "v$version (build $build) is new: releasing."
             echo "release=true" >> "$GITHUB_OUTPUT"
           fi
 
   android:
-    name: Release ${{ needs.check.outputs.version }}
+    name: Android build
     needs: check
     if: needs.check.outputs.release == 'true'
     runs-on: ubuntu-latest
-    permissions:
-      contents: write # to tag the commit and publish the release
-    env:
-      VERSION: ${{ needs.check.outputs.version }}
-      NOTES: docs/release-notes/${{ needs.check.outputs.version }}.md
     steps:
       - uses: actions/checkout@v4
-
-      - name: Release notes
-        run: |
-          if [ ! -s "$NOTES" ]; then
-            echo "::error::$NOTES is missing. Write the release notes for $VERSION, then push again."
-            exit 1
-          fi
 
       - uses: actions/setup-java@v4
         with:
@@ -132,18 +146,143 @@ jobs:
             fi
           done
 
-      - name: Publish the release
+      - name: Name the files
         env:
-          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ needs.check.outputs.version }}
         run: |
           mkdir -p dist
           cp build/app/outputs/bundle/release/app-release.aab "dist/chameleon-$VERSION.aab"
           cp build/app/outputs/flutter-apk/app-release.apk "dist/chameleon-$VERSION.apk"
-          gh release create "v$VERSION" dist/* \
-            --target "$GITHUB_SHA" \
-            --title "Chameleon $VERSION" \
-            --notes-file "$NOTES"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: android
+          path: dist/
+          retention-days: 7
 
       - name: Clean up the key
         if: always()
         run: rm -f "$RUNNER_TEMP/upload.jks" android/key.properties
+
+  ios:
+    name: iOS build
+    needs: check
+    if: needs.check.outputs.release == 'true'
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
+
+      # The certificate goes into a keychain of its own, and the profile where Xcode looks for it.
+      - name: Signing certificate and profile
+        env:
+          P12_BASE64: ${{ secrets.IOS_DIST_CERT_P12_BASE64 }}
+          P12_PASSWORD: ${{ secrets.IOS_DIST_CERT_PASSWORD }}
+          PROFILE_BASE64: ${{ secrets.IOS_PROVISIONING_PROFILE_BASE64 }}
+        run: |
+          for name in P12_BASE64 P12_PASSWORD PROFILE_BASE64; do
+            if [ -z "${!name}" ]; then
+              echo "::error::An iOS signing secret ($name) isn't set (Settings › Secrets and variables › Actions)."
+              exit 1
+            fi
+          done
+          keychain="$RUNNER_TEMP/signing.keychain-db"
+          keychain_password=$(openssl rand -base64 24)
+          echo "$P12_BASE64" | base64 --decode > "$RUNNER_TEMP/distribution.p12"
+          security create-keychain -p "$keychain_password" "$keychain"
+          security set-keychain-settings -lut 21600 "$keychain"
+          security unlock-keychain -p "$keychain_password" "$keychain"
+          security import "$RUNNER_TEMP/distribution.p12" -P "$P12_PASSWORD" -A -t cert -f pkcs12 -k "$keychain"
+          security set-key-partition-list -S apple-tool:,apple: -k "$keychain_password" "$keychain" >/dev/null
+          # Search the new keychain first, then the ones already there.
+          existing=()
+          while IFS= read -r line; do existing+=("$(echo "$line" | tr -d '" ')"); done < <(security list-keychains -d user)
+          security list-keychains -d user -s "$keychain" "${existing[@]}"
+          rm "$RUNNER_TEMP/distribution.p12"
+
+          echo "$PROFILE_BASE64" | base64 --decode > "$RUNNER_TEMP/profile.mobileprovision"
+          uuid=$(security cms -D -i "$RUNNER_TEMP/profile.mobileprovision" | plutil -extract UUID raw -)
+          for dir in "$HOME/Library/MobileDevice/Provisioning Profiles" "$HOME/Library/Developer/Xcode/UserData/Provisioning Profiles"; do
+            mkdir -p "$dir"
+            cp "$RUNNER_TEMP/profile.mobileprovision" "$dir/$uuid.mobileprovision"
+          done
+
+      - run: flutter pub get
+      - run: flutter build ipa --release --export-options-plist=ios/ExportOptions.plist
+
+      - name: Name the file
+        env:
+          VERSION: ${{ needs.check.outputs.version }}
+        run: |
+          mkdir -p dist
+          cp build/ios/ipa/*.ipa "dist/chameleon-$VERSION.ipa"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ios
+          path: dist/
+          retention-days: 7
+
+      - name: Clean up the keychain
+        if: always()
+        run: security delete-keychain "$RUNNER_TEMP/signing.keychain-db" || true
+
+  publish:
+    name: Publish the release
+    needs: [check, android, ios]
+    # Not on a dry run; and, like everything after it, only once both builds have succeeded.
+    if: needs.check.outputs.release == 'true' && !(github.event_name == 'workflow_dispatch' && inputs.dry_run)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # to tag the commit and publish the release
+    env:
+      VERSION: ${{ needs.check.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+
+      - name: Tag and release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "v$VERSION" dist/* \
+            --target "$GITHUB_SHA" \
+            --title "Chameleon $VERSION" \
+            --notes-file "docs/release-notes/$VERSION.md"
+
+  testflight:
+    name: Upload to TestFlight
+    needs: [check, publish]
+    runs-on: macos-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: ios
+          path: dist
+
+      - name: Upload
+        env:
+          KEY_ID: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
+          ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
+          KEY_P8: ${{ secrets.APP_STORE_CONNECT_KEY_P8 }}
+        run: |
+          for name in KEY_ID ISSUER_ID KEY_P8; do
+            if [ -z "${!name}" ]; then
+              echo "::error::The APP_STORE_CONNECT_$name secret isn't set (Settings › Secrets and variables › Actions)."
+              exit 1
+            fi
+          done
+          # altool looks for the key here, by its ID.
+          mkdir -p "$HOME/.appstoreconnect/private_keys"
+          printf '%s\n' "$KEY_P8" > "$HOME/.appstoreconnect/private_keys/AuthKey_$KEY_ID.p8"
+          xcrun altool --upload-app --type ios --file dist/*.ipa --apiKey "$KEY_ID" --apiIssuer "$ISSUER_ID"
+          rm -f "$HOME/.appstoreconnect/private_keys/AuthKey_$KEY_ID.p8"
