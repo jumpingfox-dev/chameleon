@@ -78,7 +78,7 @@ Future<List<JellyfinItem>> _artwork(ScreensaverContent content, String imageType
       types: content.itemTypes,
       sortBy: const ['Random'],
       limit: 80, // more than needed, since some won't have the art
-      fields: const ['ProductionYear'],
+      fields: const ['Genres'],
     );
     return items.where((item) {
       if (imageType == JellyfinImagesApi.typeBackdrop) {
@@ -215,8 +215,8 @@ class _ClockState extends State<_Clock> {
 
 // ─── Backdrops ───────────────────────────────────────────────────────────────
 
-/// Library artwork, one at a time, cross-fading every few seconds, with a slow zoom and the
-/// title's logo. The logo and clock swap corners with each picture.
+/// Library artwork, one at a time, with a slow zoom: every few seconds the picture fades to black
+/// and the next fades in. The title's logo sits bottom left and the clock top right.
 class _Backdrops extends StatefulWidget {
   const _Backdrops({required this.settings});
 
@@ -230,6 +230,10 @@ class _BackdropsState extends State<_Backdrops> {
   List<JellyfinItem>? _items; // null while loading
   int _index = 0;
   Timer? _next;
+
+  /// False while fading to black between pictures.
+  bool _shown = true;
+  static const _fade = Duration(milliseconds: 900);
 
   ScreensaverSettings get _s => widget.settings;
 
@@ -254,7 +258,13 @@ class _BackdropsState extends State<_Backdrops> {
         await precacheImage(NetworkImage(_backdropUrl(items[upcoming])), context);
       } catch (_) {}
       if (!mounted) return;
-      setState(() => _index = upcoming);
+      setState(() => _shown = false);
+      await Future<void>.delayed(_fade);
+      if (!mounted) return;
+      setState(() {
+        _index = upcoming;
+        _shown = true;
+      });
       _schedule();
     });
   }
@@ -271,55 +281,60 @@ class _BackdropsState extends State<_Backdrops> {
     if (items == null) return const SizedBox.expand(); // black until the artwork's in
     if (items.isEmpty) return _FloatingLogo(settings: _s);
     final item = items[_index];
-    final left = _index.isEven; // details on alternate sides
     final edge = ScreenType.of(context).isPhone ? 24.0 : 48.0;
 
     return Stack(
       fit: StackFit.expand,
       children: [
-        AnimatedSwitcher(
-          duration: const Duration(milliseconds: 1500),
-          child: _KenBurns(
-            key: ValueKey(item.id),
-            moving: _s.backdropMotion,
-            seconds: _s.backdropSeconds + 2,
-            // Each picture drifts a different way.
-            from: Alignment(_index.isEven ? -0.4 : 0.4, -0.2),
-            child: Image.network(
-              _backdropUrl(item),
-              fit: BoxFit.cover,
-              errorBuilder: (_, _, _) => const SizedBox.shrink(),
-            ),
+        // The picture and its details fade out to black together, and the next fade in.
+        AnimatedOpacity(
+          opacity: _shown ? 1 : 0,
+          duration: _fade,
+          curve: Curves.easeInOut,
+          child: Stack(
+            fit: StackFit.expand,
+            children: [
+              _KenBurns(
+                key: ValueKey(item.id),
+                moving: _s.backdropMotion,
+                seconds: _s.backdropSeconds + 2,
+                // Each picture drifts a different way.
+                from: Alignment(_index.isEven ? -0.4 : 0.4, -0.2),
+                child: Image.network(
+                  _backdropUrl(item),
+                  fit: BoxFit.cover,
+                  errorBuilder: (_, _, _) => const SizedBox.shrink(),
+                ),
+              ),
+              // Shade under the details, so they read over a bright picture.
+              if (_s.backdropDetails)
+                const DecoratedBox(
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.bottomLeft,
+                      end: Alignment.center,
+                      colors: [Color(0xAA000000), Color(0x00000000)],
+                    ),
+                  ),
+                ),
+              if (_s.backdropDetails)
+                Positioned(left: edge, bottom: edge, child: _TitleArt(item: item)),
+            ],
           ),
         ),
-        // Shade under the details, so they read over a bright picture.
-        if (_s.backdropDetails || _s.backdropClock)
-          DecoratedBox(
+        // The clock stays put, over a shade of its own.
+        if (_s.backdropClock) ...[
+          const DecoratedBox(
             decoration: BoxDecoration(
-              gradient: LinearGradient(
-                begin: left ? Alignment.bottomLeft : Alignment.bottomRight,
-                end: Alignment.center,
-                colors: const [Color(0xAA000000), Color(0x00000000)],
+              gradient: RadialGradient(
+                center: Alignment.topRight,
+                radius: 0.9,
+                colors: [Color(0x88000000), Color(0x00000000)],
               ),
             ),
           ),
-        if (_s.backdropDetails)
-          Positioned(
-            left: left ? edge : null,
-            right: left ? null : edge,
-            bottom: edge,
-            child: AnimatedSwitcher(
-              duration: const Duration(milliseconds: 1500),
-              child: _TitleArt(key: ValueKey(item.id), item: item, alignLeft: left),
-            ),
-          ),
-        if (_s.backdropClock)
-          Positioned(
-            right: left ? edge : null,
-            left: left ? null : edge,
-            top: edge,
-            child: _Clock(format: _s.clockFormat, size: 0.6),
-          ),
+          Positioned(right: edge, top: edge, child: _Clock(format: _s.clockFormat, size: 0.6)),
+        ],
       ],
     );
   }
@@ -351,29 +366,22 @@ class _KenBurns extends StatelessWidget {
   }
 }
 
-/// The title's logo (or name) and year.
+/// The title's logo (or name) and its genres.
 class _TitleArt extends StatelessWidget {
-  const _TitleArt({super.key, required this.item, required this.alignLeft});
+  const _TitleArt({required this.item});
 
   final JellyfinItem item;
-  final bool alignLeft;
 
   @override
   Widget build(BuildContext context) {
     final logoTag = item.imageTags[JellyfinImagesApi.typeLogo];
-    final year = item.raw['ProductionYear'];
-    final name = Text(
-      item.name,
-      textAlign: alignLeft ? TextAlign.left : TextAlign.right,
-      style: context.text.headlineMedium!.copyWith(
-        color: _white,
-        shadows: const [Shadow(blurRadius: 12, color: Color(0x99000000))],
-      ),
-    );
+    final genres = ((item.raw['Genres'] as List?) ?? const []).whereType<String>().take(3).join('  ·  ');
+    const shadow = [Shadow(blurRadius: 12, color: Color(0x99000000))];
+    final name = Text(item.name, style: context.text.headlineMedium!.copyWith(color: _white, shadows: shadow));
     return Column(
       mainAxisSize: MainAxisSize.min,
-      crossAxisAlignment: alignLeft ? CrossAxisAlignment.start : CrossAxisAlignment.end,
-      spacing: 8,
+      crossAxisAlignment: CrossAxisAlignment.start,
+      spacing: 10,
       children: [
         ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 360, maxHeight: 110),
@@ -387,12 +395,15 @@ class _TitleArt extends StatelessWidget {
                     fillWidth: 720,
                   ),
                   fit: BoxFit.contain,
-                  alignment: alignLeft ? Alignment.bottomLeft : Alignment.bottomRight,
+                  alignment: Alignment.bottomLeft,
                   errorBuilder: (_, _, _) => name,
                 ),
         ),
-        if (year != null)
-          Text('$year', style: context.text.titleMedium!.copyWith(color: const Color(0xCCFFFFFF))),
+        if (genres.isNotEmpty)
+          Text(
+            genres,
+            style: context.text.titleMedium!.copyWith(color: const Color(0xDDFFFFFF), shadows: shadow),
+          ),
       ],
     );
   }
@@ -715,10 +726,10 @@ class _FloatingLogoState extends State<_FloatingLogo> with SingleTickerProviderS
         colorAsset: 'assets/images/text_logo_color.svg',
         height: _logo.height,
       ),
-      final color => SvgPicture.asset(
+      final color => AppLogo.picture(
         'assets/images/text_logo.svg',
         height: _logo.height,
-        colorFilter: ColorFilter.mode(_tint(context, color, _phase), BlendMode.srcIn),
+        tint: _tint(context, color, _phase),
       ),
     };
     return LayoutBuilder(

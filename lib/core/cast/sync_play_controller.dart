@@ -7,6 +7,7 @@ import 'package:http/http.dart' as http;
 
 import '../format/item_format.dart';
 import '../jellyfin/jellyfin_controller.dart';
+import '../jellyfin/together.dart';
 
 /// A play/pause/seek/stop instruction from the group, to carry out at [when].
 class SyncPlayCommand {
@@ -122,7 +123,7 @@ class SyncPlayController extends ChangeNotifier {
   /// The groups you can join, each with what its members are watching (when the server
   /// lets this account see other people's sessions: admins always can).
   Future<List<SyncPlayGroup>> groups() async {
-    final (list, watching) = await (_client.syncPlay.list(), _nowPlayingByUser()).wait;
+    final (list, watching) = await together2(_client.syncPlay.list(), _nowPlayingByUser());
     return [
       for (final g in list)
         if (g['GroupId'] case final String id)

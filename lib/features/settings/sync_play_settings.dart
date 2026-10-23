@@ -145,10 +145,14 @@ class _SyncPlayCardState extends State<_SyncPlayCard> {
               crossAxisAlignment: CrossAxisAlignment.stretch,
               spacing: 8,
               children: [
-                TextField(
-                  controller: _name,
-                  decoration: InputDecoration(
-                    hintText: 'Group name',
+                RemoteTextField(
+                  builder: (context, focusNode, highlighted) => TextField(
+                    controller: _name,
+                    focusNode: focusNode,
+                    decoration: InputDecoration(
+                      hintText: 'Group name',
+                      enabledBorder: highlighted ? remoteFieldBorder(context) : null,
+                    ),
                   ),
                 ),
                 FilledButton(

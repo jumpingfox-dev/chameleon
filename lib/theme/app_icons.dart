@@ -90,6 +90,13 @@ class AppIconSet {
       CupertinoIcons.chevron_back,
       FluentIcons.chevron_left_24_filled
   );
+  IconData get forward => _pick(
+      Symbols.arrow_forward_ios_rounded,
+      FPhosphorFillIcons.caretRight,
+      FLucideIcons.chevronRight,
+      CupertinoIcons.chevron_forward,
+      FluentIcons.chevron_right_24_filled
+  );
   IconData get close => _pick(
       Symbols.close_rounded,
       FPhosphorIcons.x,

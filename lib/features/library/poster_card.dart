@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:dart_jellyfin/dart_jellyfin.dart';
 import 'package:material_ui/material_ui.dart';
 
@@ -8,7 +10,8 @@ import '../../widgets/hover_lift.dart';
 import '../../theme/theme.dart';
 import '../../widgets/tappable.dart';
 import '../previews/card_preview.dart';
-import '../previews/trailer_preview.dart';
+import 'item_menu.dart';
+import '../previews/frames_preview.dart';
 
 enum LibraryView { poster, thumbnail }
 
@@ -170,24 +173,34 @@ class PosterCard extends StatefulWidget {
     super.key,
     required this.item,
     required this.onPress,
+    this.menuList,
     this.view = LibraryView.poster,
-    this.trailer = true,
+    this.preview = true,
     this.onPreviewShowing,
     this.anchor = Alignment.center,
   });
 
   final JellyfinItem item;
   final VoidCallback onPress;
+
+  /// The Home list it's in, if it's Continue Watching or Next Up: its menu (holding Select, a
+  /// long press, or a right-click) can then take it off the list.
+  final ItemMenuList? menuList;
   final LibraryView view;
 
-  /// Whether the card plays the title's trailer after a moment on it (Settings › Playback).
+  /// Whether the card plays stills from the title after a moment on it (Settings › Playback).
   /// Off where you're picking up something you've started (Continue Watching, Next Up).
-  final bool trailer;
+  final bool preview;
 
-  /// Set where the card is big enough to play its trailer in itself (Home's rows): it does,
-  /// and this says when the trailer starts or stops showing (a poster widens to 16:9 for it).
-  /// Otherwise the trailer plays in a panel over the card.
+  /// Told when the stills start or stop showing (Home's rows widen a poster to 16:9 for them).
   final ValueChanged<bool>? onPreviewShowing;
+
+  /// How tall Home's cards are on wider screens, posters and thumbnails alike (330 pixels on a
+  /// 1080p TV), so a poster widened to 16:9 for its preview is a thumbnail's size.
+  static const height = 220.0;
+
+  /// The focus border's width. Stills playing in the card sit just inside it.
+  static const borderWidth = 2.5;
 
   /// What stays put as the card grows on focus: the middle, or a side (a row's first card grows
   /// away from the sidebar, its last one away from the screen's edge).
@@ -209,18 +222,38 @@ class PosterCard extends StatefulWidget {
 }
 
 class _PosterCardState extends State<PosterCard> {
-  /// The trailer is playing in the card: no focus border over it.
-  bool _previewing = false;
-
   JellyfinItem get item => widget.item;
   LibraryView get view => widget.view;
+
+  /// The width the image is asked for, in pixels: what the card covers on screen, rounded up to
+  /// a step of 160 (so the server and cache see few sizes). It only grows, so a poster widening
+  /// for its trailer fetches a bigger copy once rather than on every frame.
+  int _fillWidth = 0;
+
+  int _fillFor(BuildContext context, Size card) {
+    // Pixels per layout unit: the app is laid out at a virtual size and scaled up (UiScaler).
+    final pixels =
+        View.of(context).physicalSize.width / MediaQuery.sizeOf(context).width;
+    // Cropped to fit, the image's width covers the card's width, or its height at its own shape.
+    final shape = view == LibraryView.poster || !_hasLandscapeArt
+        ? 2 / 3
+        : 16 / 9;
+    final needed = math.max(card.width, card.height * shape) * pixels;
+    final stepped = ((needed / 160).ceil() * 160).clamp(240, 1920);
+    if (stepped > _fillWidth) _fillWidth = stepped;
+    return _fillWidth;
+  }
+
+  bool get _hasLandscapeArt =>
+      item.imageTags['Thumb'] != null ||
+      ((item.raw['BackdropImageTags'] as List?)?.isNotEmpty ?? false);
 
   /// Posters use the Primary image. Thumbnails prefer the landscape Thumb image,
   /// then a Backdrop, then fall back to the poster (cropped to fit).
   ///
   /// Not wideImageUrl: this goes through client.images.url() for its quality and sizing,
   /// not a hand-built address.
-  String? _imageUrl(JellyfinClient client) {
+  String? _imageUrl(JellyfinClient client, int fillWidth) {
     if (view == LibraryView.thumbnail) {
       final thumb = item.imageTags['Thumb'];
       if (thumb != null) {
@@ -228,7 +261,7 @@ class _PosterCardState extends State<PosterCard> {
           itemId: item.id,
           type: JellyfinImagesApi.typeThumb,
           tag: thumb,
-          fillWidth: 640,
+          fillWidth: fillWidth,
           quality: 90,
         );
       }
@@ -238,7 +271,7 @@ class _PosterCardState extends State<PosterCard> {
           itemId: item.id,
           type: JellyfinImagesApi.typeBackdrop,
           tag: backdrops.first as String,
-          fillWidth: 640,
+          fillWidth: fillWidth,
           quality: 90,
         );
       }
@@ -249,20 +282,14 @@ class _PosterCardState extends State<PosterCard> {
       itemId: item.id,
       type: JellyfinImagesApi.typePrimary,
       tag: primary,
-      fillWidth: view == LibraryView.poster ? 340 : 640,
+      fillWidth: fillWidth,
       quality: 90,
     );
-  }
-
-  void _onPreviewShowing(bool showing) {
-    if (mounted) setState(() => _previewing = showing);
-    widget.onPreviewShowing?.call(showing);
   }
 
   @override
   Widget build(BuildContext context) {
     final client = jellyfin.client; // null for a moment right after sign-out
-    final url = client == null ? null : _imageUrl(client);
     final colors = context.colors;
 
     return Semantics(
@@ -271,77 +298,82 @@ class _PosterCardState extends State<PosterCard> {
       child: HoverLift(
         builder: (context, active) => Tappable(
           onPress: widget.onPress,
+          onLongPress: hasItemMenu(item) ? () => showItemMenu(context, item, list: widget.menuList) : null,
           // Resting cards sit in a little from their tile's edges; focused, they fill it.
           child: LayoutBuilder(
-            builder: (context, constraints) => AnimatedPadding(
-              padding: active
-                  ? EdgeInsets.zero
-                  : PosterCard.restInset(
-                      constraints.maxHeight,
-                      anchor: widget.anchor,
-                    ),
-              duration: const Duration(milliseconds: 150),
-              curve: Curves.easeOut,
-              child: AnimatedContainer(
+            builder: (context, constraints) {
+              final url = client == null
+                  ? null
+                  : _imageUrl(client, _fillFor(context, constraints.biggest));
+              return AnimatedPadding(
+                padding: active
+                    ? EdgeInsets.zero
+                    : PosterCard.restInset(
+                        constraints.maxHeight,
+                        anchor: widget.anchor,
+                      ),
                 duration: const Duration(milliseconds: 150),
-                // Hovered or focused: a border drawn over the artwork's edge (it takes up no space),
-                // until the trailer plays there.
-                foregroundDecoration: BoxDecoration(
-                  border: Border.all(
-                    color: active && !_previewing
-                        ? context.colors.primary
-                        : const Color(0x00000000),
-                    width: 2.5,
+                curve: Curves.easeOut,
+                child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 150),
+                  // Hovered or focused: a border drawn over the artwork's edge (it takes up no space),
+                  // and around stills playing in the card.
+                  foregroundDecoration: BoxDecoration(
+                    border: Border.all(
+                      color: active
+                          ? context.colors.primary
+                          : const Color(0x00000000),
+                      width: PosterCard.borderWidth,
+                    ),
+                    borderRadius: BorderRadius.circular(8),
                   ),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: ClipRRect(
-                  borderRadius: BorderRadius.circular(8),
-                  child: Stack(
-                    fit: StackFit.expand,
-                    children: [
-                      url == null
-                          ? _placeholder(context, colors)
-                          : Image.network(
-                              url,
-                              fit: BoxFit.cover,
-                              width: double.infinity,
-                              height: double.infinity,
-                              errorBuilder: (_, _, _) =>
-                                  _placeholder(context, colors),
-                            ),
-                      if (watchProgress(item) case final progress?)
-                        Positioned(
-                          left: 8,
-                          right: 8,
-                          bottom: 8,
-                          child: WatchProgressBar(progress),
-                        ),
-                      if (isWatched(item))
-                        const Positioned(
-                          top: 8,
-                          right: 8,
-                          child: WatchedBadge(),
-                        ),
-                      // After a moment on the card, its trailer, in the card or in a panel over it
-                      // (see Settings › Playback), over the badges: nothing may cover a YouTube player.
-                      // Not on phones, which have no focus or hover.
-                      if (widget.trailer &&
-                          TrailerPreview.supports(item) &&
-                          !ScreenType.of(context).isPhone)
-                        CardPreview(
-                          item: item,
-                          active: active,
-                          inline: widget.onPreviewShowing != null,
-                          onShowing: widget.onPreviewShowing == null
-                              ? null
-                              : _onPreviewShowing,
-                        ),
-                    ],
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(8),
+                    child: Stack(
+                      fit: StackFit.expand,
+                      children: [
+                        url == null
+                            ? _placeholder(context, colors)
+                            : Image.network(
+                                url,
+                                fit: BoxFit.cover,
+                                gaplessPlayback: true, // a bigger copy replaces the smaller in place
+                                width: double.infinity,
+                                height: double.infinity,
+                                errorBuilder: (_, _, _) =>
+                                    _placeholder(context, colors),
+                              ),
+                        if (watchProgress(item) case final progress?)
+                          Positioned(
+                            left: 8,
+                            right: 8,
+                            bottom: 8,
+                            child: WatchProgressBar(progress),
+                          ),
+                        if (isWatched(item))
+                          const Positioned(
+                            top: 8,
+                            right: 8,
+                            child: WatchedBadge(),
+                          ),
+                        // After a moment on the card, stills from the title play in it (see
+                        // Settings › Playback). Not on phones, which have no focus or hover.
+                        if (widget.preview &&
+                            FramesPreview.supports(item) &&
+                            !ScreenType.of(context).isPhone)
+                          CardPreview(
+                            item: item,
+                            active: active,
+                            onShowing: widget.onPreviewShowing,
+                            // A poster where nothing widens it (a grid): in a 16:9 panel over it.
+                            widen: view == LibraryView.poster && widget.onPreviewShowing == null,
+                          ),
+                      ],
+                    ),
                   ),
                 ),
-              ),
-            ),
+              );
+            },
           ),
         ),
       ),

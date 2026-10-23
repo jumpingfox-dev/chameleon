@@ -9,13 +9,13 @@ import '../../core/platform/orientation.dart';
 import '../../core/platform/screen_type.dart';
 import '../../theme/theme.dart';
 import '../screensaver/screensaver.dart';
-import 'trailer_preview.dart' show YouTubeView, hideYouTubeCaptions, youTubeParams;
+import 'trailers.dart' show YouTubeView, hideYouTubeCaptions, youTubeParams;
 
-/// A YouTube trailer, full screen in the app, in YouTube's own player (youtube_player_iframe)
-/// with its branding and
-/// no captions. Touch screens get YouTube's controls. With a remote or keyboard there are none:
+/// A YouTube trailer, filling the screen, in YouTube's own player (youtube_player_iframe) with
+/// its branding and no captions. Touch screens get YouTube's controls. With a remote or keyboard there are none:
 /// OK or Play/Pause pauses and plays, ←/→ jump 10 seconds, and Back (or the trailer ending)
-/// closes it. A slim progress bar shows while it's paused and for a moment after a key.
+/// closes it. A slim progress bar shows over the bottom while it's paused and for a moment after
+/// a key.
 class YouTubeTrailerScreen extends StatefulWidget {
   const YouTubeTrailerScreen({super.key, required this.videoId});
 
@@ -156,45 +156,58 @@ class _YouTubeTrailerScreenState extends State<YouTubeTrailerScreen> with Widget
       body: Focus(
         autofocus: true,
         onKeyEvent: _onKey,
-        // The progress bar has its own strip under the video (remote and keyboard), so it never
-        // covers YouTube's logo or title.
-        child: Column(
+        child: Stack(
+          fit: StackFit.expand,
           children: [
-            Expanded(
-              child: Center(
-                // With a remote, YouTube's player isn't touched or focused: the keys above drive it.
-                child: IgnorePointer(
-                  ignoring: !touch,
-                  child: AspectRatio(aspectRatio: 16 / 9, child: YouTubeView(controller: _player!)),
-                ),
+            // The whole screen, edge to edge (black bars only where the shapes differ).
+            Center(
+              // With a remote, YouTube's player isn't touched or focused: the keys above drive it.
+              child: IgnorePointer(
+                ignoring: !touch,
+                child: AspectRatio(aspectRatio: 16 / 9, child: YouTubeView(controller: _player!)),
               ),
             ),
+            // With a remote or keyboard: over the bottom of the video, for a moment after a key
+            // and while paused.
             if (!touch)
-              SizedBox(
-                height: 64,
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 48),
+              Positioned(
+                left: 0,
+                right: 0,
+                bottom: 0,
+                child: IgnorePointer(
                   child: AnimatedOpacity(
                     opacity: showBar ? 1 : 0,
                     duration: const Duration(milliseconds: 200),
-                    child: Row(
-                      spacing: 16,
-                      children: [
-                        Icon(_playing ? Icons.play_arrow_rounded : Icons.pause_rounded, color: white),
-                        Text(_clock(_time), style: context.text.bodyMedium?.copyWith(color: white)),
-                        Expanded(
-                          child: ClipRRect(
-                            borderRadius: BorderRadius.circular(2),
-                            child: LinearProgressIndicator(
-                              value: _length > 0 ? (_time / _length).clamp(0.0, 1.0) : 0,
-                              minHeight: 4,
-                              color: white,
-                              backgroundColor: const Color(0x40FFFFFF),
-                            ),
-                          ),
+                    child: DecoratedBox(
+                      decoration: const BoxDecoration(
+                        gradient: LinearGradient(
+                          begin: Alignment.bottomCenter,
+                          end: Alignment.topCenter,
+                          colors: [Color(0xCC000000), Color(0x00000000)],
                         ),
-                        Text(_clock(_length), style: context.text.bodyMedium?.copyWith(color: white)),
-                      ],
+                      ),
+                      child: Padding(
+                        padding: const EdgeInsets.fromLTRB(48, 48, 48, 32),
+                        child: Row(
+                          spacing: 16,
+                          children: [
+                            Icon(_playing ? Icons.play_arrow_rounded : Icons.pause_rounded, color: white),
+                            Text(_clock(_time), style: context.text.bodyMedium?.copyWith(color: white)),
+                            Expanded(
+                              child: ClipRRect(
+                                borderRadius: BorderRadius.circular(2),
+                                child: LinearProgressIndicator(
+                                  value: _length > 0 ? (_time / _length).clamp(0.0, 1.0) : 0,
+                                  minHeight: 4,
+                                  color: white,
+                                  backgroundColor: const Color(0x40FFFFFF),
+                                ),
+                              ),
+                            ),
+                            Text(_clock(_length), style: context.text.bodyMedium?.copyWith(color: white)),
+                          ],
+                        ),
+                      ),
                     ),
                   ),
                 ),

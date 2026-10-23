@@ -15,6 +15,7 @@ import '../../theme/theme_controller.dart';
 import '../../theme/theme_presets.dart';
 import '../../core/jellyfin/jellyfin_controller.dart';
 import '../../core/platform/screen_type.dart';
+import '../../core/platform/screen_off.dart';
 import '../../core/cast/sync_play_controller.dart';
 import '../../core/jellyfin/account_settings.dart';
 import '../player/playback_settings.dart';
@@ -33,6 +34,7 @@ import 'switch_setting.dart';
 import '../../theme/theme.dart';
 import '../../widgets/tappable.dart';
 import '../../core/platform/page_insets.dart';
+import '../../widgets/remote_text_field.dart';
 
 part 'screensaver_tab.dart';
 part 'server_tab.dart';
@@ -433,12 +435,16 @@ class _AccountCardState extends State<_AccountCard> {
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 spacing: 8,
                 children: [
-                  TextField(
-                    controller: _code,
-                    keyboardType: TextInputType.number,
-                    onSubmitted: (_) => _authorize(),
-                    decoration: InputDecoration(
-                      hintText: 'Code, e.g. 123456',
+                  RemoteTextField(
+                    builder: (context, focusNode, highlighted) => TextField(
+                      controller: _code,
+                      focusNode: focusNode,
+                      keyboardType: TextInputType.number,
+                      onSubmitted: (_) => _authorize(),
+                      decoration: InputDecoration(
+                        hintText: 'Code, e.g. 123456',
+                        enabledBorder: highlighted ? remoteFieldBorder(context) : null,
+                      ),
                     ),
                   ),
                   FilledButton(
@@ -852,10 +858,11 @@ class _PlaybackCard extends StatelessWidget {
           // ── Previews ──
           const _SectionTitle(
             'Previews',
-            description: 'Play a title\'s trailer in its card after a moment on it, with the remote or the mouse.',
+            description: 'After a moment on a card or the featured banner, with the remote or the mouse, '
+                'show a few stills from across the title. Trailers play from the Trailer button.',
           ),
           SwitchSetting(
-            label: 'Trailer previews',
+            label: 'Previews',
             value: s.previews,
             onChange: (v) => update((s) => s.previews = v),
           ),
@@ -868,23 +875,6 @@ class _PlaybackCard extends StatelessWidget {
               format: (n) => n == 1 ? '1 second' : '$n seconds',
               onChange: (n) => update((s) => s.previewDelay = n),
             ),
-            _gap,
-            SwitchSetting(
-              label: 'Sound',
-              value: s.previewSound,
-              onChange: (v) => update((s) => s.previewSound = v),
-            ),
-            if (Platform.isAndroid || Platform.isIOS)
-              SwitchSetting(
-                label: 'YouTube trailers',
-                description: 'When the server has no trailer of its own.',
-                value: s.previewYouTube,
-                onChange: (v) => update((s) => s.previewYouTube = v),
-              ),
-            if (Platform.isAndroid || Platform.isIOS) ...[
-              _gap,
-              const YouTubeNotice(),
-            ],
           ],
 
           // ── Engine (Android only: ExoPlayer is Android's own player) ──

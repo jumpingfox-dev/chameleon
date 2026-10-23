@@ -7,6 +7,7 @@ import 'package:material_ui/material_ui.dart';
 import '../../core/focus/focus_rows.dart';
 import '../../theme/theme.dart';
 import '../../widgets/tappable.dart';
+import '../../widgets/remote_text_field.dart';
 
 /// A form-style field showing the current choice; selecting it opens [showChoicePicker].
 /// Works with a remote, unlike a dropdown (which keeps the arrow keys to itself).
@@ -185,11 +186,15 @@ class _ChoicePickerState<T> extends State<_ChoicePicker<T>> {
                         const SingleActivator(LogicalKeyboardKey.arrowDown): () =>
                             moveFocus(TraversalDirection.down),
                       },
-                      child: TextField(
-                        controller: _query,
-                        decoration: InputDecoration(
-                          hintText: widget.searchHint,
-                          border: searchFieldBorder,
+                      child: RemoteTextField(
+                        builder: (context, focusNode, highlighted) => TextField(
+                          controller: _query,
+                          focusNode: focusNode,
+                          decoration: InputDecoration(
+                            hintText: widget.searchHint,
+                            border: searchFieldBorder,
+                            enabledBorder: highlighted ? remoteFieldBorder(context, searchFieldBorder) : null,
+                          ),
                         ),
                       ),
                     ),

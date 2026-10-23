@@ -2,7 +2,7 @@ import 'package:material_ui/material_ui.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../theme/theme.dart';
-import 'trailer_preview.dart';
+import 'trailers.dart';
 
 /// Says that trailers from YouTube play in YouTube's own player, under YouTube's Terms of
 /// Service and Google's Privacy Policy, with a link to each (as YouTube requires of apps that

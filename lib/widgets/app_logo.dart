@@ -1,4 +1,3 @@
-import 'package:flutter_svg/flutter_svg.dart';
 import 'package:material_ui/material_ui.dart';
 
 import '../theme/theme_controller.dart';
@@ -37,6 +36,19 @@ class AppLogo extends StatelessWidget {
 
   final AppLogoVariant variant;
 
+  /// [svgAsset] drawn from its PNG copy beside it (rendered from the SVG at 480 pixels tall).
+  /// Not the SVG itself: on GPUs without multisampling, which many TVs have, Flutter draws a
+  /// vector's edges jagged, while a picture is smoothed as it's scaled. [tint] fills it with
+  /// one color.
+  static Widget picture(String svgAsset, {double? width, double? height, Color? tint}) => Image.asset(
+    svgAsset.replaceFirst(RegExp(r'\.svg$'), '.png'),
+    width: width,
+    height: height,
+    filterQuality: FilterQuality.medium, // smooth when scaled down (mipmaps)
+    color: tint,
+    colorBlendMode: tint == null ? null : BlendMode.srcIn,
+  );
+
   @override
   Widget build(BuildContext context) => ValueListenableBuilder<ThemePreset>(
     valueListenable: themeController,
@@ -51,7 +63,7 @@ class AppLogo extends StatelessWidget {
 
       if (showColor) {
         // The logo's own colors, no gradient.
-        return SvgPicture.asset(colorAsset!, height: height);
+        return picture(colorAsset!, height: height);
       }
 
       return ShaderMask(
@@ -62,7 +74,7 @@ class AppLogo extends StatelessWidget {
             context.colors.outlineVariant,
           ],
         ).createShader(bounds),
-        child: SvgPicture.asset(asset, height: height),
+        child: picture(asset, height: height),
       );
     },
   );

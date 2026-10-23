@@ -12,6 +12,8 @@ import '../library/poster_card.dart';
 import '../../theme/app_icons.dart';
 import '../../theme/theme.dart';
 import '../../core/platform/page_insets.dart';
+import '../../core/jellyfin/together.dart';
+import '../../widgets/remote_text_field.dart';
 
 class SearchScreen extends StatefulWidget {
   const SearchScreen({super.key, this.query});
@@ -93,7 +95,7 @@ class _SearchScreenState extends State<SearchScreen> {
     final id = ++_requestId;
     setState(() => _loading = true);
     try {
-      final (page, people) = await (
+      final (page, people) = await together2(
       client.items.listEach(
         searchTerm: query,
         types: const [
@@ -108,7 +110,7 @@ class _SearchScreenState extends State<SearchScreen> {
         personTypes: const ['Actor'],
         limit: 20,
       ),
-      ).wait;
+      );
       if (!mounted || id != _requestId) return;
       setState(() {
         _results = page;
@@ -167,24 +169,30 @@ class _SearchScreenState extends State<SearchScreen> {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         SizedBox(height: pageTop(context)),
-        TextField(
-          controller: _query,
-          autofocus: _routeQuery == null, // open the keyboard when arriving from the bottom bar
-          textInputAction: TextInputAction.search,
-          onSubmitted: (text) {
-            _debounce?.cancel();
-            _search(text);
-          },
-          decoration: InputDecoration(
-            hintText: 'Search movies, shows, and actors',
-            border: searchFieldBorder,
-            prefixIcon: Icon(appIcons.search, fill: 1),
-            // A clear button while there's something to clear.
-            suffixIcon: ListenableBuilder(
-              listenable: _query,
-              builder: (context, _) => _query.text.isEmpty
-                  ? const SizedBox.shrink()
-                  : IconButton(onPressed: _query.clear, icon: Icon(appIcons.close), tooltip: 'Clear'),
+        // Arriving from the sidebar or bottom bar: ready to type (on a TV, the remote is on
+        // the box, and Select opens the keyboard).
+        RemoteTextField(
+          autofocus: _routeQuery == null,
+          builder: (context, focusNode, highlighted) => TextField(
+            controller: _query,
+            focusNode: focusNode,
+            textInputAction: TextInputAction.search,
+            onSubmitted: (text) {
+              _debounce?.cancel();
+              _search(text);
+            },
+            decoration: InputDecoration(
+              hintText: 'Search movies, shows, and actors',
+              border: searchFieldBorder,
+              enabledBorder: highlighted ? remoteFieldBorder(context, searchFieldBorder) : null,
+              prefixIcon: Icon(appIcons.search, fill: 1),
+              // A clear button while there's something to clear.
+              suffixIcon: ListenableBuilder(
+                listenable: _query,
+                builder: (context, _) => _query.text.isEmpty
+                    ? const SizedBox.shrink()
+                    : IconButton(onPressed: _query.clear, icon: Icon(appIcons.close), tooltip: 'Clear'),
+              ),
             ),
           ),
         ),

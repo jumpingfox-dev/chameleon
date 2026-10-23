@@ -205,14 +205,48 @@ bool _sameLanguage(Object? a, String? b) {
   return norm(a) == norm(b);
 }
 
-/// Position of the audio stream to start with, or null to keep mpv's choice.
-int? _pickAudio(List<Map<String, dynamic>> streams, _TrackPrefs prefs) {
+/// Audio codecs that can't be played here unless passed through to a receiver: media_kit's
+/// Android FFmpeg has no TrueHD decoder. Codecs a decoder failed to start for are added as they
+/// come up ("Failed to initialize a decoder for codec …"), for the rest of the run.
+final _undecodableAudio = <String>{if (Platform.isAndroid) ...{'truehd', 'mlp'}};
+
+/// No account settings (offline, or an old server): the file's default audio.
+const _TrackPrefs _noPrefs = (
+  audioLanguage: null,
+  subtitleLanguage: null,
+  subtitleMode: 'Default',
+  playDefaultAudio: true,
+);
+
+/// Position of the audio stream to start with, or null to keep the player's choice.
+///
+/// With [playable]: never one that can't be played here. If the one wanted (the default, or the
+/// preferred language) can't, the best that can: in the same language, not commentary, with the
+/// most channels. Null if none can (the player then does what it can).
+int? _pickAudio(
+  List<Map<String, dynamic>> streams,
+  _TrackPrefs prefs, {
+  bool Function(Map<String, dynamic>)? playable,
+}) {
   if (streams.isEmpty) return null;
   final preferred = streams.indexWhere((s) => _sameLanguage(s['Language'], prefs.audioLanguage));
   final flagged = streams.indexWhere((s) => s['IsDefault'] == true);
-  if (prefs.playDefaultAudio && flagged != -1) return flagged;
-  if (preferred != -1) return preferred;
-  return null;
+  final wanted = prefs.playDefaultAudio && flagged != -1 ? flagged : (preferred != -1 ? preferred : null);
+  if (playable == null || (wanted != null && playable(streams[wanted]))) return wanted;
+
+  final language = wanted != null ? streams[wanted]['Language'] as String? : prefs.audioLanguage;
+  final candidates = [for (var i = 0; i < streams.length; i++) if (playable(streams[i])) i];
+  if (candidates.isEmpty) return null;
+  int rank(int i) {
+    final s = streams[i];
+    final title = '${s['Title'] ?? ''} ${s['DisplayTitle'] ?? ''}'.toLowerCase();
+    return (_sameLanguage(s['Language'], language) ? 1000 : 0) +
+        (title.contains('commentary') ? 0 : 100) +
+        ((s['Channels'] as int?) ?? 2) * 10 +
+        (s['IsDefault'] == true ? 1 : 0);
+  }
+  candidates.sort((a, b) => rank(b).compareTo(rank(a)));
+  return candidates.first;
 }
 
 /// The subtitle stream to start with, or null for off. Follows Jellyfin's modes:

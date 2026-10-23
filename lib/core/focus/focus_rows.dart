@@ -160,7 +160,14 @@ class _RowFocusNavigationState extends State<RowFocusNavigation> {
     if (focused == null) return;
     if (focused is! FocusScopeNode) {
       final scope = focused.nearestScope;
-      if (scope != null && focused.context != null) _lastOnPage[scope] = (focused, focused.rect);
+      // Its place on screen, for finding the nearest item if it goes away. Not yet laid out (focus
+      // given while it's being built), its place isn't known: kept without it, by the node alone.
+      final box = focused.context?.findRenderObject();
+      if (scope != null && box is RenderBox && box.hasSize) {
+        _lastOnPage[scope] = (focused, focused.rect);
+      } else if (scope != null && focused.context != null) {
+        _lastOnPage[scope] = (focused, _lastOnPage[scope]?.$2 ?? Rect.zero);
+      }
       return;
     }
     // Focus fell back to a page. Only with a keyboard or remote: on a touch screen nothing

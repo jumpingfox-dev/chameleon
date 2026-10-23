@@ -46,10 +46,31 @@ const _black = Color(0xFF000000);
 const _dimWhite = Color(0xCCFFFFFF);
 
 /// Full-screen playback of a movie or episode.
+/// Where something partway through starts playing.
+enum PlayStart {
+  /// As the Resuming setting says (which can be to ask).
+  setting,
+
+  /// Where you left off.
+  resume,
+
+  /// From the beginning.
+  beginning,
+}
+
 class PlayerScreen extends StatefulWidget {
-  const PlayerScreen({super.key, required this.itemId, this.queue = const [], this.fromGroup = false});
+  const PlayerScreen({
+    super.key,
+    required this.itemId,
+    this.queue = const [],
+    this.fromGroup = false,
+    this.start = PlayStart.setting,
+  });
 
   final String itemId;
+
+  /// Where the first item starts, when it's partway through.
+  final PlayStart start;
 
   /// Opened by a Watch Together group (someone else started it), rather than from this device.
   final bool fromGroup;
@@ -84,6 +105,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
   /// Where the video opened from, for opening it again in the other engine if one can't play it.
   Duration _openedAt = Duration.zero;
   bool _fellBack = false; // once per screen, so the two never hand it back and forth
+  bool _audioRetried = false; // once per video: another audio track after a decoder failed
   bool _fallingBack = false;
 
   /// Made when the first video opens, since how it draws depends on the file (see
@@ -243,6 +265,8 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
           // has loaded. ExoPlayer only reports errors that stop it.
           final exo = _player.usingExo;
           if (!exo && _player.state.duration != Duration.zero) return;
+          // Its audio couldn't be decoded here: another of its tracks may be.
+          if (await _retryWithOtherAudio(message)) return;
           // One engine couldn't play it: the other may manage.
           if (await _fallBack(toExo: !exo)) return;
           if (mounted) setState(() => _error = message);
@@ -342,6 +366,9 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
           _groupDriven = true;
           unawaited(syncPlay.play(ids, start: start));
         }
+      } else if (start > Duration.zero && widget.start != PlayStart.setting && id == widget.itemId) {
+        // Chosen already (Continue, or Play from beginning).
+        if (widget.start == PlayStart.beginning) start = Duration.zero;
       } else if (start > Duration.zero) {
         switch (playbackSettings.resume) {
           case ResumeMode.resume:
@@ -410,6 +437,7 @@ builder: (context) => Dialog(child: Padding(
   /// when it's over the quality limit (or Settings says to always convert).
   Future<void> _openLocal(JellyfinClient client, JellyfinItem item, Duration start) async {
     _localOpened = true;
+    _audioRetried = false;
     // Start loading the skip segments now, so they're ready by the time the video is.
     final segments = _loadSegments(client, item);
     await _audioReady;
@@ -426,6 +454,8 @@ builder: (context) => Dialog(child: Padding(
     }
     if (!mounted) return;
     _openedAt = start;
+
+    if (transcode == null) await _chooseMpvAudio(item);
 
     // Open directly at the start position, so there's no seek afterwards.
     // In a group, it waits paused until everyone has loaded; the group then starts it.
@@ -448,7 +478,7 @@ builder: (context) => Dialog(child: Padding(
     final loaded = await segments;
     if (mounted) setState(() => _segments = loaded);
 
-    _startReporter(client, item);
+    _startReporter(client, item, start: start);
   }
 
   /// How video gets to the screen. On Android, best is the hardware decoder drawing straight
@@ -502,18 +532,74 @@ builder: (context) => Dialog(child: Padding(
     return range.startsWith('DOVI') || video?['DvProfile'] != null;
   }
 
-  /// Whether ExoPlayer can play the audio that'll be picked: the account's language, or the
-  /// file's default.
+  /// Whether ExoPlayer can play one of the file's audio tracks: the one the account's language
+  /// or the file's default asks for, or failing that, the best one it can.
   Future<bool> _exoPlaysAudio(JellyfinItem item, ExoSupport support) async {
     final streams = _streamsOf(item, 'Audio', external: false);
     if (streams.isEmpty) return true;
-    final prefs = await _fetchTrackPrefs();
-    final picked = prefs == null ? null : _pickAudio(streams, prefs);
-    final audio = picked != null
-        ? streams[picked]
-        : (streams.where((s) => s['IsDefault'] == true).firstOrNull ?? streams.first);
+    final playable = await _audioPlayable(exo: true);
+    return _pickAudio(streams, (await _fetchTrackPrefs()) ?? _noPrefs, playable: playable) != null;
+  }
+
+  /// Which audio tracks the engine ([exo] or mpv) can play here: ones it decodes, or ones the
+  /// TV or receiver takes undecoded (passthrough, when on).
+  Future<bool Function(Map<String, dynamic>)> _audioPlayable({required bool exo}) async {
     final passthrough = playbackSettings.passthrough ? await MediaSupport.passthroughFormats() : const <String>{};
-    return support.playsAudio(audio['Codec'] as String?, passthrough);
+    final support = exo ? await ExoEngine.support() : null;
+    return (stream) {
+      final codec = (stream['Codec'] as String?)?.toLowerCase();
+      if (support != null) return support.playsAudio(codec, passthrough);
+      return codec == null || !_undecodableAudio.contains(codec) || passthrough.contains(codec);
+    };
+  }
+
+  /// Tells mpv which audio track to open [item] with, before it opens: one it can play, so a
+  /// track it can't (TrueHD without passthrough) never stops the video from starting.
+  Future<void> _chooseMpvAudio(JellyfinItem item) async {
+    if (_player.usingExo) return;
+    final dynamic mpv = _player.mpv.player.platform;
+    if (mpv == null) return;
+    final streams = _streamsOf(item, 'Audio', external: false);
+    final pick = _pickAudio(
+      streams,
+      (await _fetchTrackPrefs()) ?? _noPrefs,
+      playable: await _audioPlayable(exo: false),
+    );
+    try {
+      // mpv numbers a file's audio tracks from 1, in the order Jellyfin lists them.
+      await mpv.setProperty('aid', pick == null ? 'auto' : '${pick + 1}');
+    } catch (e) {
+      debugPrint('Audio track: $e');
+    }
+  }
+
+  /// A decoder couldn't start for the audio ([message] names the codec): reopens from the same
+  /// spot with another of the file's tracks, if one can be played. Once per video.
+  Future<bool> _retryWithOtherAudio(String message) async {
+    final codec = RegExp(r"decoder for codec '([\w-]+)'").firstMatch(message)?.group(1)?.toLowerCase();
+    final item = _item;
+    if (codec == null || item == null || _audioRetried || _transcode != null || _casting) return false;
+    _undecodableAudio.add(codec);
+    final streams = _streamsOf(item, 'Audio', external: false);
+    final playable = await _audioPlayable(exo: _player.usingExo);
+    final pick = _pickAudio(streams, (await _fetchTrackPrefs()) ?? _noPrefs, playable: playable);
+    if (pick == null) return false;
+    _audioRetried = true;
+    _fallingBack = true;
+    try {
+      final position = _player.state.position;
+      final from = position > Duration.zero ? position : _openedAt;
+      await _chooseMpvAudio(item);
+      if (!mounted) return true;
+      await _player.open(
+        Media(jellyfin.streamUrl(item.id), httpHeaders: jellyfin.authHeaders, start: from > Duration.zero ? from : null),
+        play: !_inGroup,
+      );
+      unawaited(_applyDefaultTracks(item));
+      return true;
+    } finally {
+      _fallingBack = false;
+    }
   }
 
   /// Hands playback to ExoPlayer, drawing on a surface of its own.
@@ -904,7 +990,7 @@ builder: (context) => Dialog(child: Padding(
   }
 
   /// Tells Jellyfin what's playing here. Not while casting: the Chromecast reports instead.
-  void _startReporter(JellyfinClient client, JellyfinItem item) {
+  void _startReporter(JellyfinClient client, JellyfinItem item, {Duration start = Duration.zero}) {
     if (_reporter != null) return;
     final transcode = _transcode;
     _reporter = PlaybackReporter(
@@ -915,6 +1001,7 @@ builder: (context) => Dialog(child: Padding(
       transcoding: transcode != null,
       playSessionId: transcode?.session,
       audioStreamIndex: transcode?.audioIndex,
+      openedAt: start,
     )..start();
   }
 
@@ -992,7 +1079,7 @@ builder: (context) => Dialog(child: Padding(
     if (_localOpened) {
       if (at > Duration.zero) await _player.seek(at);
       await _player.play();
-      if (jellyfin.client case final client?) _startReporter(client, item);
+      if (jellyfin.client case final client?) _startReporter(client, item, start: at);
     } else if (jellyfin.client case final client?) {
       await _openLocal(client, item, at > Duration.zero ? at : _resumePosition(item));
     }
@@ -1097,7 +1184,8 @@ builder: (context) => Dialog(child: Padding(
     // ── Audio: the preferred language if the file has it ──
     final audioStreams = _streamsOf(item, 'Audio', external: false);
     final audioTracks = tracks.audio.where((t) => _isRealTrack(t.id)).toList();
-    final audioPick = _pickAudio(audioStreams, prefs);
+    final audioPick = _pickAudio(audioStreams, prefs, playable: await _audioPlayable(exo: _player.usingExo));
+    if (!mounted) return;
     if (audioPick != null && audioPick < audioTracks.length) {
       await _player.setAudioTrack(audioTracks[audioPick]);
     }

@@ -6,6 +6,7 @@ import '../../theme/theme_presets.dart';
 import '../../theme/app_icons.dart';
 import 'switch_setting.dart';
 import '../../theme/theme.dart';
+import '../../widgets/remote_text_field.dart';
 
 String _pad3(int n) => n.toString().padLeft(3, '0');
 
@@ -166,12 +167,17 @@ class _SeedEditorState extends State<_SeedEditor> {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           spacing: 8,
           children: [
-            TextField(
-              controller: _code,
-              keyboardType: TextInputType.number,
-              decoration: InputDecoration(
-                hintText: 'Enter a code, e.g. 28533082',
-                error: _codeError == null ? null : Text(_codeError!),
+            RemoteTextField(
+              builder: (context, focusNode, highlighted) => TextField(
+                controller: _code,
+                focusNode: focusNode,
+                keyboardType: TextInputType.number,
+                onSubmitted: (_) => _loadCode(),
+                decoration: InputDecoration(
+                  hintText: 'Enter a code, e.g. 28533082',
+                  error: _codeError == null ? null : Text(_codeError!),
+                  enabledBorder: highlighted ? remoteFieldBorder(context) : null,
+                ),
               ),
             ),
             FilledButton(
@@ -245,15 +251,19 @@ class _AdvancedEditor extends StatelessWidget {
   final List<String> errors;
 
   @override
-  Widget build(BuildContext context) => TextField(
-    controller: controller,
-    minLines: 5,
-    keyboardType: TextInputType.multiline,
-    maxLines: null,
-    decoration: InputDecoration(
-      label: const Text('Custom Colors'),
-      hintText: 'One "name = color" per line: #RRGGBB, #AARRGGBB, or hsl(h, s%, l%).',
-      error: errors.isEmpty ? null : Text(errors.join('\n')),
+  Widget build(BuildContext context) => RemoteTextField(
+    builder: (context, focusNode, highlighted) => TextField(
+      controller: controller,
+      focusNode: focusNode,
+      minLines: 5,
+      keyboardType: TextInputType.multiline,
+      maxLines: null,
+      decoration: InputDecoration(
+        label: const Text('Custom Colors'),
+        hintText: 'One "name = color" per line: #RRGGBB, #AARRGGBB, or hsl(h, s%, l%).',
+        error: errors.isEmpty ? null : Text(errors.join('\n')),
+        enabledBorder: highlighted ? remoteFieldBorder(context) : null,
+      ),
     ),
   );
 }

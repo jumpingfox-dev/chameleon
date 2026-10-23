@@ -2,7 +2,6 @@ import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 import 'package:material_ui/material_ui.dart';
 
-import '../features/detail/detail_page.dart' show closeOpenDetailPopouts, detailPopoutOpen;
 import '../features/detail/detail_screens.dart';
 import '../features/library/genres.dart';
 import '../features/home/home.dart';
@@ -199,7 +198,7 @@ class _AppShellState extends State<AppShell> {
       return KeyEventResult.ignored;
     }
 
-    // Popouts, dialogs and pickers keep ← to themselves.
+    // Dialogs and pickers keep ← to themselves.
     if (ModalRoute.of(focusedContext) is PopupRoute) {
       return KeyEventResult.ignored;
     }
@@ -477,29 +476,6 @@ class _AppShellState extends State<AppShell> {
                           ),
                         );
                       },
-                    ),
-                  ),
-                ),
-                // A detail popout dims only its tab, which starts right of the rail. This dims
-                // the rail with it, and selecting it closes the popout like the rest of the dim.
-                Positioned(
-                  left: 0,
-                  top: 0,
-                  bottom: 0,
-                  width: inset + _railWidth,
-                  child: ValueListenableBuilder(
-                    valueListenable: detailPopoutOpen,
-                    builder: (context, open, _) => IgnorePointer(
-                      ignoring: !open,
-                      child: GestureDetector(
-                        behavior: HitTestBehavior.opaque,
-                        onTap: closeOpenDetailPopouts,
-                        child: AnimatedOpacity(
-                          duration: const Duration(milliseconds: 200), // as the popout's fade
-                          opacity: open ? 1 : 0,
-                          child: ColoredBox(color: context.colors.scrim),
-                        ),
-                      ),
                     ),
                   ),
                 ),

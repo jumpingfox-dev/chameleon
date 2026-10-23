@@ -6,12 +6,12 @@ import 'package:dart_jellyfin/dart_jellyfin.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter_svg/flutter_svg.dart';
 import 'package:material_ui/material_ui.dart';
 
 import '../../core/jellyfin/jellyfin_controller.dart';
 import '../../core/jellyfin/list_each.dart';
 import '../../core/platform/keep_awake.dart';
+import '../../core/platform/screen_off.dart';
 import '../../core/platform/screen_type.dart';
 import '../../theme/theme.dart';
 import '../../widgets/app_logo.dart';
@@ -30,8 +30,9 @@ void showScreensaver(ScreensaverStyle style) => _ScreensaverHostState._instance?
 /// Shows the screensaver over [child] (the whole app) after a while without a button press
 /// or touch, as set in Settings. Any button or touch ends it, without doing anything else.
 ///
-/// While it shows, the screen stays on for up to [ScreensaverSettings.awakeFor]; after that the
-/// device sleeps (or starts its own screensaver) as it would without the app.
+/// While it shows, the screen stays on for up to [ScreensaverSettings.awakeFor]. After that the
+/// app turns the screen off if [ScreensaverSettings.turnOff] says so (and it's allowed), and
+/// otherwise lets the device sleep (or start its own screensaver) as it would without the app.
 class ScreensaverHost extends StatefulWidget {
   const ScreensaverHost({super.key, required this.child});
 
@@ -108,11 +109,17 @@ class _ScreensaverHostState extends State<ScreensaverHost> with WidgetsBindingOb
     // Dimming leaves the device to sleep when it usually would; a screensaver keeps it on.
     if (style != ScreensaverStyle.off) {
       _awake.hold();
-      _awakeTimer = Timer(Duration(minutes: _settings.awakeFor), _awake.release);
+      _awakeTimer = Timer(Duration(minutes: _settings.awakeFor), _timeUp);
     }
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted && _showing != null) _focus.requestFocus();
     });
+  }
+
+  /// The screensaver has kept the screen on as long as it should.
+  Future<void> _timeUp() async {
+    _awake.release();
+    if (_settings.turnOff) await ScreenOff.turnOff();
   }
 
   void _hide() {

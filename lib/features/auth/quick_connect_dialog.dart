@@ -90,70 +90,72 @@ class _QuickConnectBodyState extends State<_QuickConnectBody> {
     final muted = theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.onSurfaceVariant);
     final request = _request;
 
-    return Padding(
-      padding: const EdgeInsets.all(24),
-      child: Column(
-        mainAxisSize: .min,
-        crossAxisAlignment: .stretch,
-        spacing: 12,
-        children: [
-          Text('Quick Connect', textAlign: TextAlign.center, style: theme.textTheme.titleLarge),
+    // Only as wide as the code and a few short lines need.
+    return ConstrainedBox(
+      constraints: const BoxConstraints(maxWidth: 400),
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisSize: .min,
+          crossAxisAlignment: .stretch,
+          spacing: 12,
+          children: [
+            Text('Quick Connect', style: theme.textTheme.titleLarge),
 
-          if (_error != null) ...[
-            Text(_error!, textAlign: TextAlign.center, style: muted?.copyWith(color: theme.colorScheme.error)),
-          ] else if (request == null || _signingIn) ...[
-            const Padding(
-              padding: EdgeInsets.symmetric(vertical: 24),
-              child: Center(child: CircularProgressIndicator()),
-            ),
-            if (_signingIn) Text('Signing in…', textAlign: TextAlign.center, style: muted),
-          ] else ...[
-            Text(
-              'On a device that\'s already signed in, open Quick Connect and enter this code.',
-              textAlign: TextAlign.center,
-              style: muted,
-            ),
-            // The code, big enough to read from the couch.
-            Center(
-              child: Text(
-                request.code,
-                style: theme.textTheme.headlineLarge?.copyWith(
-                  fontWeight: FontWeight.w700,
-                  letterSpacing: 8,
-                  color: theme.colorScheme.primary,
+            if (_error != null) ...[
+              Text(_error!, style: muted?.copyWith(color: theme.colorScheme.error)),
+            ] else if (request == null || _signingIn) ...[
+              const Padding(
+                padding: EdgeInsets.symmetric(vertical: 24),
+                child: Center(child: CircularProgressIndicator()),
+              ),
+              if (_signingIn) Text('Signing in…', style: muted),
+            ] else ...[
+              Text(
+                'On a device that\'s already signed in, open Quick Connect and enter this code.',
+                style: muted,
+              ),
+              // The code, big enough to read from the couch.
+              Center(
+                child: Text(
+                  request.code,
+                  style: theme.textTheme.headlineLarge?.copyWith(
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: 8,
+                    color: theme.colorScheme.primary,
+                  ),
                 ),
               ),
-            ),
-            Text(
-              'In the Jellyfin web app it\'s under your profile → Quick Connect. '
-                  'In Chameleon, it\'s in Settings → Account.',
-              textAlign: TextAlign.center,
-              style: muted,
-            ),
-            Text('Waiting for approval…', textAlign: TextAlign.center, style: muted),
-          ],
-
-          const SizedBox(height: 4),
-          Row(
-            mainAxisAlignment: .end,
-            spacing: 8,
-            children: [
-              if (_error != null)
-                OutlinedButton(
-                  onPressed: _start,
-                  child: const Text('Get a new code'),
-                ),
-              if (_error != null)
-                TextButton(onPressed: () => Navigator.of(context).pop(false), child: const Text('Cancel'))
-              else
-                OutlinedButton(
-                  autofocus: true, // so a remote can cancel straight away
-                  onPressed: () => Navigator.of(context).pop(false),
-                  child: const Text('Cancel'),
-                ),
+              Text(
+                'In the Jellyfin web app it\'s under your profile → Quick Connect. '
+                'In Chameleon, it\'s in Settings → Account.',
+                style: muted,
+              ),
+              Text('Waiting for approval…', style: muted),
             ],
-          ),
-        ],
+
+            const SizedBox(height: 4),
+            Row(
+              mainAxisAlignment: .center,
+              spacing: 8,
+              children: [
+                if (_error != null)
+                  OutlinedButton(
+                    onPressed: _start,
+                    child: const Text('Get a new code'),
+                  ),
+                if (_error != null)
+                  TextButton(onPressed: () => Navigator.of(context).pop(false), child: const Text('Cancel'))
+                else
+                  OutlinedButton(
+                    autofocus: true, // so a remote can cancel straight away
+                    onPressed: () => Navigator.of(context).pop(false),
+                    child: const Text('Cancel'),
+                  ),
+              ],
+            ),
+          ],
+        ),
       ),
     );
   }

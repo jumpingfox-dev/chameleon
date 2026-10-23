@@ -14,6 +14,7 @@ class PlaybackReporter {
     this.playSessionId,
     this.transcoding = false,
     this.audioStreamIndex,
+    this.openedAt = Duration.zero,
   });
 
   final JellyfinClient client;
@@ -29,7 +30,21 @@ class PlaybackReporter {
   bool transcoding;
   int? audioStreamIndex;
 
+  /// Where playback was opened. Until the player gets there, its position reads as zero; that
+  /// must not be reported, or leaving straight away would lose where you'd got to.
+  final Duration openedAt;
+  bool _reachedStart = false;
+
   static const _interval = Duration(seconds: 10);
+
+  Duration get _position {
+    final position = player.state.position;
+    if (_reachedStart || position >= openedAt - const Duration(seconds: 5)) {
+      _reachedStart = true;
+      return position;
+    }
+    return openedAt;
+  }
 
   Timer? _timer;
   StreamSubscription<bool>? _playing;
@@ -59,7 +74,7 @@ class PlaybackReporter {
     'MediaSourceId': ?mediaSourceId,
     'PlaySessionId': ?playSessionId,
     'AudioStreamIndex': ?audioStreamIndex,
-    'PositionTicks': player.state.position.inMicroseconds * 10, // Jellyfin counts in 100 ns ticks
+    'PositionTicks': _position.inMicroseconds * 10, // Jellyfin counts in 100 ns ticks
     'IsPaused': !player.state.playing,
     'CanSeek': true,
     'PlayMethod': transcoding ? 'Transcode' : 'DirectPlay',

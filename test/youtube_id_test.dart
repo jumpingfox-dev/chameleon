@@ -1,4 +1,4 @@
-import 'package:chameleon/features/previews/trailer_preview.dart';
+import 'package:chameleon/features/previews/trailers.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {

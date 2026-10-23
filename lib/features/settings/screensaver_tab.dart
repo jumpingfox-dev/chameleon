@@ -138,6 +138,18 @@ class _ScreensaverCard extends StatelessWidget {
               format: _minutes,
               onChange: (n) => update((s) => s.awakeFor = n),
             ),
+            if (ScreenOff.supported)
+              SwitchSetting(
+                label: 'Then turn off the TV',
+                description: 'Turns the screen off when that time is up. A TV set to follow its '
+                    'source over HDMI-CEC goes to standby. Android asks for your OK first.',
+                value: s.turnOff,
+                onChange: (on) async {
+                  if (on && !await ScreenOff.enable()) return; // not allowed: stays off
+                  if (!on) await ScreenOff.disable();
+                  update((s) => s.turnOff = on);
+                },
+              ),
             _gap,
             _PickerSetting<int>(
               label: 'Dim',
@@ -169,7 +181,7 @@ class _ScreensaverCard extends StatelessWidget {
                 ),
                 SwitchSetting(
                   label: 'Show the title',
-                  description: 'Its logo or name, and year.',
+                  description: 'Its logo or name, and genres.',
                   value: s.backdropDetails,
                   onChange: (v) => update((s) => s.backdropDetails = v),
                 ),

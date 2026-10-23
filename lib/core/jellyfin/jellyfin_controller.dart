@@ -12,6 +12,7 @@ import '../storage/app_cache.dart';
 import '../storage/database.dart';
 import '../storage/storage.dart';
 import '../format/format.dart';
+import 'together.dart';
 
 class JellyfinLibrary {
   const JellyfinLibrary({
@@ -379,6 +380,9 @@ class JellyfinController extends ChangeNotifier {
         await _clearSession(); // token revoked or expired: back to login
       }
       // Connection errors (server offline) keep the session, so you stay signed in.
+    } catch (e) {
+      // Anything else: still start, with what's saved, rather than stop on the splash screen.
+      debugPrint('JellyfinController.load: $e');
     }
   }
 
@@ -534,13 +538,12 @@ class JellyfinController extends ChangeNotifier {
 
   Future<void> _refresh() async {
     final c = client!;
-    final (me, views, genreResult) = await (
-    c.user.currentUser(),
-    c.library.userViews(),
-    c.genres.list(
-      includeItemTypes: const ['Movie', 'Series'],
-    ), // drop to include music genres
-    ).wait;
+    final meLoad = c.user.currentUser();
+    final viewsLoad = c.library.userViews();
+    final genresLoad = c.genres.list(includeItemTypes: const ['Movie', 'Series']); // drop to include music genres
+    // A failure comes through as itself (see together3), so load() can tell a revoked token
+    // from an offline server; wrapped, it got past both and startup stopped on the splash screen.
+    final (me, views, genreResult) = await together3(meLoad, viewsLoad, genresLoad);
 
     userName = me.name;
     final tag = me.primaryImageTag;

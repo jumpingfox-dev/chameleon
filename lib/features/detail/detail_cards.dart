@@ -1,177 +1,5 @@
 part of 'detail_page.dart';
 
-// ─── Backdrop banner (collections, movies) ───────────────────────────────────
-
-/// An item's backdrop, with a parallax effect and its logo in the bottom-left.
-class _BackdropBanner extends StatelessWidget {
-  const _BackdropBanner({required this.item, required this.topPadding});
-
-  final JellyfinItem item;
-  final double topPadding;
-
-  @override
-  Widget build(BuildContext context) {
-    final client = jellyfin.client!;
-    final colors = context.colors;
-    final isPhone = ScreenType.of(context).isPhone;
-
-    final backdrops = item.raw['BackdropImageTags'] as List?;
-    final backdropTag = backdrops != null && backdrops.isNotEmpty
-        ? backdrops.first as String
-        : null;
-    final logoTag = item.imageTags['Logo'];
-
-    return _TapShield(
-      child: Container(
-        foregroundDecoration: BoxDecoration(
-          border: Border.all(color: colors.outlineVariant),
-          borderRadius: BorderRadius.circular(12),
-        ),
-        child: ClipRRect(
-          borderRadius: BorderRadius.circular(12),
-          child: AspectRatio(
-            aspectRatio: isPhone ? 16 / 9 : 21 / 9,
-            child: Stack(
-              fit: StackFit.expand,
-              children: [
-                if (backdropTag != null)
-                  _ParallaxBackdrop(
-                    topPadding: topPadding,
-                    child: Image.network(
-                      client.images.url(
-                        itemId: item.id,
-                        type: JellyfinImagesApi.typeBackdrop,
-                        tag: backdropTag,
-                        fillWidth: 1600,
-                        quality: 90,
-                      ),
-                      fit: BoxFit.cover,
-                      alignment: Alignment.topCenter, // crop from the bottom, keep the top of the image
-                      errorBuilder: (_, _, _) =>
-                          ColoredBox(color: colors.surfaceContainerHighest),
-                    ),
-                  )
-                else
-                  ColoredBox(color: colors.surfaceContainerHighest),
-
-                // Darkens the bottom so the logo stands out on any backdrop.
-                const DecoratedBox(
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      begin: Alignment.topCenter,
-                      end: Alignment.bottomCenter,
-                      stops: [0.4, 1.0],
-                      colors: [Color(0x00000000), Color(0xB3000000)],
-                    ),
-                  ),
-                ),
-
-                Positioned(
-                  left: 16,
-                  bottom: 16,
-                  child: ConstrainedBox(
-                    constraints: BoxConstraints(
-                      maxWidth: isPhone ? 200 : 360,
-                      maxHeight: isPhone ? 56 : 96,
-                    ),
-                    child: logoTag != null
-                        ? Image.network(
-                      client.images.url(
-                        itemId: item.id,
-                        type: JellyfinImagesApi.typeLogo,
-                        tag: logoTag,
-                        fillWidth: 720,
-                      ),
-                      fit: BoxFit.contain,
-                      alignment: Alignment.bottomLeft,
-                    )
-                        : Text(
-                      // No logo: the name, in large white text.
-                      item.name,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: context.text.headlineSmall
-                          ?.copyWith(
-                        color: const Color(0xFFFFFFFF),
-                        shadows: const [
-                          Shadow(
-                            blurRadius: 8,
-                            color: Color(0x99000000),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                ),
-                // ── Close (popouts on touch screens only; TVs have Back, desktops Esc) ──
-                if (_PopoutScope.of(context) && ScreenType.of(context).isTouch)
-                  Positioned(
-                    top: 10,
-                    left: 10,
-                    child: Focus(
-                      // Doesn't take focus itself: notices when the button gets it from the keyboard or remote,
-                      // and scrolls the popout back to the top so the whole banner is in view.
-                      canRequestFocus: false,
-                      skipTraversal: true,
-                      onFocusChange: (hasFocus) {
-                        if (!hasFocus || FocusManager.instance.highlightMode != FocusHighlightMode.traditional) return;
-                        Scrollable.maybeOf(context)?.position.animateTo(
-                          0,
-                          duration: const Duration(milliseconds: 300),
-                          curve: Curves.easeOutCubic,
-                        );
-                      },
-                      child: _FloatingIconButton(
-                        icon: appIcons.close,
-                        label: 'Close',
-                        filled: true,
-                        autofocus:
-                        FocusManager.instance.highlightMode ==
-                            FocusHighlightMode.traditional,
-                        onPress: () => Navigator.of(context).pop(),
-                      ),
-                    ),
-                  ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-/// Moves its child down at a fraction of the scroll speed once the banner reaches the top
-/// of the view, so the image appears to scroll more slowly than the page.
-class _ParallaxBackdrop extends StatelessWidget {
-  const _ParallaxBackdrop({required this.topPadding, required this.child});
-
-  final double topPadding;
-  final Widget child;
-
-  static const _speed = 0.7; // 0 = no parallax, 1 = the image stays fixed
-
-  @override
-  Widget build(BuildContext context) {
-    final position = Scrollable.of(context).position;
-    final start = topPadding + _PopoutScope.gapOf(context); // where the banner sits before scrolling
-    return AnimatedBuilder(
-      animation: position,
-      builder: (context, child) {
-        // Start only once the banner's top edge has scrolled out of view,
-        // so no gap ever opens above the image.
-        final scrolledPastTop = math.max(0.0, position.pixels - start);
-        return Transform.translate(
-          offset: Offset(0, scrolledPastTop * _speed),
-          child: child,
-        );
-      },
-      child:
-      child, // the image itself isn't rebuilt while scrolling, only moved
-    );
-  }
-}
-
 // ─── Collection pieces ───────────────────────────────────────────────────────
 
 /// Count, year span and age rating, then the description, genres and movies.
@@ -257,7 +85,6 @@ class _CollectionInfoCard extends StatelessWidget {
     final genres = _genres;
 
     return _DetailCard(
-      showClose: false,
       edgeToEdge: true,
       child: _CardColumn(
         children: [
@@ -279,18 +106,20 @@ class _CollectionInfoCard extends StatelessWidget {
               spacing: 8,
               runSpacing: 8,
               children: [
-                FilledButton(
-                  style: actionButtonStyle,
-                  onPressed: items.isEmpty
-                      ? null
-                      : () => playQueue(GoRouter.of(context), collectionQueue(items)),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    spacing: 8,
-                    children: [Icon(appIcons.play, size: 18, fill: 1), const Text('Play')],
+                _StartsHere(
+                  child: FilledButton(
+                    style: actionButtonStyle,
+                    onPressed: items.isEmpty
+                        ? null
+                        : () => playQueue(GoRouter.of(context), collectionQueue(items)),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      spacing: 8,
+                      children: [Icon(appIcons.play, size: 18, fill: 1), const Text('Play')],
+                    ),
                   ),
                 ),
-                OutlinedButton(
+                FilledButton.tonal(
                   style: actionButtonStyle,
                   onPressed: items.length < 2
                       ? null
@@ -339,6 +168,13 @@ class _MovieInfoCard extends StatelessWidget {
 
 
   /// Actors only, in billing order, as Jellyfin lists them.
+  /// Started and not finished.
+  bool get _partway {
+    final userData = movie.raw['UserData'] as Map?;
+    final ticks = userData?['PlaybackPositionTicks'];
+    return ticks is int && ticks > 0 && userData?['Played'] != true;
+  }
+
   List<Map<String, dynamic>> get _cast => [
     for (final p in (movie.raw['People'] as List?) ?? const [])
       if (p is Map<String, dynamic> && p['Type'] == 'Actor') p,
@@ -362,7 +198,6 @@ class _MovieInfoCard extends StatelessWidget {
     final cast = _cast;
 
     return _DetailCard(
-      showClose: false,
       edgeToEdge: true,
       child: _CardColumn(
         children: [
@@ -390,16 +225,19 @@ class _MovieInfoCard extends StatelessWidget {
               spacing: 8,
               runSpacing: 8,
               children: [
-                FilledButton(
-                  style: actionButtonStyle,
-                  onPressed: () => context.push('/play/${movie.id}'),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    spacing: 8,
-                    children: [
-                      Icon(appIcons.play, size: 18, fill: 1),
-                      const Text('Play'),
-                    ],
+                _StartsHere(
+                  child: FilledButton(
+                    style: actionButtonStyle,
+                    onPressed: () => context.push('/play/${movie.id}'),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      spacing: 8,
+                      children: [
+                        Icon(appIcons.play, size: 18, fill: 1),
+                        // Partway through: it picks up where you left off.
+                        Text(_partway ? 'Continue' : 'Play'),
+                      ],
+                    ),
                   ),
                 ),
                 _FavoriteButton(item: movie),
@@ -546,7 +384,6 @@ class _SeriesInfoCardState extends State<_SeriesInfoCard> {
     final episodes = season == null ? null : _episodes[season.id];
 
     return _DetailCard(
-      showClose: false,
       edgeToEdge: true,
       child: _CardColumn(
         children: [
@@ -578,7 +415,7 @@ class _SeriesInfoCardState extends State<_SeriesInfoCard> {
               spacing: 8,
               runSpacing: 8,
               children: [
-                _SeriesPlayButton(series: series, seasons: widget.seasons),
+                _StartsHere(child: _SeriesPlayButton(series: series, seasons: widget.seasons)),
                 _FavoriteButton(item: series),
                 _TrailerButton(item: series),
               ],
@@ -955,9 +792,8 @@ class _FavoriteButtonState extends State<_FavoriteButton> {
       fill: _favorite ? 1 : 0,
     );
     final label = Text(_favorite ? 'Favorited' : 'Favorite');
-    return _favorite
-        ? FilledButton.tonalIcon(style: actionButtonStyle, onPressed: _toggle, icon: icon, label: label)
-        : OutlinedButton.icon(style: actionButtonStyle, onPressed: _toggle, icon: icon, label: label);
+    // Filled, like the banner's More info: an outline alone gets lost on a busy backdrop.
+    return FilledButton.tonalIcon(style: actionButtonStyle, onPressed: _toggle, icon: icon, label: label);
   }
 }
 
@@ -991,10 +827,11 @@ class _TrailerButton extends StatelessWidget {
     builder: (context, snap) {
       final trailer = snap.data;
       if (trailer == null) return const SizedBox.shrink();
-      return OutlinedButton.icon(
+      // Filled, like the banner's More info: an outline alone gets lost on a busy backdrop.
+      return FilledButton.tonalIcon(
         style: actionButtonStyle,
         onPressed: () => _play(context, trailer),
-        icon: Icon(appIcons.trailer, fill: 1),
+        icon: Icon(appIcons.trailer, size: 18, fill: 1),
         label: const Text('Trailer'),
       );
     },
@@ -1065,13 +902,19 @@ class _SeriesPlayButtonState extends State<_SeriesPlayButton> {
   @override
   Widget build(BuildContext context) {
     final next = _next?.episode;
-    final label = _next?.started ?? false ? 'Continue Watching' : 'Play';
+    final label = _next?.started ?? false ? 'Continue' : 'Play';
 
     return FilledButton(
       style: actionButtonStyle,
-      onPressed: next == null
-          ? null
-          : () => context.push('/play/${next.id}'), // disabled until found
+      // Usable straight away (so the page can open with focus on it): pressed before the next
+      // episode is found, it waits for it.
+      onPressed: _next != null && next == null
+          ? null // nothing to play
+          : () async {
+              final router = GoRouter.of(context);
+              final episode = next ?? (await _nextEpisodeOf(widget.series, widget.seasons)).episode;
+              if (episode != null) router.push('/play/${episode.id}');
+            },
       child: Row(
         mainAxisSize: MainAxisSize.min,
         spacing: 8,

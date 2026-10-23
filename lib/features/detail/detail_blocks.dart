@@ -157,10 +157,8 @@ class _GenreButtons extends StatelessWidget {
         for (final genre in genres)
           OutlinedButton(
             onPressed: () {
-              final router = GoRouter.of(
-                context,
-              ); // grab it before the popout (and this context) closes
-              closeDetailPopouts(context);
+              final router = GoRouter.of(context); // grab it before the page (and this context) closes
+              closeDetailPages(context);
               router.push('/home/genre/${Uri.encodeComponent(genre)}');
             },
             style: genreButtonStyle(context.colors, compact: true),
@@ -206,24 +204,7 @@ class _InlineItemGrid extends StatelessWidget {
   }
 }
 
-/// Marks everything below it as inside a popout, so cards can show a close button.
-class _PopoutScope extends InheritedWidget {
-  const _PopoutScope({required super.child, this.gap = 0});
-
-  /// The empty space above the popout's first card (see [DetailPage.popoutGap]).
-  final double gap;
-
-  static bool of(BuildContext context) =>
-      context.dependOnInheritedWidgetOfExactType<_PopoutScope>() != null;
-
-  static double gapOf(BuildContext context) =>
-      context.dependOnInheritedWidgetOfExactType<_PopoutScope>()?.gap ?? 0;
-
-  @override
-  bool updateShouldNotify(_PopoutScope oldWidget) => oldWidget.gap != gap;
-}
-
-/// Catches taps that land on its child, so they don't count as "clicking outside" a popout.
+/// Catches taps that land on its child, so they don't reach what's behind it.
 /// Buttons and posters inside still receive their own taps.
 class _TapShield extends StatelessWidget {
   const _TapShield({required this.child});
@@ -238,22 +219,32 @@ class _TapShield extends StatelessWidget {
   );
 }
 
-/// The card used by every detail layout. It absorbs taps, and in a popout shows a
-/// close button in its top-right corner (touch screens only; TVs and desktops have Back and Esc).
+/// The card used by every detail layout.
 class _DetailCard extends StatelessWidget {
-  const _DetailCard({required this.child, this.showClose = true, this.edgeToEdge = false});
+  const _DetailCard({required this.child, this.edgeToEdge = false});
 
   final Widget child;
 
-  /// False for cards under a backdrop banner, which carries the close button instead.
-  final bool showClose;
 
   /// True when [child] is a [_CardColumn]: the card then leaves out its side padding and
   /// the column adds it to each piece, so sideways rows can scroll to the card's edges.
   final bool edgeToEdge;
 
   @override
-  Widget build(BuildContext context) => _TapShield(
+  Widget build(BuildContext context) {
+    // Over a backdrop: the details sit straight on the artwork, no card, and the page's sides
+    // are its sides (the page leaves them to each part, so rows run to the screen's edge).
+    if (_BackdropScope.of(context)) {
+      final sides = pageSides(context, extra: 12);
+      return Padding(
+        padding: EdgeInsets.only(top: 8, bottom: 8, left: edgeToEdge ? 0 : sides.left, right: edgeToEdge ? 0 : sides.right),
+        child: _CardSides(left: edgeToEdge ? sides.left : 0, right: edgeToEdge ? sides.right : 0, child: child),
+      );
+    }
+    return _card(context);
+  }
+
+  Widget _card(BuildContext context) => _TapShield(
     child: Card(
       child: Builder(builder: (context) {
         const padding = EdgeInsets.all(16);
@@ -266,17 +257,6 @@ class _DetailCard extends StatelessWidget {
               )
             else
               Padding(padding: padding, child: child),
-            if (showClose && _PopoutScope.of(context) && ScreenType.of(context).isTouch)
-              Positioned(
-                top: 8,
-                right: 8,
-                child: IconButton(
-                  autofocus: FocusManager.instance.highlightMode ==
-                      FocusHighlightMode.traditional,
-                  onPressed: () => Navigator.of(context).pop(),
-                  icon: Icon(appIcons.close, fill: 1),
-                ),
-              ),
           ],
         );
       }),
@@ -380,9 +360,9 @@ class SliverItemGrid extends StatelessWidget {
   }
 }
 
-/// Closes the popout it's in when the app navigates somewhere else: another library,
+/// Closes the detail page it's in when the app navigates somewhere else: another library,
 /// a genre, another tab, ... Playing something doesn't count, because the player opens
-/// over the popout and closing it should return you here.
+/// over the page and closing it should return you here.
 class _CloseOnNavigation extends StatefulWidget {
   const _CloseOnNavigation({required this.child});
 
@@ -412,7 +392,7 @@ class _CloseOnNavigationState extends State<_CloseOnNavigation> {
     final uri = _router!.routerDelegate.currentConfiguration.uri;
     if (uri == _openedAt || uri.path.startsWith('/play')) return;
 
-    // Close this popout specifically, after the current navigation has finished.
+    // Close this page specifically, after the current navigation has finished.
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       final route = ModalRoute.of(context);
@@ -457,14 +437,12 @@ class _FloatingIconButton extends StatelessWidget {
     required this.label,
     required this.filled,
     required this.onPress,
-    this.autofocus = false,
   });
 
   final IconData icon;
   final String label;
   final bool filled;
   final VoidCallback onPress;
-  final bool autofocus;
   static const size = 40.0;
 
   @override
@@ -472,7 +450,6 @@ class _FloatingIconButton extends StatelessWidget {
     button: true,
     label: label,
     child: Tappable(
-      autofocus: autofocus,
       onPress: onPress,
       builder: (context, states, _) {
         final active = isHighlighted(states);

@@ -45,6 +45,7 @@ final GoRouter appRouter = GoRouter(
         itemId: state.pathParameters['id']!,
         queue: state.uri.queryParameters['queue']?.split(',') ?? const [],
         fromGroup: state.uri.queryParameters['syncplay'] == '1',
+        start: PlayStart.values.asNameMap()[state.uri.queryParameters['start']] ?? PlayStart.setting,
       ),
     ),
     StatefulShellRoute(

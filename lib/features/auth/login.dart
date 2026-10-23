@@ -3,6 +3,8 @@ import 'package:go_router/go_router.dart';
 import 'package:material_ui/material_ui.dart';
 
 import '../../core/jellyfin/jellyfin_controller.dart';
+import '../../core/platform/screen_type.dart';
+import '../../widgets/remote_text_field.dart';
 import 'quick_connect_dialog.dart';
 import '../../widgets/app_logo.dart';
 import '../../theme/theme.dart';
@@ -24,6 +26,9 @@ class _LoginScreenState extends State<LoginScreen> {
     FocusNode(),
   ]; // server, username, password
   bool _busy = false;
+
+  /// No server filled in yet: the remote starts there, otherwise on the username.
+  late final bool _startOnServer = _server.text.isEmpty;
   double _keyboard =
       0; // the on-screen keyboard's height, last time it was looked at
 
@@ -34,7 +39,7 @@ class _LoginScreenState extends State<LoginScreen> {
       _server.text = displayServerUrl(jellyfin.lastServer!);
     }
     for (final node in _fields) {
-      node.addListener(_revealField);
+      node.addListener(_onFieldFocus);
     }
   }
 
@@ -55,6 +60,15 @@ class _LoginScreenState extends State<LoginScreen> {
 
   void _goBack() => context.go(jellyfin.isConnected ? '/home' : '/profiles');
 
+  /// Typing in a field, or done: on TVs the page makes room for the keyboard (below).
+  void _onFieldFocus() {
+    if (mounted) setState(() {});
+    _revealField();
+  }
+
+  /// Whether a field is being typed in.
+  bool get _typing => _fields.any((node) => node.hasFocus);
+
   /// Scrolls the field being typed in to the middle of the space the keyboard leaves, once
   /// that space has settled: on moving to a field, and as the keyboard opens or resizes.
   void _revealField() => WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -62,7 +76,9 @@ class _LoginScreenState extends State<LoginScreen> {
     if (field != null && field.mounted) {
       Scrollable.ensureVisible(
         field,
-        alignment: 0.5,
+        // A TV's keyboard covers the bottom half without making room for itself (it doesn't
+        // say how tall it is), so the field goes near the top instead.
+        alignment: ScreenType.of(context).isTv ? 0.15 : 0.5,
         duration: const Duration(milliseconds: 200),
       );
     }
@@ -144,32 +160,60 @@ class _LoginScreenState extends State<LoginScreen> {
                               ),
                             ),
                             // The port goes in here too, if it isn't Jellyfin's 8096.
-                            TextField(
-                              controller: _server,
+                            // The keyboard's ✓ moves on to the next field, and signs in from
+                            // the password.
+                            // On a TV the remote starts on the first field still to fill in.
+                            RemoteTextField(
                               focusNode: _fields[0],
-                              enabled: !_busy,
-                              keyboardType: TextInputType.url,
-                              autocorrect: false,
-                              decoration: const InputDecoration(
-                                label: Text('Server'),
-                                hintText: '192.168.1.100:8096',
+                              autofocus: _startOnServer,
+                              builder: (context, focusNode, highlighted) => TextField(
+                                controller: _server,
+                                focusNode: _fields[0],
+                                enabled: !_busy,
+                                keyboardType: TextInputType.url,
+                                autocorrect: false,
+                                textInputAction: TextInputAction.next,
+                                onEditingComplete: () {}, // onSubmitted moves on
+                                onSubmitted: (_) => _fields[1].requestFocus(),
+                                decoration: InputDecoration(
+                                  label: const Text('Server'),
+                                  hintText: '192.168.1.100:8096',
+                                  enabledBorder: highlighted ? remoteFieldBorder(context) : null,
+                                ),
                               ),
                             ),
-                            TextField(
-                              controller: _username,
+                            RemoteTextField(
                               focusNode: _fields[1],
-                              enabled: !_busy,
-                              decoration: InputDecoration(
-                                label: const Text('Username'),
+                              autofocus: !_startOnServer,
+                              builder: (context, focusNode, highlighted) => TextField(
+                                controller: _username,
+                                focusNode: _fields[1],
+                                enabled: !_busy,
+                                autocorrect: false,
+                                textInputAction: TextInputAction.next,
+                                onEditingComplete: () {},
+                                onSubmitted: (_) => _fields[2].requestFocus(),
+                                decoration: InputDecoration(
+                                  label: const Text('Username'),
+                                  enabledBorder: highlighted ? remoteFieldBorder(context) : null,
+                                ),
                               ),
                             ),
-                            TextField(
-                              controller: _password,
+                            RemoteTextField(
                               focusNode: _fields[2],
-                              enabled: !_busy,
-                              obscureText: true,
-                              decoration: InputDecoration(
-                                label: const Text('Password'),
+                              builder: (context, focusNode, highlighted) => TextField(
+                                controller: _password,
+                                focusNode: _fields[2],
+                                enabled: !_busy,
+                                obscureText: true,
+                                textInputAction: TextInputAction.done,
+                                onSubmitted: (_) {
+                                  if (!_busy) _signIn();
+                                },
+                                decoration: InputDecoration(
+                                  label: const Text('Password'),
+                                  enabledBorder: highlighted ? remoteFieldBorder(context) : null,
+                                ),
                               ),
                             ),
                             FilledButton(
@@ -205,6 +249,9 @@ class _LoginScreenState extends State<LoginScreen> {
                         ),
                       ),
                     ),
+                    // Room to scroll the field above a TV's keyboard while typing.
+                    if (_typing && ScreenType.of(context).isTv)
+                      SizedBox(height: MediaQuery.sizeOf(context).height * 0.5),
                   ],
                 ),
               ),

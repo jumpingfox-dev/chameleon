@@ -1,5 +1,5 @@
 import 'package:flutter/widgets.dart';
-import 'package:flutter_svg/flutter_svg.dart';
+import '../widgets/app_logo.dart';
 
 /// What a TV shows while the app starts: the full wordmark, centered, as on the TV banner
 /// (`android/app/src/main/res/drawable-xhdpi/tv_banner.png`). Phones keep the system splash
@@ -21,7 +21,7 @@ class TvSplash extends StatelessWidget {
   Widget build(BuildContext context) => ColoredBox(
     color: background,
     child: Center(
-      child: SvgPicture.asset('assets/images/text_logo_color.svg', width: _wordmarkWidth),
+      child: AppLogo.picture('assets/images/text_logo_color.svg', width: _wordmarkWidth),
     ),
   );
 }

@@ -101,6 +101,7 @@ class ScreensaverSettings extends ChangeNotifier {
   int startAfter = 3; // minutes
   int dimAfter = 5; // minutes, with the screensaver off; 0 = never
   int awakeFor = 60; // minutes
+  bool turnOff = false; // then turn the screen off (and the TV, over HDMI-CEC)
   int dim = 0; // percent darker, one of screensaverDimOptions
 
   // Backdrops
@@ -167,6 +168,7 @@ class ScreensaverSettings extends ChangeNotifier {
     'startAfter': startAfter,
     'dimAfter': dimAfter,
     'awakeFor': awakeFor,
+    'turnOff': turnOff,
     'dim': dim,
     'backdropContent': backdropContent.name,
     'backdropSeconds': backdropSeconds,
@@ -197,6 +199,7 @@ class ScreensaverSettings extends ChangeNotifier {
     startAfter = number('startAfter', startAfter);
     dimAfter = number('dimAfter', dimAfter);
     awakeFor = number('awakeFor', awakeFor);
+    turnOff = flag('turnOff', turnOff);
     dim = number('dim', dim);
     if (!screensaverDimOptions.contains(dim)) dim = 0;
     backdropContent = pick(ScreensaverContent.values, j['backdropContent'], backdropContent);

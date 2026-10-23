@@ -206,11 +206,9 @@ class PlaybackSettings extends ChangeNotifier {
   // Engine
   VideoEngine engine = VideoEngine.auto;
 
-  // Trailer previews on cards
+  // Previews: stills from a title, on its card or the banner
   bool previews = true;
-  int previewDelay = 2; // seconds on a card before it starts
-  bool previewSound = false;
-  bool previewYouTube = true; // when there's no trailer on the server
+  int previewDelay = 2; // seconds on a card before they start
 
   /// Episodes played in a row by the Up Next countdown, with no button pressed in between.
   /// Not saved: it starts over each time the app opens.
@@ -324,8 +322,6 @@ class PlaybackSettings extends ChangeNotifier {
     'engine': engine.name,
     'previews': previews,
     'previewDelay': previewDelay,
-    'previewSound': previewSound,
-    'previewYouTube': previewYouTube,
   };
 
   void _read(Map<String, dynamic> j) {
@@ -366,8 +362,6 @@ class PlaybackSettings extends ChangeNotifier {
     engine = pick(VideoEngine.values, j['engine'], engine);
     previews = flag('previews', previews);
     previewDelay = number('previewDelay', previewDelay);
-    previewSound = flag('previewSound', previewSound);
-    previewYouTube = flag('previewYouTube', previewYouTube);
   }
 }
 

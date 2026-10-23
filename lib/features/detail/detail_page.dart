@@ -1,7 +1,10 @@
 import 'dart:io';
 import 'dart:math' as math;
+import 'dart:ui' show ImageFilter;
 
 import 'package:dart_jellyfin/dart_jellyfin.dart';
+import 'package:flutter/gestures.dart';
+import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 import 'package:material_ui/material_ui.dart';
 
@@ -14,19 +17,20 @@ import '../../core/jellyfin/jellyfin_controller.dart';
 import '../../core/jellyfin/list_each.dart';
 import '../../core/platform/screen_type.dart';
 import '../../core/platform/media_support.dart';
-import '../previews/trailer_preview.dart';
+import '../previews/trailers.dart';
 import '../previews/trailer_screen.dart';
 import 'expandable_text.dart';
 import '../../widgets/hover_lift.dart';
-import 'person_tile.dart';
 import '../library/poster_card.dart';
 import '../../core/focus/scroll_into_view.dart';
 import '../../theme/theme.dart';
 import '../../widgets/tappable.dart';
 import '../../core/platform/page_insets.dart';
+import '../../core/jellyfin/together.dart';
 
 part 'detail_blocks.dart';
 part 'detail_cards.dart';
+part 'detail_sections.dart';
 
 /// Bumped whenever a favorite is added or removed, so pages listing favorites can refresh.
 final favoritesChanged = ValueNotifier<int>(0);
@@ -37,14 +41,9 @@ final favoritesChanged = ValueNotifier<int>(0);
 void openItem(BuildContext context, JellyfinItem item) {
   switch (item.type) {
     case JellyfinItemKind.movie:
-      showDetailPopout(
-        context,
-        load: movieDetails(item.id),
-        layout: const MovieLayout(),
-        cacheKey: 'movie:${item.id}',
-      );
+      showDetailPage(context, load: movieDetails(item.id), layout: const MovieLayout(), cacheKey: 'movie:${item.id}');
     case JellyfinItemKind.series:
-      showDetailPopout(
+      showDetailPage(
         context,
         load: seriesDetails(item.id),
         layout: const SeriesLayout(),
@@ -53,7 +52,7 @@ void openItem(BuildContext context, JellyfinItem item) {
     case JellyfinItemKind.episode:
       context.push('/play/${item.id}');
     case 'BoxSet':
-      showDetailPopout(
+      showDetailPage(
         context,
         load: collectionDetails(item.id),
         layout: const CollectionLayout(),
@@ -64,12 +63,16 @@ void openItem(BuildContext context, JellyfinItem item) {
   }
 }
 
-/// Opens a person's popout by id (cast rows and search results only have the id).
-void openPerson(BuildContext context, String personId) => showDetailPopout(
+/// Opens a person's page by id (cast rows and search results only have the id).
+void openPerson(BuildContext context, String personId) =>
+    showDetailPage(context, load: personDetails(personId), layout: const PersonLayout(), cacheKey: 'person:$personId');
+
+/// Opens a show's page by id (an episode only has its show's id).
+void openSeries(BuildContext context, String seriesId) => showDetailPage(
   context,
-  load: personDetails(personId),
-  layout: const PersonLayout(),
-  cacheKey: 'person:$personId',
+  load: seriesDetails(seriesId),
+  layout: const SeriesLayout(),
+  cacheKey: 'series:$seriesId',
 );
 
 /// Plays an item: a movie (or episode) directly, a series from where you left off, or a
@@ -153,95 +156,36 @@ Future<JellyfinItem?> nextEpisodeFor(String seriesId) async {
   return episodes.items.firstOrNull;
 }
 
-/// Whether a detail popout is open, for the parts of the screen outside its tab (the TV
-/// sidebar's rail) to dim along with the page.
-final detailPopoutOpen = ValueNotifier(false);
-
-/// The navigator holding the open popouts, so [closeOpenDetailPopouts] can reach them from
-/// outside the tab.
-NavigatorState? _popoutNavigator;
-int _openPopouts = 0;
-
-/// Closes any open detail popout, from anywhere.
-void closeOpenDetailPopouts() =>
-    _popoutNavigator?.popUntil((route) => route is! PopupRoute);
-
-/// Shows a detail layout in a large card floating over the current screen's content,
-/// leaving the nav bars visible and usable. Any popout already open is closed first.
-Future<void> showDetailPopout(
-    BuildContext context, {
-      required DetailLoader load,
-      required DetailLayout layout,
-      String? cacheKey,
-    }) {
-  // The tab's navigator covers only the area between the nav bars, so the popout does too.
-  // Read everything needed from `context` now: if it belongs to a popout, it's about to close.
-  final navigator = Navigator.of(context);
-  final barrierColor = context.colors.scrim;
-
-  navigator.popUntil((route) => route is! PopupRoute); // close any open popouts
-  _popoutNavigator = navigator;
-  _openPopouts++;
-  detailPopoutOpen.value = true;
-
-  return showGeneralDialog(
-    context: navigator.context,
-    useRootNavigator: false, // stay inside the tab, below the top bar and above the bottom bar
-    barrierDismissible: true, // click outside to close
-    barrierLabel: 'Close',
-    barrierColor: barrierColor,
-    transitionDuration: const Duration(milliseconds: 200),
-    pageBuilder: (context, _, _) {
-      final isPhone = ScreenType.of(context).isPhone;
-      // Size to the space the tab actually has, not the whole screen.
-      return _CloseOnNavigation(
-        child: Padding(
-          // Phones in landscape: keep the card clear of the camera cutout and rounded corners.
-          padding: EdgeInsets.only(
-            left: MediaQuery.paddingOf(context).left,
-            right: MediaQuery.paddingOf(context).right,
-          ),
-          child: LayoutBuilder(
-            builder: (context, constraints) => Center(
-              // Full height, so content scrolls right off the top and bottom of the screen
-              // instead of being sliced off at an invisible edge. The gap it used to have
-              // above and below is now space inside the scroll.
-              child: SizedBox(
-                width: math.min(constraints.maxWidth - (isPhone ? 16 : 48), 1100),
-                height: constraints.maxHeight,
-                child: DetailPage(
-                  load: load,
-                  layout: layout,
-                  popout: true,
-                  cacheKey: cacheKey,
-                  popoutGap: constraints.maxHeight * (isPhone ? 0.02 : 0.04),
-                ),
-              ),
-            ),
-          ),
-        ),
-      );
-    },
-    transitionBuilder: (context, animation, _, child) {
-      final curved = CurvedAnimation(parent: animation, curve: Curves.easeOut);
-      return FadeTransition(
-        opacity: curved,
-        child: ScaleTransition(
-          scale: Tween(begin: 0.96, end: 1.0).animate(curved),
+/// A title's (or person's) page, opened over the page it was opened from, inside the tab: the
+/// sidebar stays. Back returns to where you were.
+class _DetailRoute extends PageRouteBuilder<void> {
+  _DetailRoute({required super.pageBuilder})
+    : super(
+        transitionDuration: const Duration(milliseconds: 200),
+        reverseTransitionDuration: const Duration(milliseconds: 200),
+        transitionsBuilder: (context, animation, _, child) => FadeTransition(
+          opacity: CurvedAnimation(parent: animation, curve: Curves.easeOut),
           child: child,
         ),
       );
-    },
-  ).whenComplete(() {
-    // Counted, since opening one closes the last: that one finishes after this one opened.
-    _openPopouts--;
-    if (_openPopouts == 0) detailPopoutOpen.value = false;
-  });
 }
 
-/// Closes every open detail popout, e.g. before going to a full page like a genre.
-void closeDetailPopouts(BuildContext context) =>
-    Navigator.of(context).popUntil((route) => route is! PopupRoute);
+/// Opens a detail layout as a page of its own in the current tab.
+Future<void> showDetailPage(
+  BuildContext context, {
+  required DetailLoader load,
+  required DetailLayout layout,
+  String? cacheKey,
+}) => Navigator.of(context).push(
+  _DetailRoute(
+    pageBuilder: (context, _, _) => _CloseOnNavigation(
+      child: DetailPage(load: load, layout: layout, cacheKey: cacheKey),
+    ),
+  ),
+);
+
+/// Closes every open detail page, e.g. before going to a full page like a genre.
+void closeDetailPages(BuildContext context) => Navigator.of(context).popUntil((route) => route is! _DetailRoute);
 
 // ─── Data ────────────────────────────────────────────────────────────────────
 
@@ -276,39 +220,36 @@ DetailLoader movieDetails(String id) =>
         (client) async => DetailData(item: (await client.items.byId(id))!);
 
 DetailLoader collectionDetails(String id) => (client) async {
-  final (collection, page) = await (
-  client.items.byId(id),
-  client.items.list(
-    enableTotalRecordCount: false,
-    parentId: id,
-    // Just what's in the collection: a show, not its seasons and every episode as well.
-    recursive: false,
-    sortBy: const ['ProductionYear', 'SortName'],
-    limit: 200,
-    fields: const ['Genres', 'OfficialRating', 'ProductionYear'],
-  ),
-  ).wait;
+  final (collection, page) = await together2(
+    client.items.byId(id),
+    client.items.list(
+      enableTotalRecordCount: false,
+      parentId: id,
+      // Just what's in the collection: a show, not its seasons and every episode as well.
+      recursive: false,
+      sortBy: const ['ProductionYear', 'SortName'],
+      limit: 200,
+      fields: const ['Genres', 'OfficialRating', 'ProductionYear'],
+    ),
+  );
   return DetailData(item: collection!, children: page.items);
 };
 
 DetailLoader personDetails(String id) => (client) async {
-  final (person, page) = await (
-  client.items.byId(id),
-  client.items.listEach(
-    personIds: [id],
-    types: const [JellyfinItemKind.movie, JellyfinItemKind.series],
-    sortBy: const ['ProductionYear', 'SortName'],
-    descending: true,
-  ),
-  ).wait;
+  final (person, page) = await together2(
+    client.items.byId(id),
+    client.items.listEach(
+      personIds: [id],
+      types: const [JellyfinItemKind.movie, JellyfinItemKind.series],
+      sortBy: const ['ProductionYear', 'SortName'],
+      descending: true,
+    ),
+  );
   return DetailData(item: person!, children: page);
 };
 
 DetailLoader seriesDetails(String id) => (client) async {
-  final (series, seasons) = await (
-  client.items.byId(id),
-  client.tvShows.seasons(seriesId: id),
-  ).wait;
+  final (series, seasons) = await together2(client.items.byId(id), client.tvShows.seasons(seriesId: id));
   // Regular seasons in order, with "Specials" (season 0) at the end.
   final ordered = [...seasons.items]
     ..sort((a, b) {
@@ -341,66 +282,77 @@ abstract class DetailLayout {
   /// Space above the page's content.
   double get topPadding => 24;
 
+  /// The item whose backdrop fills the top of the page, behind everything, if any.
+  JellyfinItem? backdropOf(DetailData data) => null;
+
+  /// True if the page leaves its sides to each part (they're all [_BackdropScope]-aware), so
+  /// rows can scroll to the screen's edge.
+  bool get edgeToEdge => false;
+
+  /// True if the phone's floating Back button sits in the top right instead (clear of a photo).
+  bool get backButtonOnRight => false;
+
   /// Where the floating back button sits, measured from the top-left of the page's content
   /// (below the top padding).
   Offset get backButtonOffset => const Offset(12, 12);
 }
 
-/// A person: round photo, name, how many of their titles you have, biography,
-/// then the movies and shows they appear in.
+/// A person, over a backdrop from their best-rated title: photo, name, birth and death,
+/// biography, then rows of the movies and shows they're in.
 class PersonLayout extends DetailLayout {
   const PersonLayout();
 
   @override
   List<Widget> buildSlivers(BuildContext context, DetailData data) {
-    final count = data.children.length;
+    final movies = [for (final i in data.children) if (i.type == JellyfinItemKind.movie) i];
+    final shows = [for (final i in data.children) if (i.type != JellyfinItemKind.movie) i];
     return [
-      SliverDetailCard(
-        image: (size) => PersonPhoto(person: data.item, size: size),
-        title: data.item.name,
-        subtitle: '$count ${count == 1 ? 'title' : 'titles'} in your library',
-        description: data.item.raw['Overview'] as String?,
-        footer: [
-          if (data.children.isNotEmpty) ...[
-            const _CardDivider(),
-            Text('Movies & Shows', style: context.text.titleLarge),
-            _InlineItemGrid(data.children),
-          ],
-        ],
-      ),
+      SliverToBoxAdapter(child: _PersonHero(person: data.item, movies: movies.length, shows: shows.length)),
+      // Starts on their first title, whichever row it's in.
+      if (movies.isNotEmpty) SliverToBoxAdapter(child: _StartsHere(child: _ItemRow(title: 'Movies', items: movies))),
+      if (shows.isNotEmpty)
+        SliverToBoxAdapter(
+          child: movies.isEmpty
+              ? _StartsHere(child: _ItemRow(title: 'Shows', items: shows))
+              : _ItemRow(title: 'Shows', items: shows),
+        ),
     ];
   }
+
+  @override
+  JellyfinItem? backdropOf(DetailData data) => _personBackdrop(data.children);
+
+  @override
+  bool get edgeToEdge => true;
 
   @override
   bool get floatingBackButton => true;
 
   @override
-  Offset get backButtonOffset => const Offset(4, 4); // tucked into the card's corner
+  bool get backButtonOnRight => true; // clear of their photo
 
   @override
-  double get topPadding => 24;
+  Offset get backButtonOffset => const Offset(6, 6);
 }
 
-/// A collection: backdrop banner with the logo, then an info card (count, years, age rating,
-/// description, genres, and its movies).
+/// A collection, over its backdrop: logo, details (count, years, age rating, description,
+/// genres) and its movies.
 class CollectionLayout extends DetailLayout {
   const CollectionLayout();
 
   @override
   List<Widget> buildSlivers(BuildContext context, DetailData data) => [
+    SliverToBoxAdapter(child: _HeroTitle(item: data.item)),
     SliverToBoxAdapter(
-      child: Padding(
-        padding: const EdgeInsets.only(bottom: 12),
-        child: _BackdropBanner(item: data.item, topPadding: topPadding),
-      ),
-    ),
-    SliverToBoxAdapter(
-      child: Padding(
-        padding: const EdgeInsets.only(bottom: 8),
-        child: _CollectionInfoCard(collection: data.item, items: data.children),
-      ),
+      child: _CollectionInfoCard(collection: data.item, items: data.children),
     ),
   ];
+
+  @override
+  JellyfinItem? backdropOf(DetailData data) => data.item;
+
+  @override
+  bool get edgeToEdge => true;
 
   @override
   bool get floatingBackButton => true;
@@ -409,26 +361,24 @@ class CollectionLayout extends DetailLayout {
   Offset get backButtonOffset => const Offset(6, 6); // tucked into the banner's corner
 }
 
-/// A movie: backdrop banner with the logo, then an info card (year, runtime, age rating,
-/// score, Play, description, genres, and the cast).
+/// A movie, over its backdrop: logo, details (year, runtime, age rating, score, Play,
+/// description, genres, cast), the collections it's in, more like it, and its media info.
 class MovieLayout extends DetailLayout {
   const MovieLayout();
 
   @override
   List<Widget> buildSlivers(BuildContext context, DetailData data) => [
-    SliverToBoxAdapter(
-      child: Padding(
-        padding: const EdgeInsets.only(bottom: 12),
-        child: _BackdropBanner(item: data.item, topPadding: topPadding),
-      ),
-    ),
-    SliverToBoxAdapter(
-      child: Padding(
-        padding: const EdgeInsets.only(bottom: 8),
-        child: _MovieInfoCard(movie: data.item),
-      ),
-    ),
+    SliverToBoxAdapter(child: _HeroTitle(item: data.item)),
+    SliverToBoxAdapter(child: _MovieInfoCard(movie: data.item)),
+    SliverToBoxAdapter(child: _RelatedRows(item: data.item)),
+    SliverToBoxAdapter(child: _MediaInfo(item: data.item)),
   ];
+
+  @override
+  JellyfinItem? backdropOf(DetailData data) => data.item;
+
+  @override
+  bool get edgeToEdge => true;
 
   @override
   bool get floatingBackButton => true;
@@ -437,26 +387,26 @@ class MovieLayout extends DetailLayout {
   Offset get backButtonOffset => const Offset(6, 6); // tucked into the banner's corner
 }
 
-/// A series: backdrop banner with the logo, then an info card (years, seasons, age rating,
-/// score, description, genres), a season picker and that season's episodes.
+/// A series, over its backdrop: logo, details (years, seasons, age rating, score, description,
+/// genres), a season picker and that season's episodes, then the collections it's in and more
+/// like it.
 class SeriesLayout extends DetailLayout {
   const SeriesLayout();
 
   @override
   List<Widget> buildSlivers(BuildContext context, DetailData data) => [
+    SliverToBoxAdapter(child: _HeroTitle(item: data.item)),
     SliverToBoxAdapter(
-      child: Padding(
-        padding: const EdgeInsets.only(bottom: 12),
-        child: _BackdropBanner(item: data.item, topPadding: topPadding),
-      ),
+      child: _SeriesInfoCard(series: data.item, seasons: data.children),
     ),
-    SliverToBoxAdapter(
-      child: Padding(
-        padding: const EdgeInsets.only(bottom: 8),
-        child: _SeriesInfoCard(series: data.item, seasons: data.children),
-      ),
-    ),
+    SliverToBoxAdapter(child: _RelatedRows(item: data.item)),
   ];
+
+  @override
+  JellyfinItem? backdropOf(DetailData data) => data.item;
+
+  @override
+  bool get edgeToEdge => true;
 
   @override
   bool get floatingBackButton => true;
@@ -480,29 +430,15 @@ class SeriesLayout extends DetailLayout {
 
 /// A detail page: loads its data, shows loading and errors, and hands the result to a layout.
 class DetailPage extends StatefulWidget {
-  const DetailPage({
-    super.key,
-    required this.load,
-    required this.layout,
-    this.popout = false,
-    this.cacheKey,
-    this.popoutGap = 0,
-  });
+  const DetailPage({super.key, required this.load, required this.layout, this.cacheKey});
 
   /// Fetches the page's data. Called on open and on "Try again".
   final DetailLoader load;
 
   final DetailLayout layout;
 
-  /// True when shown as a floating card: no scaffold, and a close button instead of back.
-  final bool popout;
-
   /// When set, the page's data is cached under this key and reused for 10 minutes.
   final String? cacheKey;
-
-  /// Popouts: empty space above the first card and below the last, inside the scroll,
-  /// so the page starts a little way down but can scroll right to the screen's edges.
-  final double popoutGap;
 
   @override
   State<DetailPage> createState() => _DetailPageState();
@@ -537,6 +473,7 @@ class _DetailPageState extends State<DetailPage> {
   @override
   void dispose() {
     _scroll.dispose();
+    _start.dispose();
     super.dispose();
   }
 
@@ -567,25 +504,33 @@ class _DetailPageState extends State<DetailPage> {
     }
   }
 
-  /// TVs have no on-screen Back or Close here (the remote has its own), so once the content is
-  /// in, focus goes to the first thing on the page, usually Play, unless the remote already
-  /// moved it somewhere on the page.
+  /// Where a page starts with a remote or keyboard: its Play button, or a person's first title
+  /// ([_StartsHere]). Not on phones, which are touched.
+  final _start = FocusNode(canRequestFocus: false, skipTraversal: true);
+
+  /// Once the content is in, focus goes to where the page starts ([_start]), or else the first
+  /// thing on it, unless the remote already moved it somewhere on the page.
   void _focusFirst() {
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted || !ScreenType.of(context).isTv) return;
+      if (!mounted || ScreenType.of(context).isPhone) return;
       final scope = FocusScope.of(context);
       final focused = FocusManager.instance.primaryFocus;
       if (focused != null && focused != scope && focused.ancestors.contains(scope)) return;
-      scope.nextFocus();
+      final start = _start.traversalDescendants.firstOrNull;
+      if (start != null) {
+        start.requestFocus();
+      } else {
+        scope.nextFocus();
+      }
     });
   }
 
   @override
   Widget build(BuildContext context) {
     final topPadding = widget.layout.topPadding;
-    final tv = ScreenType.of(context).isTv;
+    final isPhone = ScreenType.of(context).isPhone;
 
-    final Widget body;
+    Widget body;
     if (_loading) {
       body = const Center(child: CircularProgressIndicator());
     } else if (_error != null || _data == null) {
@@ -606,54 +551,57 @@ class _DetailPageState extends State<DetailPage> {
       body = CustomScrollView(
         controller: _scroll,
         slivers: [
-          SliverToBoxAdapter(child: SizedBox(height: topPadding + widget.popoutGap)),
+          SliverToBoxAdapter(child: SizedBox(height: topPadding)),
           ...widget.layout.buildSlivers(context, _data!),
-          SliverToBoxAdapter(child: SizedBox(height: 8 + widget.popoutGap)),
+          // The same room under the last section as on Home.
+          SliverToBoxAdapter(child: SizedBox(height: (isPhone ? 48 : 8) + 24)),
         ],
       );
     }
 
-    // Popout: tapping any empty space closes it (cards absorb their own taps), and each
-    // info card shows its own close button.
-    if (widget.popout) {
-      final isPhone = ScreenType.of(context).isPhone;
-      return GestureDetector(
-        behavior: HitTestBehavior.opaque,
-        onTap: () => Navigator.of(context).pop(),
-        child: _PopoutScope(
-          gap: widget.popoutGap,
-          child: Padding(
-            padding: EdgeInsets.symmetric(horizontal: isPhone ? 12 : 24),
-            child: body,
-          ),
-        ),
-      );
-    }
+    body = _StartFocus(node: _start, child: body);
 
-    // Layouts with a floating back button use it in every state (loading, error and loaded),
-    // so the button never changes style or position.
+    // Only phones show a Back button: TVs go back with the remote, computers with Esc or the
+    // mouse's back button (_GoBackKeys). Layouts with a floating one use it in every state
+    // (loading, error and loaded), fixed in place, so it never changes style or position.
+    final backdrop = _data == null ? null : widget.layout.backdropOf(_data!);
     if (widget.layout.floatingBackButton) {
-      return Scaffold(
-        body: Padding(
-          padding: pageSides(context, extra: 12),
-          child: Stack(
-          children: [
-            body,
-            if (!tv) // TVs go back with the remote
-              Positioned(
-                top: topPadding + widget.layout.backButtonOffset.dy,
-                left: widget.layout.backButtonOffset.dx,
-                child: _FloatingIconButton(
-                  icon: appIcons.back,
-                  label: 'Back',
-                  filled: _scrolled,
-                  onPress: () => context.pop(),
-                ),
+      final edgeToEdge = widget.layout.edgeToEdge;
+      final sides = edgeToEdge ? pageSides(context, extra: 12) : EdgeInsets.zero;
+      final offset = widget.layout.backButtonOffset;
+      final backButton = !isPhone
+          ? null
+          : Positioned(
+              top: topPadding + offset.dy,
+              left: widget.layout.backButtonOnRight ? null : sides.left + offset.dx,
+              right: widget.layout.backButtonOnRight ? sides.right + offset.dx : null,
+              child: _FloatingIconButton(
+                icon: appIcons.back,
+                label: 'Back',
+                filled: _scrolled,
+                onPress: () => context.pop(),
               ),
+            );
+      final Widget page;
+      if (!edgeToEdge) {
+        page = Padding(
+          padding: pageSides(context, extra: 12),
+          child: Stack(children: [body, ?backButton]),
+        );
+      } else {
+        // No side padding here: each part adds its own, so rows can scroll to the screen's edge.
+        page = Stack(
+          children: [
+            if (backdrop != null)
+              Positioned.fill(
+                child: _PageBackdrop(item: backdrop, scroll: _scroll, soft: widget.layout is PersonLayout),
+              ),
+            _BackdropScope(child: body),
+            ?backButton,
           ],
-        ),
-        ),
-      );
+        );
+      }
+      return Scaffold(body: _GoBackKeys(child: page));
     }
 
     final title = _data == null ? null : widget.layout.headerTitle(_data!);
@@ -665,17 +613,59 @@ class _DetailPageState extends State<DetailPage> {
         child: Padding(
           padding: EdgeInsets.only(top: pageTop(context) - 12),
           child: AppBar(
-            // TVs go back with the remote.
+            // Only phones: TVs go back with the remote, computers with Esc or the mouse.
             automaticallyImplyLeading: false,
-            leading: tv ? null : BackButton(onPressed: () => context.pop()),
+            leading: isPhone ? BackButton(onPressed: () => context.pop()) : null,
             title: title == null ? null : Text(title),
           ),
         ),
       ),
-      body: Padding(
-        padding: pageSides(context, extra: 12),
-        child: body,
+      body: _GoBackKeys(
+        child: Padding(padding: pageSides(context, extra: 12), child: body),
       ),
     );
+  }
+}
+
+/// Esc, or a mouse's back button, goes back from a page.
+class _GoBackKeys extends StatelessWidget {
+  const _GoBackKeys({required this.child});
+
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) => Listener(
+    onPointerDown: (event) {
+      if (event.buttons & kBackMouseButton != 0) Navigator.of(context).maybePop();
+    },
+    child: CallbackShortcuts(
+      bindings: {const SingleActivator(LogicalKeyboardKey.escape): () => Navigator.of(context).maybePop()},
+      child: child, // (the page focuses its start, so Esc works straight away)
+    ),
+  );
+}
+
+/// Hands [_StartsHere] the page's start node.
+class _StartFocus extends InheritedWidget {
+  const _StartFocus({required this.node, required super.child});
+
+  final FocusNode node;
+
+  @override
+  bool updateShouldNotify(_StartFocus old) => old.node != node;
+}
+
+/// Marks where a page starts with a remote or keyboard: the first thing in [child] that takes
+/// focus (Play, or a person's first title). One per page.
+class _StartsHere extends StatelessWidget {
+  const _StartsHere({required this.child});
+
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    final node = context.dependOnInheritedWidgetOfExactType<_StartFocus>()?.node;
+    if (node == null) return child;
+    return Focus(focusNode: node, canRequestFocus: false, skipTraversal: true, child: child);
   }
 }
