@@ -15,7 +15,7 @@ import 'package:flutter/widgets.dart';
 /// * [desktop]: Linux, macOS or Windows with a window bigger than a phone's.
 /// * [tablet]: everything else.
 ///
-/// Tablets, desktops and TVs share the wide layout with the sidebar; phones get the bottom bar.
+/// Every screen has the top bar and the menu; phones (and tablets held upright) get the bottom bar.
 /// Inside a widget, size things to their parent with a `LayoutBuilder` rather than by the
 /// screen type when only the space matters.
 enum ScreenType {

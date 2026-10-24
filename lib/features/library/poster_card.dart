@@ -203,7 +203,7 @@ class PosterCard extends StatefulWidget {
   static const borderWidth = 2.5;
 
   /// What stays put as the card grows on focus: the middle, or a side (a row's first card grows
-  /// away from the sidebar, its last one away from the screen's edge).
+  /// away from the screen's left edge, its last one away from its right).
   final Alignment anchor;
 
   /// How far in a resting card sits from each side, for a card [height] tall: the same on

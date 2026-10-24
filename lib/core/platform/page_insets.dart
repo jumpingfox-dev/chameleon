@@ -2,26 +2,25 @@ import 'package:material_ui/material_ui.dart';
 
 import 'screen_type.dart';
 
-/// On wider screens, how far the sidebar's icons sit in from the rail's edge: half of what's
-/// left of the 64-wide rail around a 24-wide icon. The rail is see-through, so the icons are
-/// what reads as the sidebar's edge; see [pageSides].
-const _railIconInset = 20.0;
+/// On wider screens, extra room on each side.
+const _wideInset = 20.0;
 
 /// Side padding for page content: [extra] (16 by default) plus room for a camera cutout
-/// or rounded corners, which is 0 on most screens.
-///
-/// On wider screens the right side also gets [_railIconInset], so the gap after the content
-/// looks the same as the one between the sidebar's icons and the content.
+/// or rounded corners, which is 0 on most screens. Wider screens get [_wideInset] more on both
+/// sides, so the page sits evenly between them.
 ///
 /// Put it *inside* scroll views (as their `padding`) rather than around them, so content
 /// starts clear of the edge but can still scroll right up to it.
 EdgeInsets pageSides(BuildContext context, {double extra = 16}) {
   final insets = MediaQuery.paddingOf(context);
-  final balance = ScreenType.of(context).isPhone ? 0.0 : _railIconInset;
-  return EdgeInsets.only(left: insets.left + extra, right: insets.right + extra + balance);
+  final wide = ScreenType.of(context).isPhone ? 0.0 : _wideInset;
+  return EdgeInsets.only(left: insets.left + extra + wide, right: insets.right + extra + wide);
 }
-/// Room above a page's content. More on wider screens, where a TV can crop the edge; the
-/// sidebar's logo lines up with it there.
+/// Room above a page's content, below the app's top bar.
 ///
 /// Like [pageSides], put it inside scroll views (in their `padding`) where there is one.
-double pageTop(BuildContext context) => ScreenType.of(context).isPhone ? 12 : 32;
+double pageTop(BuildContext context) => ScreenType.of(context).isPhone ? 8 : 16;
+
+/// Room below a page's content: [extra], plus whatever floats over the bottom of the page (the
+/// bottom bar on phones), so the last of it can scroll clear.
+double pageBottom(BuildContext context, [double extra = 16]) => MediaQuery.paddingOf(context).bottom + extra;

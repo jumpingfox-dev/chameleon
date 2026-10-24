@@ -16,7 +16,7 @@ publish_to: 'none' # Remove this line if you wish to publish to pub.dev
 # https://developer.apple.com/library/archive/documentation/General/Reference/InfoPlistKeyReference/Articles/CoreFoundationKeys.html
 # In Windows, build-name is used as the major, minor, and patch parts
 # of the product and file versions while build-number is used as the build suffix.
-version: 1.1.6+8
+version: 1.1.7+9
 
 environment:
   sdk: ^3.13.3
@@ -56,6 +56,7 @@ dependencies:
   youtube_player_iframe: ^6.0.2 # YouTube trailers
   webview_flutter: ^4.14.1 # draws its player in place (see YouTubeView)
   url_launcher: ^6.3.0 # YouTube's terms and privacy links
+  background_downloader: ^9.6.4 # downloads for offline viewing, carried on in the background
 
   # Other
   go_router: ^18.0.1

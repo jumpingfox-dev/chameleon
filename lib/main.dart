@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/services.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:flutter_native_splash/flutter_native_splash.dart';
 import 'package:media_kit/media_kit.dart';
@@ -9,6 +10,7 @@ import 'app/splash.dart';
 import 'app/ui_scaler.dart';
 import 'core/cast/cast_controller.dart';
 import 'core/cast/sync_play_controller.dart';
+import 'core/downloads/downloads.dart';
 import 'core/focus/focus_rows.dart';
 import 'core/jellyfin/jellyfin_controller.dart';
 import 'core/platform/orientation.dart';
@@ -23,6 +25,7 @@ import 'theme/app_icons.dart';
 import 'theme/font_controller.dart';
 import 'theme/theme.dart';
 import 'theme/theme_controller.dart';
+import 'core/storage/app_defaults.dart';
 
 Future<void> main() async {
   _quietMediaKit();
@@ -44,6 +47,7 @@ Future<void> main() async {
     ..maximumSize = 1500
     ..maximumSizeBytes = 200 << 20; // 200 MB (the default is 100 MB)
   storage = await Storage.open(); // before anything that reads a setting
+  await appDefaults.load(); // assets/defaults.json: what each setting starts as
   unawaited(storage.pruneCache(DateTime.now().subtract(AppCache.keepFor)));
   themeController = await ThemeController.load();
   fontController = await FontController.load();
@@ -63,6 +67,10 @@ Future<void> main() async {
 
   jellyfin = JellyfinController();
   await jellyfin.load();
+
+  // Downloads for offline viewing: picks up any that carried on while the app was closed, then
+  // tells the server where you got to in them while offline (if it can be reached now).
+  unawaited(downloads.init().then((_) => downloads.syncPositions()));
 
   // Chromecast: finds Chromecasts on the network so the player can offer a cast button.
   // Does nothing where casting isn't available (desktop, or devices without Play services).
@@ -104,16 +112,51 @@ class Application extends StatelessWidget {
 
       return MaterialApp.router(
         debugShowCheckedModeBanner: false,
+        // Select, Enter and Space press a button once, when they go down, not again for every
+        // repeat while held: holding Select opens a title's menu (see Tappable), and a remote
+        // keeps repeating Select while it's held, which would otherwise press the menu's first
+        // option straight away.
+        shortcuts: _shortcutsWithoutRepeats,
         scrollBehavior: const MaterialScrollBehavior().copyWith(scrollbars: false),
         theme: theme,
-        builder: (context, child) => TextFieldArrowEscape(
-          child: RowFocusNavigation(child: UiScaler(child: ScreensaverHost(child: child!))),
+        // No tooltips anywhere (Flutter's own buttons have some): pop-up labels on hover or a
+        // long press aren't wanted in this app.
+        builder: (context, child) => TooltipVisibility(
+          visible: false,
+          child: TextFieldArrowEscape(
+            child: RowFocusNavigation(child: UiScaler(child: ScreensaverHost(child: child!))),
+          ),
         ),
         routerConfig: appRouter,
       );
     },
   );
 }
+
+/// The app's default shortcuts, with the keys that press buttons (Select, Enter, Space, a
+/// gamepad's A) doing so once per press, not on every repeat while held.
+final Map<ShortcutActivator, Intent> _shortcutsWithoutRepeats = {
+  for (final MapEntry(:key, :value) in WidgetsApp.defaultShortcuts.entries)
+    if (key is SingleActivator && key.includeRepeats && _pressKeys.contains(key.trigger))
+      SingleActivator(
+        key.trigger,
+        control: key.control,
+        shift: key.shift,
+        alt: key.alt,
+        meta: key.meta,
+        includeRepeats: false,
+      ): value
+    else
+      key: value,
+};
+
+final _pressKeys = {
+  LogicalKeyboardKey.select,
+  LogicalKeyboardKey.enter,
+  LogicalKeyboardKey.numpadEnter,
+  LogicalKeyboardKey.space,
+  LogicalKeyboardKey.gameButtonA,
+};
 
 /// media_kit logs every video output change it makes ("VideoOutput.Resize" and the like).
 /// Drops those, so the log only has the app's own messages.

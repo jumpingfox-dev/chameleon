@@ -2,10 +2,12 @@ import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
 import '../../core/storage/storage.dart';
+import '../../core/storage/app_defaults.dart';
 
 /// Every kind of section the home screen can show. Add new ones here.
 enum HomeModuleType {
   carousel,
+  myMedia,
   continueWatching,
   nextUp,
   favorites,
@@ -76,19 +78,25 @@ class HomeLayoutController extends ValueNotifier<List<HomeModule>> {
   HomeLayoutController._(super.value);
 
   static const _key = 'home_layout';
+  static const _kMyMediaAdded = 'home_layout_my_media';
 
   /// What a new user sees.
   static const defaultTypes = [
     HomeModuleType.carousel,
+    HomeModuleType.myMedia,
     HomeModuleType.continueWatching,
     HomeModuleType.nextUp,
     HomeModuleType.recentlyAdded,
     HomeModuleType.suggested,
   ];
 
-  static List<HomeModule> get _defaults => [
-    for (final t in defaultTypes) HomeModule(id: t.name, type: t),
-  ];
+  /// What a new user sees: assets/defaults.json's "home" list, or else [defaultTypes].
+  static List<HomeModule> get _defaults {
+    final names = appDefaults.strings('home');
+    final byName = HomeModuleType.values.asNameMap();
+    final types = names == null ? defaultTypes : [for (final n in names) ?byName[n]];
+    return [for (final t in types) HomeModule(id: t.name, type: t)];
+  }
 
   static Future<HomeLayoutController> load() async => HomeLayoutController._(_readSaved());
 
@@ -106,6 +114,15 @@ class HomeLayoutController extends ValueNotifier<List<HomeModule>> {
       }
     }
     modules ??= _migrateOldLayout() ?? _defaults;
+    // My Media came later: added once to layouts from before, after the banner.
+    if (!(storage.getBool(_kMyMediaAdded) ?? false)) {
+      if (!modules.any((m) => m.type == HomeModuleType.myMedia)) {
+        final at = modules.isNotEmpty && modules.first.type == HomeModuleType.carousel ? 1 : 0;
+        modules = [...modules]..insert(at, HomeModule(id: HomeModuleType.myMedia.name, type: HomeModuleType.myMedia));
+        storage.setString(_key, jsonEncode([for (final m in modules) m.toJson()]));
+      }
+      storage.setBool(_kMyMediaAdded, true);
+    }
     return List.unmodifiable(modules);
   }
 
@@ -175,5 +192,5 @@ class HomeLayoutController extends ValueNotifier<List<HomeModule>> {
 
 late final HomeLayoutController homeLayout;
 
-/// Whether the home screen is being edited. Shared so the sidebar can switch it too.
+/// Whether the home screen is being edited. Shared so the menu can switch it too.
 final homeEditing = ValueNotifier(false);

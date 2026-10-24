@@ -35,7 +35,7 @@ class GenresScreen extends StatelessWidget {
         }
 
         return GridView.builder(
-          padding: EdgeInsets.only(top: pageTop(context), bottom: 16),
+          padding: EdgeInsets.only(top: pageTop(context), bottom: pageBottom(context)),
           gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
             maxCrossAxisExtent:
                 200, // tile width; more columns on wider screens
@@ -49,7 +49,8 @@ class GenresScreen extends StatelessWidget {
             return OutlinedButton(
               style: genreButtonStyle(context.colors),
               onPressed: () =>
-                  context.go('/home/genre/${Uri.encodeComponent(genre)}'),
+                  // On top of the list of genres, so Back returns to it.
+                  context.push('/home/genre/${Uri.encodeComponent(genre)}'),
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 spacing: 8,

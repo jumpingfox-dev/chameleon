@@ -358,7 +358,7 @@ bool moveFocus(TraversalDirection direction) {
   if (target == null) {
     // In a row that scrolls further that way: the next card just isn't built yet (pressed
     // faster than the row can scroll). Scroll on and try again, rather than saying there's
-    // nothing there, which would send focus out of the row (into the sidebar, say).
+    // nothing there, which would send focus out of the row (into the menu, say).
     if (row != null &&
         (direction == TraversalDirection.left || direction == TraversalDirection.right) &&
         _scrollRowOn(current, forward: direction == TraversalDirection.right)) {

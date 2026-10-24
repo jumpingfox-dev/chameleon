@@ -17,14 +17,13 @@ class _BackdropScope extends InheritedWidget {
 /// bottom and darkened on the left where the details sit. It scrolls up more slowly than the
 /// page ([scroll]).
 class _PageBackdrop extends StatelessWidget {
-  const _PageBackdrop({required this.item, required this.scroll, this.soft = false});
+  const _PageBackdrop({required this.item, required this.scroll, this.collage = const []});
 
   final JellyfinItem item;
   final ScrollController scroll;
 
-  /// Blurred and darkened, for a page whose artwork isn't its own (a person's, from one of
-  /// their titles): a mood behind the details rather than a picture competing with them.
-  final bool soft;
+  /// Titles whose posters make the backdrop instead, as a tilted wall (a person's page).
+  final List<JellyfinItem> collage;
 
   static const _speed = 0.5; // how fast it moves with the page: 0 stays put, 1 scrolls with it
 
@@ -36,16 +35,18 @@ class _PageBackdrop extends StatelessWidget {
   Widget build(BuildContext context) {
     final tag = (item.raw['BackdropImageTags'] as List?)?.firstOrNull as String?;
     final background = Theme.of(context).scaffoldBackgroundColor;
-    if (tag == null) return const SizedBox.shrink();
+    if (tag == null && collage.isEmpty) return const SizedBox.shrink();
     return LayoutBuilder(
       builder: (context, constraints) {
         final height = heightIn(constraints.biggest);
         final pixels = View.of(context).physicalSize.width / MediaQuery.sizeOf(context).width;
-        final image = Image.network(
+        final image = collage.isNotEmpty
+            ? _PosterWall(items: collage)
+            : Image.network(
           jellyfin.client!.images.url(
             itemId: item.id,
             type: JellyfinImagesApi.typeBackdrop,
-            tag: tag,
+            tag: tag!,
             fillWidth: ((constraints.maxWidth * pixels / 320).ceil() * 320).clamp(640, 3840),
             quality: 90,
           ),
@@ -68,21 +69,14 @@ class _PageBackdrop extends StatelessWidget {
               child: Stack(
                 fit: StackFit.expand,
                 children: [
-                  if (soft)
-                    ImageFiltered(
-                      imageFilter: ImageFilter.blur(sigmaX: 16, sigmaY: 16, tileMode: TileMode.decal),
-                      child: image,
-                    )
-                  else
-                    image,
-                  if (soft) ColoredBox(color: background.withValues(alpha: 0.55)),
+                  image,
                   // Darker on the left, where the logo and details are.
                   DecoratedBox(
                     decoration: BoxDecoration(
                       gradient: LinearGradient(
                         begin: Alignment.centerLeft,
                         end: Alignment.centerRight,
-                        // Solid at the left edge, so the artwork fades into the sidebar.
+                        // Solid at the left edge, so the artwork fades into the page's background.
                         stops: const [0.0, 0.12, 0.4, 0.75],
                         colors: [
                           background,
@@ -166,22 +160,85 @@ class _HeroTitle extends StatelessWidget {
   }
 }
 
-// ─── A person ────────────────────────────────────────────────────────────────
+/// A person's titles as a wall of posters, tilted, softened and dimmed: a backdrop that's theirs
+/// alone, of everything they're in. Rows of posters, each row shifted along from the last.
+class _PosterWall extends StatelessWidget {
+  const _PosterWall({required this.items});
 
-/// The backdrop behind a person's page: from their best-rated title that has one.
-JellyfinItem? _personBackdrop(List<JellyfinItem> titles) {
-  final withBackdrop = [
-    for (final t in titles)
-      if ((t.raw['BackdropImageTags'] as List?)?.isNotEmpty ?? false) t,
-  ];
-  if (withBackdrop.isEmpty) return null;
-  num score(JellyfinItem t) => (t.raw['CommunityRating'] as num?) ?? 0;
-  return withBackdrop.reduce((best, t) => score(t) > score(best) ? t : best);
+  final List<JellyfinItem> items;
+
+  @override
+  Widget build(BuildContext context) {
+    final posters = [for (final i in items) if (i.imageTags['Primary'] != null) i];
+    if (posters.isEmpty) return const SizedBox.shrink();
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        // Wider than the area, so the tilt never shows a corner.
+        final width = constraints.maxWidth * 1.4;
+        final posterWidth = (width / 9).clamp(90.0, 220.0);
+        final posterHeight = posterWidth * 1.5;
+        const gap = 10.0;
+        final perRow = (width / (posterWidth + gap)).ceil() + 1;
+        final rows = (constraints.maxHeight * 1.4 / (posterHeight + gap)).ceil() + 1;
+        var n = 0;
+        Widget poster() {
+          final item = posters[n++ % posters.length];
+          return Padding(
+            padding: const EdgeInsets.all(gap / 2),
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(8),
+              child: SizedBox(
+                width: posterWidth,
+                height: posterHeight,
+                child: Image.network(
+                  jellyfin.client!.images.url(
+                    itemId: item.id,
+                    type: JellyfinImagesApi.typePrimary,
+                    tag: item.imageTags['Primary'],
+                    fillWidth: 240,
+                    quality: 80,
+                  ),
+                  fit: BoxFit.cover,
+                  errorBuilder: (_, _, _) => const SizedBox.shrink(),
+                ),
+              ),
+            ),
+          );
+        }
+
+        return ClipRect(
+          child: ImageFiltered(
+            imageFilter: ImageFilter.blur(sigmaX: 2.5, sigmaY: 2.5, tileMode: TileMode.clamp),
+            child: OverflowBox(
+              maxWidth: width,
+              maxHeight: constraints.maxHeight * 1.4,
+              child: Transform.rotate(
+                angle: -0.12,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    for (var r = 0; r < rows; r++)
+                      Transform.translate(
+                        // Each row along by part of a poster, so they don't line up in columns.
+                        offset: Offset(-posterWidth * ((r * 0.37) % 1), 0),
+                        child: Row(mainAxisSize: MainAxisSize.min, children: [for (var c = 0; c < perRow; c++) poster()]),
+                      ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
 }
 
-/// The top of a person's page: their photo, then their name, when and where they were born
-/// (and died), how many of their titles you have, and their biography. Side by side on wider
-/// screens; on phones the photo sits above.
+// ─── A person ────────────────────────────────────────────────────────────────
+
+/// The top of a person's page, laid out like a title's: their photo and name where a title's
+/// logo goes, over the backdrop, then when and where they were born (and died), how many of
+/// their titles you have, and their biography.
 class _PersonHero extends StatelessWidget {
   const _PersonHero({required this.person, required this.movies, required this.shows});
 
@@ -228,89 +285,141 @@ class _PersonHero extends StatelessWidget {
       if (movies > 0) '$movies ${movies == 1 ? 'movie' : 'movies'}',
       if (shows > 0) '$shows ${shows == 1 ? 'show' : 'shows'}',
     ];
-    final photoHeight = isPhone ? 180.0 : 300.0;
+    final photoSize = isPhone ? 72.0 : 120.0;
+    // As tall as a title's logo area, so the artwork shows above the name.
+    final room = _PageBackdrop.heightIn(size) * (isPhone ? 0.7 : 0.55);
+    final shadow = const [Shadow(blurRadius: 8, color: Color(0x99000000))];
 
-    final tag = person.imageTags['Primary'];
-    final pixels = View.of(context).physicalSize.width / size.width;
-    final photo = SizedBox(
-      height: photoHeight,
-      width: photoHeight * 2 / 3,
-      child: DecoratedBox(
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(12),
-          boxShadow: const [BoxShadow(color: Color(0x66000000), blurRadius: 24, offset: Offset(0, 8))],
-        ),
-        child: ClipRRect(
-          borderRadius: BorderRadius.circular(12),
-          child: tag == null
-              ? ColoredBox(
-                  color: context.colors.surfaceContainerHighest,
-                  child: Center(
+    return Padding(
+      padding: pageSides(context, extra: 12).copyWith(bottom: 8),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        spacing: 12,
+        children: [
+          // ── Photo and name, where a title's logo goes ──
+          ConstrainedBox(
+            constraints: BoxConstraints(minHeight: room),
+            child: Align(
+              alignment: Alignment.bottomLeft,
+              child: Row(
+                spacing: isPhone ? 14 : 20,
+                children: [
+                  // Where the page starts with a remote; selecting it shows the photo full size.
+                  _StartsHere(child: _PersonPortrait(person: person, height: photoSize * 1.5)),
+                  Expanded(
                     child: Text(
-                      initialsOf(person.name),
-                      style: context.text.headlineMedium?.copyWith(color: context.colors.onSurfaceVariant),
+                      person.name,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: (isPhone ? context.text.headlineMedium : context.text.displaySmall)?.copyWith(
+                        color: const Color(0xFFFFFFFF),
+                        shadows: shadow,
+                      ),
                     ),
                   ),
-                )
-              : Image.network(
-                  jellyfin.client!.images.url(
-                    itemId: person.id,
-                    type: JellyfinImagesApi.typePrimary,
-                    tag: tag,
-                    fillWidth: ((photoHeight * 2 / 3 * pixels / 80).ceil() * 80).clamp(160, 800),
-                    quality: 90,
-                  ),
-                  fit: BoxFit.cover,
-                  alignment: Alignment.topCenter,
-                ),
+                ],
+              ),
+            ),
+          ),
+
+          // ── Their details, as a title's are ──
+          for (final line in _lifeLines) Text(line, style: muted),
+          if (counts.isNotEmpty) Text('${counts.join(' · ')} in your library', style: muted),
+          if (bio != null && bio.isNotEmpty)
+            ExpandableText(bio, limit: isPhone ? 150 : 400, style: context.text.bodyLarge),
+        ],
+      ),
+    );
+  }
+}
+
+/// A person's photo as a rounded rectangle, lit up under the remote or pointer. Selecting it
+/// shows it full size.
+class _PersonPortrait extends StatelessWidget {
+  const _PersonPortrait({required this.person, required this.height});
+
+  final JellyfinItem person;
+  final double height;
+
+  String? _url(double height) {
+    final tag = person.imageTags['Primary'];
+    if (tag == null) return null;
+    return jellyfin.client!.images.url(
+      itemId: person.id,
+      type: JellyfinImagesApi.typePrimary,
+      tag: tag,
+      fillHeight: height.round(),
+      quality: 90,
+    );
+  }
+
+  Widget _picture(BuildContext context, double height) {
+    final url = _url(height * 2);
+    return url == null
+        ? ColoredBox(
+            color: context.colors.surfaceContainerHighest,
+            child: Center(
+              child: Text(
+                initialsOf(person.name),
+                style: context.text.headlineSmall?.copyWith(color: context.colors.onSurfaceVariant),
+              ),
+            ),
+          )
+        : Image.network(url, fit: BoxFit.cover, alignment: Alignment.topCenter);
+  }
+
+  void _showFull(BuildContext context) {
+    final size = MediaQuery.sizeOf(context);
+    final height = size.height * 0.8;
+    showDialog<void>(
+      context: context,
+      builder: (context) => GestureDetector(
+        onTap: () => Navigator.of(context).pop(),
+        child: Center(
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(16),
+            child: SizedBox(
+              height: height,
+              width: math.min(height * 2 / 3, size.width * 0.9),
+              child: _picture(context, height),
+            ),
+          ),
         ),
       ),
     );
-
-    final details = Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      mainAxisSize: MainAxisSize.min,
-      spacing: 8,
-      children: [
-        Text(
-          person.name,
-          style: (isPhone ? context.text.headlineMedium : context.text.displaySmall)?.copyWith(
-            color: const Color(0xFFFFFFFF),
-            shadows: const [Shadow(blurRadius: 8, color: Color(0x99000000))],
-          ),
-        ),
-        for (final line in _lifeLines) Text(line, style: muted),
-        if (counts.isNotEmpty) Text('${counts.join(' · ')} in your library', style: muted),
-        if (bio != null && bio.isNotEmpty)
-          Padding(
-            padding: const EdgeInsets.only(top: 8),
-            child: ExpandableText(bio, limit: isPhone ? 200 : 500, style: context.text.bodyLarge),
-          ),
-      ],
-    );
-
-    // Some of the backdrop shows above it, as on a title's page.
-    final room = _PageBackdrop.heightIn(size) * (isPhone ? 0.25 : 0.3);
-    return Padding(
-      padding: pageSides(context, extra: 12).copyWith(top: room, bottom: 8),
-      child: isPhone
-          ? Column(crossAxisAlignment: CrossAxisAlignment.start, spacing: 16, children: [photo, details])
-          : Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              spacing: 32,
-              children: [
-                photo,
-                Expanded(
-                  // Not too wide to read.
-                  child: Align(
-                    alignment: Alignment.topLeft,
-                    child: ConstrainedBox(constraints: const BoxConstraints(maxWidth: 900), child: details),
-                  ),
-                ),
-              ],
-            ),
-    );
   }
+
+  @override
+  Widget build(BuildContext context) => Tappable(
+    onPress: () => _showFull(context),
+    semanticsLabel: 'Photo of ${person.name}',
+    builder: (context, states, child) {
+      final active = isHighlighted(states);
+      return AnimatedScale(
+        scale: active ? 1.05 : 1,
+        duration: const Duration(milliseconds: 150),
+        curve: Curves.easeOut,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 150),
+          height: height,
+          width: height * 2 / 3,
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(12),
+            boxShadow: const [BoxShadow(color: Color(0x66000000), blurRadius: 16, offset: Offset(0, 4))],
+          ),
+          foregroundDecoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(
+              color: active ? context.colors.primary : const Color(0x00000000),
+              width: PosterCard.borderWidth,
+            ),
+          ),
+          child: ClipRRect(borderRadius: BorderRadius.circular(12), child: child),
+        ),
+      );
+    },
+    child: _picture(context, height),
+  );
 }
 
 // ─── Collections it's in, and more like it ───────────────────────────────────
@@ -497,7 +606,7 @@ class _ItemRowState extends State<_ItemRow> {
             child: PosterCard(
               item: items[i],
               view: view,
-              // The first card grows away from the sidebar, the last away from the screen's edge.
+              // The first card grows away from the screen's left edge, the last away from its right.
               anchor: i == 0
                   ? Alignment.centerLeft
                   : i == items.length - 1

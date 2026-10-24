@@ -6,8 +6,6 @@ import '../../theme/app_icons.dart';
 import '../../core/jellyfin/jellyfin_controller.dart';
 import 'home_layout.dart';
 import '../../core/platform/page_insets.dart';
-import '../../core/platform/screen_type.dart';
-import '../../widgets/nav_button.dart';
 import 'home_modules.dart';
 import '../../theme/theme.dart';
 
@@ -19,7 +17,6 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> {
-  void _toggleEditing() => homeEditing.value = !homeEditing.value;
   GoRouter? _router;
 
   @override
@@ -66,52 +63,15 @@ class _HomeScreenState extends State<HomeScreen> {
         ListenableBuilder(
           listenable: Listenable.merge([jellyfin, homeLayout, homeEditing]),
           builder: (context, _) {
-            final isPhone = ScreenType.of(context).isPhone;
             final editing = homeEditing.value;
 
             return ListView(
-              // On phones, extra space at the bottom so the last module isn't hidden behind the
-              // Edit button (elsewhere it's in the sidebar; each section has its own gap below).
               // No side padding: rows scroll edge to edge, everything else adds pageSides.
-              padding: EdgeInsets.fromLTRB(0, pageTop(context), 0, isPhone ? 48 : 8),
+              padding: EdgeInsets.fromLTRB(0, pageTop(context), 0, pageBottom(context, 8)),
               // While editing, every section is built, off screen too: moving one past the
               // edge would otherwise take it (and the button you're on) away, losing your place.
               scrollCacheExtent: editing ? const ScrollCacheExtent.pixels(100000) : null,
               children: [
-                // Library links: phones only, since wider screens have them in the top bar.
-                if (isPhone &&
-                    (jellyfin.libraries.isNotEmpty ||
-                        jellyfin.genres.isNotEmpty)) ...[
-                  SingleChildScrollView(
-                    scrollDirection: Axis.horizontal,
-                    padding: pageSides(context),
-                    child: Row(
-                      spacing: 8, // as the settings tabs
-                      children: [
-                        NavButton(
-                          label: 'Favorites',
-                          icon: appIcons.favorite,
-                          onPress: () => context.go('/home/favorites'),
-                        ),
-                        for (final library in jellyfin.libraries)
-                          NavButton(
-                            label: library.name,
-                            icon: libraryIcon(library.collectionType),
-                            onPress: () =>
-                                context.go('/home/library/${library.id}'),
-                          ),
-                        if (jellyfin.genres.isNotEmpty)
-                          NavButton(
-                            label: 'Genres',
-                            icon: appIcons.genres,
-                            onPress: () => context.go('/home/genres'),
-                          ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                ],
-
                 if (editing)
                   Padding(padding: pageSides(context), child: const _EditModeBanner()),
 
@@ -146,57 +106,6 @@ class _HomeScreenState extends State<HomeScreen> {
           },
         ),
 
-        // ── Edit / Done ──
-        if (ScreenType.of(context).isPhone)
-          Positioned(
-            right: pageSides(context).right,
-            bottom: 16,
-            child: ValueListenableBuilder(
-              valueListenable: homeEditing,
-              builder: (context, editing, _) => AnimatedSwitcher(
-                duration: const Duration(milliseconds: 200),
-                switchInCurve: Curves.easeOut,
-                switchOutCurve: Curves.easeIn,
-                // Keep both buttons pinned to the bottom-right corner while they crossfade,
-                // instead of centering them (which makes the smaller one slide sideways).
-                layoutBuilder: (current, previous) => Stack(
-                  alignment: Alignment.bottomRight,
-                  children: [...previous, ?current],
-                ),
-                // Fade plus a slight scale, growing from the corner the button sits in.
-                transitionBuilder: (child, animation) => FadeTransition(
-                  opacity: animation,
-                  child: ScaleTransition(
-                    scale: Tween(begin: 0.9, end: 1.0).animate(animation),
-                    alignment: Alignment.bottomRight,
-                    child: child,
-                  ),
-                ),
-                child: editing
-                    ? FilledButton(
-                      key: const ValueKey('done'),
-                      onPressed: _toggleEditing,
-                      child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    spacing: 8,
-                    children: [
-                      Icon(appIcons.check, size: 18, fill: 1),
-                      Text('Done'),
-                    ],
-                  ),
-                    )
-                    : Semantics(
-                  key: const ValueKey('edit'),
-                  label: 'Edit home screen',
-                  button: true,
-                  child: IconButton.filled(
-                    onPressed: _toggleEditing,
-                    icon: Icon(appIcons.edit, fill: 1),
-                  ),
-                ),
-              ),
-            ),
-          ),
       ],
     ),
   );

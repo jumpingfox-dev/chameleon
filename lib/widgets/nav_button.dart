@@ -19,7 +19,7 @@ IconData libraryIcon(String? type) => switch (type) {
 };
 
 /// A nav button: icon + label, outlined like the settings tabs, in the same muted color as
-/// the TV sidebar's links. Filled in when [selected].
+/// the menu's links. Filled in when [selected].
 class NavButton extends StatelessWidget {
   const NavButton({
     super.key,

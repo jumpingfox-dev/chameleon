@@ -242,6 +242,7 @@ class _MovieInfoCard extends StatelessWidget {
                 ),
                 _FavoriteButton(item: movie),
                 _TrailerButton(item: movie),
+                DownloadButton(item: movie, style: actionButtonStyle),
               ],
             ),
           ),
@@ -547,6 +548,7 @@ class _EpisodeTile extends StatelessWidget {
       child: HoverLift(
         builder: (context, active) => Tappable(
           onPress: () => context.push('/play/${episode.id}'),
+          onLongPress: () => showItemMenu(context, episode),
           child: AnimatedScale(
             scale: active ? 1.0 : 0.98, // a gentle lift: rows are wide, so a small scale is plenty
             duration: const Duration(milliseconds: 150),
@@ -646,6 +648,7 @@ class _EpisodeTile extends StatelessWidget {
                     ],
                   ),
                 ),
+                DownloadButton(item: episode, compact: true),
               ],
             ),
           ),

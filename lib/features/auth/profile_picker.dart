@@ -173,7 +173,7 @@ class _ProfilePickerState extends State<ProfilePicker> {
       if (mounted) setState(() => _busyKey = null);
     }
     // Switched: close the pop-up. The router moves to the new user's Home, but the pop-up
-    // can sit above the whole app (opened from the sidebar), where that doesn't close it.
+    // can sit above the whole app (opened from the top bar), where that doesn't close it.
     final now = jellyfin.currentAccount;
     if (now != null && (before == null || !now.isSame(before.server, before.userId))) {
       _closeDialog();

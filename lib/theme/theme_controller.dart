@@ -4,6 +4,7 @@ import 'custom_colors.dart';
 import 'palette.dart';
 import 'theme_presets.dart';
 import '../core/storage/storage.dart';
+import '../core/storage/app_defaults.dart';
 
 const customThemeId = 'custom';
 const defaultSeed = ThemeSeed(270, 280, 8, 1);
@@ -47,7 +48,7 @@ class ThemeController extends ValueNotifier<ThemePreset> {
     final advanced = storage.getBool(_advancedKey) ?? false;
     final custom = _preset(_resolve(seed, ini, advanced));
 
-    final savedId = storage.getString(_key);
+    final savedId = storage.getString(_key) ?? appDefaults.appearance('theme'); // or assets/defaults.json's
     final selected = [...themePresets, custom].firstWhere((p) => p.id == savedId, orElse: () => themePresets.first);
     return (selected: selected, custom: custom, seed: seed, ini: ini, advanced: advanced);
   }

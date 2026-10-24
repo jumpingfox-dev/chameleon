@@ -90,9 +90,9 @@ class _FavoritesScreenState extends State<FavoritesScreen> {
     body: Padding(
       padding: pageSides(context, extra: 12),
       child: ListenableBuilder(
-      listenable: libraryViewOverride, // follow the poster/thumbnail choice
-      builder: (context, _) => _buildBody(context),
-    ),
+        listenable: libraryViewOverride, // follow the poster/thumbnail choice
+        builder: (context, _) => _buildBody(context),
+      ),
     ),
   );
 
@@ -152,7 +152,7 @@ class _FavoritesScreenState extends State<FavoritesScreen> {
           const SliverSectionTitle('Collections'),
           SliverItemGrid(items: _collections),
         ],
-        const SliverToBoxAdapter(child: SizedBox(height: 16)),
+        SliverToBoxAdapter(child: SizedBox(height: pageBottom(context))),
       ],
     );
   }

@@ -17,6 +17,7 @@ import 'package:http/http.dart' as http;
 
 import '../../core/storage/app_cache.dart';
 import '../../core/cast/cast_controller.dart';
+import '../../core/downloads/downloads.dart';
 import '../../core/focus/focus_rows.dart';
 import '../../core/format/format.dart';
 import '../../core/format/item_format.dart';
@@ -332,7 +333,16 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
     if (client == null) return;
     final id = _itemId;
     try {
-      final item = await client.items.byId(id);
+      // A downloaded title plays from the device, and doesn't wait long for a server that isn't
+      // there: offline, it plays with the details saved alongside it.
+      final saved = downloads.fileFor(id) == null ? null : downloads.entry(id)?.item;
+      JellyfinItem? fetched;
+      try {
+        fetched = await (saved == null ? client.items.byId(id) : client.items.byId(id).timeout(const Duration(seconds: 4)));
+      } catch (_) {
+        if (saved == null) rethrow;
+      }
+      final item = fetched ?? saved;
       if (item == null) throw StateError('Not found');
       if (!mounted || id != _itemId) return;
       setState(() {
@@ -350,7 +360,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
       unawaited(
         _fetchNext(item).then((next) {
           if (mounted && id == _itemId) setState(() => _next = next);
-        }),
+        }, onError: (Object _) {}), // offline: no Up Next
       );
 
       // Where to start: where the group is, or by the Resuming setting.
@@ -442,7 +452,9 @@ builder: (context) => Dialog(child: Padding(
     final segments = _loadSegments(client, item);
     await _audioReady;
 
-    final transcode = await _planTranscode(item);
+    // Downloaded: the file on the device, as it is.
+    final local = downloads.fileFor(item.id);
+    final transcode = local != null ? null : await _planTranscode(item);
     if (!mounted) return;
     _transcode = transcode;
     if (_video == null && _surface == null) {
@@ -462,8 +474,8 @@ builder: (context) => Dialog(child: Padding(
     final inGroup = _inGroup;
     await _player.open(
       Media(
-        transcode?.url ?? jellyfin.streamUrl(item.id),
-        httpHeaders: jellyfin.authHeaders,
+        local != null ? Uri.file(local.path).toString() : transcode?.url ?? jellyfin.streamUrl(item.id),
+        httpHeaders: local != null ? null : jellyfin.authHeaders,
         start: start > Duration.zero ? start : null,
       ),
       play: !inGroup,
@@ -984,7 +996,13 @@ builder: (context) => Dialog(child: Padding(
     if (reporter == null) return;
 
     final ids = {_itemId, item?.raw['SeriesId'], item?.raw['SeasonId']}.whereType<String>();
-    await reporter.stop();
+    final position = reporter.position;
+    final reported = await reporter.stop();
+    // A downloaded title keeps its place on the device too, for offline; and if the server
+    // couldn't be told, it's told later.
+    if (downloads.entry(_itemId) != null) {
+      unawaited(downloads.rememberPosition(_itemId, position, reported: reported));
+    }
     refreshWatchProgress();
     appCache.invalidateWhere((key) => ids.any((id) => key.endsWith(':$id')));
   }
@@ -1934,7 +1952,7 @@ builder: (context) => Dialog(child: Padding(
                                 onAudio: _openAudio,
                                 onSubtitles: _openSubtitles,
                                 onInteract: _showControls,
-                                onCast: () => showCastPicker(context),
+                                onCast: () => showCastMenu(context),
                               ),
                             ),
                           ),

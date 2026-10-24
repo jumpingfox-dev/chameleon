@@ -5,6 +5,7 @@ import 'package:forui_phosphor/forui_phosphor.dart';
 import 'package:material_symbols_icons/symbols.dart';
 import 'package:material_ui/material_ui.dart';
 import '../core/storage/storage.dart';
+import '../core/storage/app_defaults.dart';
 
 /// Which family of icons the app uses.
 enum IconStyle {
@@ -96,6 +97,56 @@ class AppIconSet {
       FLucideIcons.chevronRight,
       CupertinoIcons.chevron_forward,
       FluentIcons.chevron_right_24_filled
+  );
+  IconData get menu => _pick(
+      Symbols.menu_rounded,
+      FPhosphorIcons.list,
+      FLucideIcons.menu,
+      CupertinoIcons.line_horizontal_3,
+      FluentIcons.navigation_24_filled
+  );
+  /// Keeps the side menu open beside the page.
+  IconData get pinMenu => _pick(
+      Symbols.dock_to_right_rounded,
+      FPhosphorFillIcons.sidebarSimple,
+      FLucideIcons.panelLeft,
+      CupertinoIcons.sidebar_left,
+      FluentIcons.panel_left_24_filled
+  );
+  IconData get cast => _pick(
+      Symbols.cast_rounded,
+      FPhosphorFillIcons.screencast,
+      FLucideIcons.cast,
+      CupertinoIcons.tv,
+      FluentIcons.cast_24_filled
+  );
+  IconData get castConnected => _pick(
+      Symbols.cast_connected_rounded,
+      FPhosphorFillIcons.screencast,
+      FLucideIcons.cast,
+      CupertinoIcons.tv_fill,
+      FluentIcons.cast_multiple_24_filled
+  );
+  IconData get download => _pick(
+      Symbols.download_rounded,
+      FPhosphorFillIcons.downloadSimple,
+      FLucideIcons.download,
+      CupertinoIcons.arrow_down_circle,
+      FluentIcons.arrow_download_24_filled
+  );
+  IconData get downloaded => _pick(
+      Symbols.download_done_rounded,
+      FPhosphorFillIcons.checkCircle,
+      FLucideIcons.circleCheck,
+      CupertinoIcons.checkmark_circle_fill,
+      FluentIcons.checkmark_circle_24_filled
+  );
+  IconData get delete => _pick(
+      Symbols.delete_rounded,
+      FPhosphorFillIcons.trash,
+      FLucideIcons.trash2,
+      CupertinoIcons.trash_fill,
+      FluentIcons.delete_24_filled
   );
   IconData get close => _pick(
       Symbols.close_rounded,
@@ -523,7 +574,9 @@ class IconController extends ValueNotifier<IconStyle> {
 
   static Future<IconController> load() async => IconController._(_saved());
 
-  static IconStyle _saved() => IconStyle.values.asNameMap()[storage.getString(_key)] ?? IconStyle.materialSymbols;
+  static IconStyle _saved() =>
+      IconStyle.values.asNameMap()[storage.getString(_key) ?? appDefaults.appearance('icons')] ??
+      IconStyle.materialSymbols;
 
   /// Loads the icon style saved for whoever is signed in now (see Storage.user).
   void reload() {

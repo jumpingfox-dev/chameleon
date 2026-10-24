@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:path_provider/path_provider.dart';
 import '../core/storage/storage.dart';
+import '../core/storage/app_defaults.dart';
 
 /// Every Google Fonts family, alphabetical.
 final allFonts = GoogleFonts.asMap().keys.toList()..sort();
@@ -114,7 +115,11 @@ class FontController extends ChangeNotifier {
   String get body => _body;
 
   static Future<FontController> load() async =>
-      FontController._(_saved(_displayKey, defaultDisplay), _saved(_bodyKey, defaultBody));
+      FontController._(_saved(_displayKey, _defaultDisplay), _saved(_bodyKey, _defaultBody));
+
+  /// From assets/defaults.json, or else the app's own.
+  static String get _defaultDisplay => appDefaults.appearance('headingFont') ?? defaultDisplay;
+  static String get _defaultBody => appDefaults.appearance('bodyFont') ?? defaultBody;
 
   static String _saved(String key, String fallback) {
     final saved = storage.getString(key);
@@ -123,8 +128,8 @@ class FontController extends ChangeNotifier {
 
   /// Loads the fonts saved for whoever is signed in now (see Storage.user).
   void reload() {
-    _display = _saved(_displayKey, defaultDisplay);
-    _body = _saved(_bodyKey, defaultBody);
+    _display = _saved(_displayKey, _defaultDisplay);
+    _body = _saved(_bodyKey, _defaultBody);
     notifyListeners();
   }
 

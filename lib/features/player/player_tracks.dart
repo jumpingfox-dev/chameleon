@@ -64,6 +64,10 @@ String _trackLabel(
 /// Where to fetch an external subtitle file from the server, or null if it can't be fetched
 /// on its own (picture-based subtitles like PGS).
 String? _externalSubtitleUrl(JellyfinItem? item, Map<String, dynamic> stream) {
+  // Downloaded with the title: from the device.
+  if (item != null && stream['Index'] is int) {
+    if (downloads.subtitleFor(item.id, stream['Index'] as int) case final path?) return Uri.file(path).toString();
+  }
   final client = jellyfin.client;
   if (client == null || item == null || stream['IsTextSubtitleStream'] == false) return null;
   final ext = switch ((stream['Codec'] as String?)?.toLowerCase()) {

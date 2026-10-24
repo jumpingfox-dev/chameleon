@@ -5,6 +5,7 @@ import 'package:dart_jellyfin/dart_jellyfin.dart';
 
 import '../../core/platform/screen_type.dart';
 import '../../core/storage/storage.dart';
+import '../../core/storage/app_defaults.dart';
 
 // ─── Choices ─────────────────────────────────────────────────────────────────
 
@@ -132,6 +133,12 @@ class ScreensaverSettings extends ChangeNotifier {
   static Future<ScreensaverSettings> load() async => ScreensaverSettings._().._readSaved();
 
   void _readSaved() {
+    // assets/defaults.json, under anything saved. Its style is one for TVs and one for the rest.
+    final defaults = appDefaults.section('screensaver');
+    _read({
+      ...defaults,
+      'style': ?(ScreenType.isTvDevice ? defaults['styleOnTv'] : defaults['styleElsewhere']),
+    });
     try {
       final raw = storage.getString(_key);
       if (raw != null) _read(jsonDecode(raw) as Map<String, dynamic>);

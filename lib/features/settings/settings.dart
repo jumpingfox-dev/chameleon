@@ -8,6 +8,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:visibility_detector/visibility_detector.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 
+import '../../app/bottom_bar_tabs.dart';
 import '../../theme/app_icons.dart';
 import '../../theme/font_controller.dart';
 import '../../core/format/item_format.dart';
@@ -42,43 +43,99 @@ part 'sync_play_settings.dart';
 
 
 /// One entry per settings tab. Add a line here to add a tab.
-typedef _SettingsTab = ({String label, Widget Function() build});
+typedef _SettingsTab = ({
+  String label,
+  IconData Function(AppIconSet icons) icon,
+  Widget Function() build,
+});
 
 final _tabs = <_SettingsTab>[
-  (label: 'Appearance', build: () => const _AppearanceCard()),
-  (label: 'Account', build: () => const _AccountCard()),
-  (label: 'Playback', build: () => const _PlaybackCard()),
-  (label: 'Screensaver', build: () => const _ScreensaverCard()),
-  (label: 'Server', build: () => const _ServerCard()),
-  (label: 'SyncPlay', build: () => const _SyncPlayCard()),
-  (label: 'About', build: () => const _AboutCard()),
+  (
+    label: 'Appearance',
+    icon: (i) => i.appearance,
+    build: () => const _AppearanceCard(),
+  ),
+  (
+    label: 'Account',
+    icon: (i) => i.profile,
+    build: () => const _AccountCard(),
+  ),
+  (
+    label: 'Playback',
+    icon: (i) => i.play,
+    build: () => const _PlaybackCard(),
+  ),
+  (
+    label: 'Screensaver',
+    icon: (i) => i.photos,
+    build: () => const _ScreensaverCard(),
+  ),
+  (label: 'Server', icon: (i) => i.server, build: () => const _ServerCard()),
+  (
+    label: 'SyncPlay',
+    icon: (i) => i.syncPlay,
+    build: () => const _SyncPlayCard(),
+  ),
+  (label: 'About', icon: (i) => i.info, build: () => const _AboutCard()),
 ];
 
-/// The settings page names in order, for the sidebar.
+/// The settings page names in order, for the tabs.
 List<String> get settingsTabLabels => [for (final t in _tabs) t.label];
 
 class SettingsScreen extends StatefulWidget {
-  const SettingsScreen({super.key, this.initialTab});
+  const SettingsScreen({super.key, this.initialTab, this.group});
 
-  /// The label of the tab to open on, e.g. 'Account'. Opens on the first tab if not given.
+  /// The section, e.g. 'Appearance': with [group], the section that group is in; on its own,
+  /// where to scroll the list to (a link to Account, say).
   final String? initialTab;
+
+  /// One group's page (e.g. 'Fonts'), with just its settings. Without it, the list of every
+  /// section and its groups.
+  final String? group;
 
   @override
   State<SettingsScreen> createState() => _SettingsScreenState();
 }
 
-class _SettingsScreenState extends State<SettingsScreen> {
-  // indexWhere gives -1 for no match, so clamp falls back to the first tab.
-  late int _index = _indexOf(widget.initialTab);
-  final _scroll = ScrollController();
+/// How the sections show their settings ([_SettingsCard]): as a list of their groups, each
+/// opening a page of its own, or (with [group]) only that group's settings.
+class _SettingsView extends InheritedWidget {
+  const _SettingsView({required this.tab, this.group, required super.child});
 
-  static int _indexOf(String? label) =>
-      _tabs.indexWhere((t) => t.label == label).clamp(0, _tabs.length - 1);
+  final String tab;
+  final String? group;
+
+  static _SettingsView? of(BuildContext context) => context.dependOnInheritedWidgetOfExactType<_SettingsView>();
+
+  @override
+  bool updateShouldNotify(_SettingsView old) => old.tab != tab || old.group != group;
+}
+
+class _SettingsScreenState extends State<SettingsScreen> {
+  final _scroll = ScrollController();
+  final _sections = {for (final t in _tabs) t.label: GlobalKey()};
+
+  @override
+  void initState() {
+    super.initState();
+    _scrollToSection();
+  }
 
   @override
   void didUpdateWidget(covariant SettingsScreen old) {
     super.didUpdateWidget(old);
-    if (widget.initialTab != old.initialTab) _index = _indexOf(widget.initialTab);
+    if (widget.initialTab != old.initialTab) _scrollToSection();
+  }
+
+  /// Opened at a section (a link to Settings › Account, say): scrolls the list to its heading.
+  void _scrollToSection() {
+    if (widget.group != null) return;
+    final key = _sections[widget.initialTab];
+    if (key == null) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final context = key.currentContext;
+      if (context != null && context.mounted) Scrollable.ensureVisible(context);
+    });
   }
 
   @override
@@ -88,58 +145,151 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   @override
-  Widget build(BuildContext context) => Scaffold(
-    // With the remote, keeps headings and the end of the page in view (see FocusReveal).
-    body: Padding(
-      padding: pageSides(context, extra: 12),
-      child: FocusReveal(
-      controller: _scroll,
-      child: ListView(
-        controller: _scroll,
-        padding: EdgeInsets.fromLTRB(4, pageTop(context), 4, 16),
-        children: [
-          // Tab pills, above the card. Phones only: wider screens pick the page from the sidebar.
-          if (ScreenType.of(context).isPhone) ...[
-            SingleChildScrollView(
-              scrollDirection: Axis.horizontal, // scrolls sideways if there are more pills than fit
-              child: Row(
-                spacing: 8,
-                children: [
-                  for (var i = 0; i < _tabs.length; i++)
-                    ChoiceChip(
-                      label: Text(_tabs[i].label),
-                      selected: i == _index,
-                      // Through the address, so the sidebar shows the same page as selected.
-                      onSelected: (_) => context.go('${GoRouterState.of(context).uri.path}?tab=${_tabs[i].label}'),
-                    ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 16),
-          ],
-          _tabs[_index].build(),
-        ],
+  Widget build(BuildContext context) {
+    final tab = _tabs.where((t) => t.label == widget.initialTab).firstOrNull;
+    final group = widget.group;
+    return Scaffold(
+      // With the remote, keeps headings and the end of the page in view (see FocusReveal).
+      body: Padding(
+        padding: pageSides(context, extra: 12),
+        child: FocusReveal(
+          controller: _scroll,
+          // All built at once, so a section further down can be scrolled to.
+          child: SingleChildScrollView(
+            controller: _scroll,
+            padding: EdgeInsets.fromLTRB(4, pageTop(context), 4, pageBottom(context)),
+            child: tab != null && group != null
+                // One group's page: its name is in the top bar.
+                ? _SettingsView(tab: tab.label, group: group, child: tab.build())
+                // Every section's heading, and its groups under it.
+                : Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      for (final (i, t) in _tabs.indexed) ...[
+                        Padding(
+                          key: _sections[t.label],
+                          padding: EdgeInsets.only(top: i == 0 ? 0 : 28, bottom: 10, left: 4),
+                          child: Text(t.label, style: context.text.titleLarge),
+                        ),
+                        _SettingsView(tab: t.label, child: t.build()),
+                      ],
+                    ],
+                  ),
+          ),
+        ),
       ),
-    ),
-    ),
-  );
+    );
+  }
 }
 
-/// A bordered card holding one settings tab. Use [_SectionTitle] for headings inside it.
+/// One group in the Settings list, opening its page.
+class _SettingsLink extends StatelessWidget {
+  const _SettingsLink({required this.label, required this.onPress});
+
+  final String label;
+  final VoidCallback onPress;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.colors;
+    return Tappable(
+      onPress: onPress,
+      builder: (context, states, child) => AnimatedContainer(
+        duration: const Duration(milliseconds: 120),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+        decoration: BoxDecoration(
+          color: isHighlighted(states) ? colors.surfaceContainerHigh : colors.surfaceContainer,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: isHighlighted(states) ? colors.primary : const Color(0x00000000),
+            width: 2,
+          ),
+        ),
+        child: child,
+      ),
+      child: Text(label, style: context.text.titleMedium),
+    );
+  }
+}
+
+/// One settings section's settings. Use [_SectionTitle] for headings: each starts a card of its own.
 class _SettingsCard extends StatelessWidget {
   const _SettingsCard({required this.children});
 
   final List<Widget> children;
 
+  /// Split at each heading ([_SectionTitle]): each heading and the settings under it. Anything
+  /// before the first heading is a group named after the section.
+  List<({String? title, String? description, List<Widget> children})> get _groups {
+    final groups = <({String? title, String? description, List<Widget> children})>[];
+    for (final child in children) {
+      if (child is _SectionTitle) {
+        groups.add((title: child.text, description: child.description, children: []));
+      } else if (groups.isEmpty) {
+        groups.add((title: null, description: null, children: [child]));
+      } else {
+        groups.last.children.add(child);
+      }
+    }
+    return groups;
+  }
+
   @override
-  Widget build(BuildContext context) => Card(child: Padding(
-      padding: const EdgeInsets.all(16),
-      child: Column(
-        mainAxisSize: .min,
+  Widget build(BuildContext context) {
+    final view = _SettingsView.of(context);
+    final groups = _groups;
+    String nameOf(String? title) => title ?? view?.tab ?? '';
+
+    // In the list: one item per group, opening its page.
+    if (view != null && view.group == null) {
+      return Column(
         crossAxisAlignment: .stretch,
-        children: children,
-      ),
-    ));
+        spacing: 8,
+        children: [
+          for (final g in groups)
+            _SettingsLink(
+              label: nameOf(g.title),
+              onPress: () => context.push(
+                Uri(path: '/settings', queryParameters: {'tab': view.tab, 'group': nameOf(g.title)}).toString(),
+              ),
+            ),
+        ],
+      );
+    }
+
+    // A group's page: just its settings (its name is in the top bar).
+    final shown = view == null ? groups : groups.where((g) => nameOf(g.title) == view.group).toList();
+    return Column(
+      mainAxisSize: .min,
+      crossAxisAlignment: .stretch,
+      spacing: 12,
+      children: [
+        for (final g in shown)
+          Card(
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                mainAxisSize: .min,
+                crossAxisAlignment: .stretch,
+                children: [
+                  if (view == null && g.title != null)
+                    _SectionTitle(g.title!, description: g.description, first: true)
+                  else if (g.description != null)
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 12),
+                      child: Text(
+                        g.description!,
+                        style: context.text.bodyMedium?.copyWith(color: context.colors.onSurfaceVariant),
+                      ),
+                    ),
+                  ...g.children,
+                ],
+              ),
+            ),
+          ),
+      ],
+    );
+  }
 }
 
 class _FontPreview extends StatefulWidget {
@@ -294,6 +444,53 @@ class _AppearanceCard extends StatelessWidget {
                 Text(style.label),
               ],
             ),
+          ),
+
+          // ── Bottom bar (phones and tablets) ──
+          if (ScreenType.of(context) case ScreenType.phone || ScreenType.tablet) ...[
+            const _SectionTitle(
+              'Bottom bar',
+              description: 'The buttons along the bottom on phones, and on tablets held upright. Up to four.',
+            ),
+            const _BottomBarSetting(),
+          ],
+        ],
+      );
+    },
+  );
+}
+
+/// Picks the bottom bar's buttons, one slot at a time. Choosing a button already in another
+/// slot swaps the two.
+class _BottomBarSetting extends StatelessWidget {
+  const _BottomBarSetting();
+
+  static String _name(String id) => id.isEmpty ? 'None' : BottomBarTabs.describe(id)?.label ?? id;
+
+  @override
+  Widget build(BuildContext context) => ListenableBuilder(
+    listenable: Listenable.merge([bottomBarTabs, jellyfin]),
+    builder: (context, _) {
+      final ids = bottomBarTabs.ids;
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        spacing: 12,
+        children: [
+          for (var slot = 0; slot < BottomBarTabs.max; slot++)
+            _PickerSetting<String>(
+              // Rebuilt when a swap changes it from another slot (a dropdown keeps its own text).
+              key: ValueKey((slot, slot < ids.length ? ids[slot] : '')),
+              label: 'Button ${slot + 1}',
+              title: 'Button ${slot + 1}',
+              value: slot < ids.length ? ids[slot] : '',
+              // The first is always something; the rest can be left empty ('').
+              options: [if (slot > 0) '', ...bottomBarTabs.options],
+              format: _name,
+              onChange: (id) => bottomBarTabs.setSlot(slot, id.isEmpty ? null : id),
+            ),
+          Align(
+            alignment: Alignment.centerLeft,
+            child: TextButton(onPressed: bottomBarTabs.reset, child: const Text('Back to the defaults')),
           ),
         ],
       );
@@ -555,6 +752,7 @@ class _SliderSetting extends StatelessWidget {
 /// Same split as the Appearance tab.
 class _PickerSetting<T> extends StatelessWidget {
   const _PickerSetting({
+    super.key,
     this.label,
     this.title,
     required this.value,

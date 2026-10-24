@@ -10,24 +10,32 @@ import '../../core/cast/cast_controller.dart';
 import '../../core/format/format.dart';
 import '../../core/jellyfin/jellyfin_controller.dart';
 import 'playback_settings.dart';
+import '../../theme/app_icons.dart';
 import '../../theme/theme.dart';
 import '../../widgets/tappable.dart';
 
-// ─── Choosing a Chromecast ───────────────────────────────────────────────────
+// ─── Choosing where to play: Chromecast and AirPlay ──────────────────────────
 
-/// Not casting: lists the Chromecasts on the network. Casting: offers to stop.
-Future<void> showCastPicker(BuildContext context) => showDialog<void>(
-context: context,
-builder: (context) => Dialog(child: const _CastPickerBody()),
+/// One menu for both ways of playing on another screen: the Chromecasts on the network
+/// (or Stop casting, while casting), and on iPhone and iPad, AirPlay.
+Future<void> showCastMenu(BuildContext context) => showDialog<void>(
+  context: context,
+  builder: (context) => Dialog(
+    child: ConstrainedBox(constraints: const BoxConstraints(maxWidth: 420), child: const _CastMenuBody()),
+  ),
 );
 
-class _CastPickerBody extends StatelessWidget {
-  const _CastPickerBody();
+class _CastMenuBody extends StatelessWidget {
+  const _CastMenuBody();
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final muted = theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.onSurfaceVariant);
+    Widget heading(String text) => Padding(
+      padding: const EdgeInsets.only(top: 8),
+      child: Text(text, style: theme.textTheme.titleSmall?.copyWith(color: theme.colorScheme.primary)),
+    );
 
     return ListenableBuilder(
       listenable: castController,
@@ -36,30 +44,32 @@ class _CastPickerBody extends StatelessWidget {
         child: Column(
           mainAxisSize: .min,
           crossAxisAlignment: .stretch,
-          spacing: 10,
+          spacing: 8,
           children: [
-            if (castController.isConnected) ...[
-              Text('Casting to ${castController.deviceName ?? 'a Chromecast'}', style: theme.textTheme.titleLarge),
-              if (castController.nowPlaying != null) Text(castController.nowPlaying!.title, style: muted),
-              const SizedBox(height: 4),
-              FilledButton(
-                autofocus: true,
-                onPressed: () {
-                  castController.disconnect();
-                  Navigator.of(context).pop();
-                },
-                child: const Text('Stop casting'),
-              ),
-            ] else ...[
-              Text('Cast to', style: theme.textTheme.titleLarge),
-              if (castController.devices.isEmpty)
+            Text('Play on', style: theme.textTheme.titleLarge),
+
+            // ── Chromecast ──
+            if (castController.supported) ...[
+              heading('Chromecast'),
+              if (castController.isConnected) ...[
+                Text('Casting to ${castController.deviceName ?? 'a Chromecast'}', style: theme.textTheme.bodyLarge),
+                if (castController.nowPlaying != null) Text(castController.nowPlaying!.title, style: muted),
+                FilledButton(
+                  autofocus: true,
+                  onPressed: () {
+                    castController.disconnect();
+                    Navigator.of(context).pop();
+                  },
+                  child: const Text('Stop casting'),
+                ),
+              ] else if (castController.devices.isEmpty)
                 Text('Looking for Chromecasts on your network…', style: muted)
               else
                 for (final (i, device) in castController.devices.indexed)
                   ListTile(
                     autofocus: i == 0,
                     shape: const StadiumBorder(),
-                    leading: const Icon(Icons.cast_rounded, size: 20),
+                    leading: Icon(appIcons.cast, size: 20),
                     title: Text(device.friendlyName, overflow: TextOverflow.ellipsis),
                     onTap: () {
                       castController.connect(device);
@@ -67,9 +77,16 @@ class _CastPickerBody extends StatelessWidget {
                     },
                   ),
             ],
-            OutlinedButton(
-              onPressed: () => Navigator.of(context).pop(),
-              child: const Text('Cancel'),
+
+            // ── AirPlay ──
+            if (AirPlayButton.available) ...[
+              heading('AirPlay'),
+              const _AirPlayRow(),
+            ],
+
+            const SizedBox(height: 4),
+            Center(
+              child: OutlinedButton(onPressed: () => Navigator.of(context).pop(), child: const Text('Cancel')),
             ),
           ],
         ),
@@ -78,42 +95,54 @@ class _CastPickerBody extends StatelessWidget {
   }
 }
 
-/// Whether to show a cast button: only when a Chromecast is around (or already casting),
-/// as Google's guidelines ask, so it never shows on a TV or with no Chromecast at home.
-bool get showCastButton =>
-    castController.supported && (castController.isConnected || castController.devices.isNotEmpty);
+/// A row that opens Apple's AirPlay picker: Apple's own button, invisible, laid over it, since
+/// iOS doesn't let apps list AirPlay devices themselves.
+class _AirPlayRow extends StatelessWidget {
+  const _AirPlayRow();
 
-IconData get castIcon => castController.isConnected ? Icons.cast_connected_rounded : Icons.cast_rounded;
+  @override
+  Widget build(BuildContext context) {
+    final muted = context.text.bodyMedium?.copyWith(color: context.colors.onSurfaceVariant);
+    return Stack(
+      children: [
+        ListTile(
+          shape: const StadiumBorder(),
+          leading: const Icon(Icons.airplay_rounded, size: 20),
+          title: const Text('Choose an AirPlay device'),
+          subtitle: Text('Plays the sound on an Apple TV, HomePod or speaker. For the picture too, '
+              'use Screen Mirroring in Control Center.', style: muted),
+        ),
+        const Positioned.fill(
+          child: AirPlayRoutePickerView(
+            prioritizesVideoDevices: true,
+            tintColor: Color(0x00000000),
+            activeTintColor: Color(0x00000000),
+            backgroundColor: Color(0x00000000),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+/// Whether to offer playing elsewhere: AirPlay on iPhone and iPad; Chromecast only when one is
+/// around (or already casting), as Google's guidelines ask, so it never shows on a TV or with
+/// no Chromecast at home.
+bool get showCastButton =>
+    AirPlayButton.available ||
+    (castController.supported && (castController.isConnected || castController.devices.isNotEmpty));
+
+IconData get castIcon => castController.isConnected ? appIcons.castConnected : appIcons.cast;
 
 // ─── AirPlay (iPhone and iPad) ───────────────────────────────────────────────
 
-/// Apple's own AirPlay button, which opens the system's device list. iOS only.
+/// Whether AirPlay is available here: iOS only.
 ///
 /// The player plays through mpv rather than Apple's player, so AirPlay carries the sound
 /// (to an Apple TV, HomePod or AirPlay speaker); for the picture on an Apple TV, use
 /// Screen Mirroring in Control Center.
-class AirPlayButton extends StatelessWidget {
-  const AirPlayButton({super.key, this.size = 44});
-
-  final double size;
-
+abstract final class AirPlayButton {
   static bool get available => !kIsWeb && Platform.isIOS;
-
-  @override
-  Widget build(BuildContext context) {
-    if (!available) return const SizedBox.shrink();
-    return Tooltip(
-      message: 'AirPlay',
-      child: AirPlayRoutePickerView(
-        width: size,
-        height: size,
-        prioritizesVideoDevices: true,
-        tintColor: const Color(0xFFFFFFFF),
-        activeTintColor: context.colors.primary,
-        backgroundColor: const Color(0x00000000),
-      ),
-    );
-  }
 }
 
 // ─── The remote, while casting ───────────────────────────────────────────────
@@ -182,7 +211,7 @@ class CastRemote extends StatelessWidget {
                         _RemoteButton(
                           icon: Icons.cast_connected_rounded,
                           label: 'Stop casting',
-                          onPress: () => showCastPicker(context),
+                          onPress: () => showCastMenu(context),
                         ),
                       ],
                     ),

@@ -249,8 +249,7 @@ class _PlayerControls extends StatelessWidget {
                 )
               else
                 const Spacer(),
-              // AirPlay (iPhone/iPad) and Chromecast (only when one is on the network).
-              if (AirPlayButton.available) AirPlayButton(size: compact ? 48 : 40),
+              // Chromecast (only when one is on the network) and AirPlay (iPhone/iPad), in one menu.
               ListenableBuilder(
                 listenable: castController,
                 builder: (context, _) => showCastButton

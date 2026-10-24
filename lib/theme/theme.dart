@@ -104,7 +104,7 @@ TextTheme _textTheme(ColorScheme colors, {required String displayFont, required 
 /// the family name Flutter should use for it.
 String _googleFamily(String name) => GoogleFonts.getFont(name).fontFamily!;
 
-/// The outline for search boxes: a pill, like the sidebar's links.
+/// The outline for search boxes: a pill.
 const searchFieldBorder = OutlineInputBorder(borderRadius: BorderRadius.all(Radius.circular(999)));
 
 /// Play, More info, Favorite and the like on Home's carousel and the detail pages: rounded

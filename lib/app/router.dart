@@ -56,6 +56,7 @@ final GoRouter appRouter = GoRouter(
           navigationShell: navigationShell,
           location: state.uri.path,
           tab: state.uri.queryParameters['tab'],
+          group: state.uri.queryParameters['group'],
         ),
       ),
       navigatorContainerBuilder: (context, navigationShell, children) => IndexedStack(
@@ -69,8 +70,10 @@ final GoRouter appRouter = GoRouter(
         ],
       ),
       branches: [
-        for (final d in destinations)
+        for (final (i, d) in destinations.indexed)
           StatefulShellBranch(
+            navigatorKey: branchNavigatorKeys[i],
+            observers: [PageStackObserver()], // so the top bar's Back follows pages pushed here
             routes: [
               GoRoute(path: d.path, builder: (context, state) => d.screen(state), routes: d.routes),
             ],

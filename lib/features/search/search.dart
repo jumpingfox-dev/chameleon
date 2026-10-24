@@ -18,7 +18,7 @@ import '../../widgets/remote_text_field.dart';
 class SearchScreen extends StatefulWidget {
   const SearchScreen({super.key, this.query});
 
-  /// A search to run straight away, from /search?q=... (the sidebar's search box).
+  /// A search to run straight away, from /search?q=... (a link elsewhere).
   final String? query;
 
   @override
@@ -46,7 +46,7 @@ class _SearchScreenState extends State<SearchScreen> {
     _loadSuggestions();
   }
 
-  /// A search submitted from the sidebar arrives as /search?q=..., passed in as [SearchScreen.query].
+  /// A search submitted from elsewhere arrives as /search?q=..., passed in as [SearchScreen.query].
   void _takeRouteQuery() {
     final q = widget.query;
     if (q != null && q != _routeQuery) {
@@ -169,7 +169,7 @@ class _SearchScreenState extends State<SearchScreen> {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         SizedBox(height: pageTop(context)),
-        // Arriving from the sidebar or bottom bar: ready to type (on a TV, the remote is on
+        // Arriving from the menu, top bar or bottom bar: ready to type (on a TV, the remote is on
         // the box, and Select opens the keyboard).
         RemoteTextField(
           autofocus: _routeQuery == null,
@@ -185,13 +185,21 @@ class _SearchScreenState extends State<SearchScreen> {
               hintText: 'Search movies, shows, and actors',
               border: searchFieldBorder,
               enabledBorder: highlighted ? remoteFieldBorder(context, searchFieldBorder) : null,
-              prefixIcon: Icon(appIcons.search, fill: 1),
-              // A clear button while there's something to clear.
+              contentPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+              // A clear button while there's something to clear, in from the box's rounded end.
               suffixIcon: ListenableBuilder(
                 listenable: _query,
                 builder: (context, _) => _query.text.isEmpty
                     ? const SizedBox.shrink()
-                    : IconButton(onPressed: _query.clear, icon: Icon(appIcons.close), tooltip: 'Clear'),
+                    : Padding(
+                        padding: const EdgeInsets.only(right: 10),
+                        child: IconButton(
+                          onPressed: _query.clear,
+                          visualDensity: VisualDensity.compact,
+                          iconSize: 20,
+                          icon: Icon(appIcons.close),
+                        ),
+                      ),
               ),
             ),
           ),
@@ -236,7 +244,7 @@ class _SearchScreenState extends State<SearchScreen> {
               onPress: () => openItem(context, _suggestions[i]),
             ),
           ),
-          const SliverToBoxAdapter(child: SizedBox(height: 16)),
+          SliverToBoxAdapter(child: SizedBox(height: pageBottom(context))),
         ],
       );
     }
@@ -279,7 +287,7 @@ class _SearchScreenState extends State<SearchScreen> {
             ),
           ),
         ],
-        const SliverToBoxAdapter(child: SizedBox(height: 16)),
+        SliverToBoxAdapter(child: SizedBox(height: pageBottom(context))),
       ],
     );
   }

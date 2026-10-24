@@ -2,6 +2,7 @@ import 'package:dart_jellyfin/dart_jellyfin.dart';
 import 'package:material_ui/material_ui.dart';
 
 import '../../core/focus/focus_rows.dart';
+import '../../core/platform/screen_type.dart';
 import '../../core/jellyfin/jellyfin_controller.dart';
 import '../../core/jellyfin/library_cache.dart';
 import '../../core/jellyfin/list_each.dart';
@@ -122,9 +123,6 @@ class _LibraryScreenState extends State<LibraryScreen> {
     };
   }
 
-  /// The page's name: the genre, or the library's name.
-  String get _title => widget.genre ?? _library?.name ?? 'Library';
-
   bool get _hasMore => _total == null || _items.length < _total!;
 
   @override
@@ -139,6 +137,31 @@ class _LibraryScreenState extends State<LibraryScreen> {
       if (_scroll.position.extentAfter < 600) _loadMore();
     });
     _loadOrRefresh();
+    _focusFirstWhenShown();
+  }
+
+  /// Opened on top of another page (a genre from Genres): with a remote, focus would be left on
+  /// the page underneath, so it moves to this page's first title once there is one.
+  void _focusFirstWhenShown([int attempt = 0]) {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || !ScreenType.of(context).isTv) return;
+      final route = ModalRoute.of(context);
+      if (route == null || route.isFirst) return; // the shell focuses pages opened from the menu
+      final scope = FocusScope.of(context);
+      final focused = FocusManager.instance.primaryFocus;
+      if (focused != null && focused != scope && focused.ancestors.contains(scope)) return; // already here
+      if (_items.isEmpty) {
+        if (attempt < 30) Future.delayed(const Duration(milliseconds: 100), () => _focusFirstWhenShown(attempt + 1));
+        return;
+      }
+      // The first title, not the view toggle beside the grid (which comes first in reading order).
+      final first = firstFocusable(scope, mainOnly: true);
+      if (first == null) {
+        if (attempt < 30) Future.delayed(const Duration(milliseconds: 100), () => _focusFirstWhenShown(attempt + 1));
+        return;
+      }
+      first.requestFocus();
+    });
   }
 
   @override
@@ -348,8 +371,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
           child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-          Text(_title, style: context.text.headlineSmall),
-          const SizedBox(height: 12),
+          // (Its name is in the app's top bar.)
           // The posters on the left, and the view toggle and A–Z down the right-hand side.
           Expanded(
           child: Row(
@@ -443,7 +465,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
                   child: Center(child: CircularProgressIndicator()),
                 ),
               ),
-            const SliverToBoxAdapter(child: SizedBox(height: 16)),
+            SliverToBoxAdapter(child: SizedBox(height: pageBottom(context))),
           ],
         );
       },

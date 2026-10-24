@@ -61,8 +61,12 @@ class PlaybackReporter {
     );
   }
 
+  /// Where playback is, as reported (see [openedAt]).
+  Duration get position => _position;
+
   /// Reports the final position. Reads it immediately, so it's safe to dispose the player right after.
-  Future<void> stop() {
+  /// True if the server got it.
+  Future<bool> stop() {
     final state = _state();
     _timer?.cancel();
     _playing?.cancel();
@@ -80,11 +84,13 @@ class PlaybackReporter {
     'PlayMethod': transcoding ? 'Transcode' : 'DirectPlay',
   };
 
-  Future<void> _post(String path, Map<String, Object?> body) async {
+  Future<bool> _post(String path, Map<String, Object?> body) async {
     try {
       await client.request(path, method: 'POST', data: body);
+      return true;
     } catch (_) {
       // Best effort: a missed report must never interrupt playback.
+      return false;
     }
   }
 }

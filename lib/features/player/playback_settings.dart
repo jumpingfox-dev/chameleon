@@ -4,6 +4,7 @@ import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:flutter/widgets.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../core/storage/storage.dart';
+import '../../core/storage/app_defaults.dart';
 
 // ─── Choices ─────────────────────────────────────────────────────────────────
 
@@ -217,6 +218,7 @@ class PlaybackSettings extends ChangeNotifier {
   static Future<PlaybackSettings> load() async => PlaybackSettings._().._readSaved();
 
   void _readSaved() {
+    _read(appDefaults.section('playback')); // assets/defaults.json, under anything saved
     try {
       final raw = storage.getString(_key);
       if (raw != null) _read(jsonDecode(raw) as Map<String, dynamic>);

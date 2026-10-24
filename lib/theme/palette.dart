@@ -25,7 +25,7 @@ class Palette {
 
   final Brightness brightness;
 
-  /// Dims what's behind dialogs, sheets and the open sidebar.
+  /// Dims what's behind dialogs and sheets.
   final Color barrier;
 
   /// The page.

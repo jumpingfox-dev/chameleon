@@ -15,6 +15,9 @@ import '../../core/platform/page_insets.dart';
 import '../../core/storage/app_cache.dart';
 import '../../core/platform/screen_type.dart';
 import '../detail/detail_page.dart';
+import 'package:go_router/go_router.dart';
+import '../../widgets/nav_button.dart';
+import '../../widgets/tappable.dart';
 import '../library/item_menu.dart';
 import '../library/poster_card.dart';
 import '../previews/frames_preview.dart';
@@ -74,6 +77,12 @@ final homeModuleSpecs = <HomeModuleType, HomeModuleSpec>{
     description: 'A rotating banner of highlights',
     icon: (i) => i.featured,
     load: _featured,
+  ),
+  HomeModuleType.myMedia: HomeModuleSpec(
+    title: 'My Media',
+    description: 'Your libraries, as tiles',
+    icon: (i) => i.folder,
+    load: (_, _) async => const HomeModuleContent([]), // drawn from the libraries, already loaded
   ),
   HomeModuleType.continueWatching: HomeModuleSpec(
     title: 'Continue Watching',
@@ -493,11 +502,13 @@ class _HomeModuleViewState extends State<HomeModuleView>
     super.build(context); // required by AutomaticKeepAliveClientMixin
     final module = widget.module;
     final isCarousel = module.type == HomeModuleType.carousel;
+    final isMyMedia = module.type == HomeModuleType.myMedia;
 
     // Loaded and empty: hidden entirely, unless you're editing (then it says so).
     if (!widget.editing &&
-        _error == null &&
-        (_content?.items.isEmpty ?? false)) {
+        (isMyMedia
+            ? jellyfin.libraries.isEmpty
+            : _error == null && (_content?.items.isEmpty ?? false))) {
       return const SizedBox.shrink();
     }
 
@@ -520,7 +531,7 @@ class _HomeModuleViewState extends State<HomeModuleView>
               Padding(
                 padding: pageSides(
                   context,
-                  extra: 16, // in line with the first card, which grows away from the sidebar
+                  extra: 16, // in line with the first card, which grows away from the edge
                 ),
                 child: Row(
                   children: [
@@ -543,6 +554,8 @@ class _HomeModuleViewState extends State<HomeModuleView>
             if (isCarousel)
             // The banner is a rounded card, so it keeps a margin rather than running to the edge.
               Padding(padding: pageSides(context), child: _carousel(context))
+            else if (isMyMedia)
+              _MyMediaRow(sides: _rowSides(context))
             else
               _row(context, _viewFor(context), captions: captions),
           ],
@@ -634,7 +647,7 @@ class _HomeModuleViewState extends State<HomeModuleView>
                 view: view,
                 preview: !widget.module.type.followsProgress, // none in Continue Watching or Next Up
                 onPreviewShowing: (showing) => _onPreviewShowing(context, i, showing, view, imageHeight),
-                // The first card grows away from the sidebar, the last away from the screen's edge.
+                // The first card grows away from the screen's left edge, the last away from its right.
                 anchor: i == 0
                     ? Alignment.centerLeft
                     : i == items.length - 1
@@ -1592,4 +1605,87 @@ class _LeftMarginClipper extends CustomClipper<Rect> {
 
   @override
   bool shouldReclip(_LeftMarginClipper old) => old.left != left;
+}
+
+// ─── My Media ────────────────────────────────────────────────────────────────
+
+/// Your libraries as colored tiles, each with its icon and name, opening the library.
+class _MyMediaRow extends StatelessWidget {
+  const _MyMediaRow({required this.sides});
+
+  final EdgeInsets sides; // the row's padding at its ends
+
+  /// Tile colors, in turn.
+  static const _colors = [
+    Color(0xFF6876F2),
+    Color(0xFFD81E6A),
+    Color(0xFFD9822B),
+    Color(0xFF1B8A4C),
+    Color(0xFF8E44AD),
+    Color(0xFF1E88C8),
+  ];
+
+  @override
+  Widget build(BuildContext context) {
+    final isPhone = ScreenType.of(context).isPhone;
+    final width = isPhone ? 150.0 : 210.0;
+    final height = width * 9 / 16;
+    final libraries = jellyfin.libraries;
+    return SizedBox(
+      height: height + 36,
+      child: FocusRow(
+        child: ListView.separated(
+          scrollDirection: Axis.horizontal,
+          padding: sides,
+          clipBehavior: Clip.none, // a focused tile grows past the row's ends
+          itemCount: libraries.length,
+          separatorBuilder: (_, _) => const SizedBox(width: 12),
+          itemBuilder: (context, i) {
+            final library = libraries[i];
+            return SizedBox(
+              width: width,
+              child: Tappable(
+                onPress: () => context.go('/home/library/${library.id}'),
+                semanticsLabel: library.name,
+                builder: (context, states, child) {
+                  final active = isHighlighted(states);
+                  return Column(
+                    spacing: 8,
+                    children: [
+                      AnimatedScale(
+                        scale: active ? 1.05 : 1,
+                        duration: const Duration(milliseconds: 150),
+                        curve: Curves.easeOut,
+                        child: AnimatedContainer(
+                          duration: const Duration(milliseconds: 150),
+                          width: width,
+                          height: height,
+                          decoration: BoxDecoration(
+                            color: _colors[i % _colors.length],
+                            borderRadius: BorderRadius.circular(10),
+                            border: Border.all(
+                              color: active ? context.colors.onSurface : const Color(0x00000000),
+                              width: 2.5,
+                            ),
+                          ),
+                          child: child,
+                        ),
+                      ),
+                      Text(
+                        library.name,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: context.text.bodyLarge,
+                      ),
+                    ],
+                  );
+                },
+                child: Icon(libraryIcon(library.collectionType), size: height * 0.42, color: const Color(0xFFFFFFFF)),
+              ),
+            );
+          },
+        ),
+      ),
+    );
+  }
 }

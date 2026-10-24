@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 import 'package:material_ui/material_ui.dart';
 
+import '../../core/downloads/downloads.dart';
 import '../../core/format/format.dart';
 import '../../core/format/item_format.dart';
 import '../../core/jellyfin/jellyfin_controller.dart';
@@ -134,6 +135,17 @@ Future<void> showItemMenu(BuildContext context, JellyfinItem item, {ItemMenuList
       label: played ? 'Mark as unplayed' : 'Mark as played',
       run: () => change(() => played ? client.userData.markUnplayed(item.id) : client.userData.markPlayed(item.id)),
     ),
+    // Saved on the device for offline (phones and tablets).
+    if (downloads.canDownload(item))
+      switch (downloads.entry(item.id)?.state) {
+        null => (icon: appIcons.download, label: 'Download', run: () => downloads.download(item)),
+        DownloadState.complete => (
+          icon: appIcons.delete,
+          label: 'Remove download',
+          run: () => downloads.delete(item.id),
+        ),
+        _ => (icon: appIcons.close, label: 'Cancel download', run: () => downloads.delete(item.id)),
+      },
     if (list == ItemMenuList.nextUp)
       (icon: appIcons.close, label: 'Remove from $listName', run: () => change(() => _hideFromNextUp(item.id)))
     else if (list == ItemMenuList.continueWatching)

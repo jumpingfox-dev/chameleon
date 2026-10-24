@@ -17,6 +17,8 @@ import '../../core/jellyfin/jellyfin_controller.dart';
 import '../../core/jellyfin/list_each.dart';
 import '../../core/platform/screen_type.dart';
 import '../../core/platform/media_support.dart';
+import '../downloads/download_button.dart';
+import '../library/item_menu.dart';
 import '../previews/trailers.dart';
 import '../previews/trailer_screen.dart';
 import 'expandable_text.dart';
@@ -157,7 +159,7 @@ Future<JellyfinItem?> nextEpisodeFor(String seriesId) async {
 }
 
 /// A title's (or person's) page, opened over the page it was opened from, inside the tab: the
-/// sidebar stays. Back returns to where you were.
+/// top bar stays. Back returns to where you were.
 class _DetailRoute extends PageRouteBuilder<void> {
   _DetailRoute({required super.pageBuilder})
     : super(
@@ -269,15 +271,14 @@ DetailLoader seriesDetails(String id) => (client) async {
 abstract class DetailLayout {
   const DetailLayout();
 
-  /// Text in the header next to the back button, if any.
+  /// Text in the page's header, if any.
   String? headerTitle(DetailData data) => null;
 
   /// The page's content, as slivers.
   List<Widget> buildSlivers(BuildContext context, DetailData data);
 
-  /// True if the back button should float over the content (a white arrow on a dark circle)
-  /// instead of sitting in a normal header row.
-  bool get floatingBackButton => false;
+  /// True if the page draws its own header (a backdrop, a photo) instead of a title row.
+  bool get noAppBar => false;
 
   /// Space above the page's content.
   double get topPadding => 24;
@@ -285,16 +286,12 @@ abstract class DetailLayout {
   /// The item whose backdrop fills the top of the page, behind everything, if any.
   JellyfinItem? backdropOf(DetailData data) => null;
 
+  /// Titles whose posters make the backdrop instead of [backdropOf]'s picture (a person's).
+  List<JellyfinItem> collageOf(DetailData data) => const [];
+
   /// True if the page leaves its sides to each part (they're all [_BackdropScope]-aware), so
   /// rows can scroll to the screen's edge.
   bool get edgeToEdge => false;
-
-  /// True if the phone's floating Back button sits in the top right instead (clear of a photo).
-  bool get backButtonOnRight => false;
-
-  /// Where the floating back button sits, measured from the top-left of the page's content
-  /// (below the top padding).
-  Offset get backButtonOffset => const Offset(12, 12);
 }
 
 /// A person, over a backdrop from their best-rated title: photo, name, birth and death,
@@ -308,31 +305,24 @@ class PersonLayout extends DetailLayout {
     final shows = [for (final i in data.children) if (i.type != JellyfinItemKind.movie) i];
     return [
       SliverToBoxAdapter(child: _PersonHero(person: data.item, movies: movies.length, shows: shows.length)),
-      // Starts on their first title, whichever row it's in.
-      if (movies.isNotEmpty) SliverToBoxAdapter(child: _StartsHere(child: _ItemRow(title: 'Movies', items: movies))),
-      if (shows.isNotEmpty)
-        SliverToBoxAdapter(
-          child: movies.isEmpty
-              ? _StartsHere(child: _ItemRow(title: 'Shows', items: shows))
-              : _ItemRow(title: 'Shows', items: shows),
-        ),
+      if (movies.isNotEmpty) SliverToBoxAdapter(child: _ItemRow(title: 'Movies', items: movies)),
+      if (shows.isNotEmpty) SliverToBoxAdapter(child: _ItemRow(title: 'Shows', items: shows)),
     ];
   }
 
   @override
-  JellyfinItem? backdropOf(DetailData data) => _personBackdrop(data.children);
+  JellyfinItem? backdropOf(DetailData data) => data.item;
+
+  /// A wall of everything they're in.
+  @override
+  List<JellyfinItem> collageOf(DetailData data) => data.children;
 
   @override
   bool get edgeToEdge => true;
 
   @override
-  bool get floatingBackButton => true;
+  bool get noAppBar => true;
 
-  @override
-  bool get backButtonOnRight => true; // clear of their photo
-
-  @override
-  Offset get backButtonOffset => const Offset(6, 6);
 }
 
 /// A collection, over its backdrop: logo, details (count, years, age rating, description,
@@ -355,10 +345,7 @@ class CollectionLayout extends DetailLayout {
   bool get edgeToEdge => true;
 
   @override
-  bool get floatingBackButton => true;
-
-  @override
-  Offset get backButtonOffset => const Offset(6, 6); // tucked into the banner's corner
+  bool get noAppBar => true;
 }
 
 /// A movie, over its backdrop: logo, details (year, runtime, age rating, score, Play,
@@ -381,10 +368,7 @@ class MovieLayout extends DetailLayout {
   bool get edgeToEdge => true;
 
   @override
-  bool get floatingBackButton => true;
-
-  @override
-  Offset get backButtonOffset => const Offset(6, 6); // tucked into the banner's corner
+  bool get noAppBar => true;
 }
 
 /// A series, over its backdrop: logo, details (years, seasons, age rating, score, description,
@@ -409,10 +393,7 @@ class SeriesLayout extends DetailLayout {
   bool get edgeToEdge => true;
 
   @override
-  bool get floatingBackButton => true;
-
-  @override
-  Offset get backButtonOffset => const Offset(6, 6); // tucked into the banner's corner
+  bool get noAppBar => true;
 }
 
 // To add a new kind of page later, add a layout here, for example:
@@ -449,15 +430,10 @@ class _DetailPageState extends State<DetailPage> {
   bool _loading = true;
   String? _error;
   final _scroll = ScrollController();
-  bool _scrolled = false;
 
   @override
   void initState() {
     super.initState();
-    _scroll.addListener(() {
-      final scrolled = _scroll.offset > 4;
-      if (scrolled != _scrolled) setState(() => _scrolled = scrolled);
-    });
 
     // Show cached data straight away; refresh quietly if it's old.
     final key = widget.cacheKey;
@@ -528,7 +504,6 @@ class _DetailPageState extends State<DetailPage> {
   @override
   Widget build(BuildContext context) {
     final topPadding = widget.layout.topPadding;
-    final isPhone = ScreenType.of(context).isPhone;
 
     Widget body;
     if (_loading) {
@@ -554,50 +529,29 @@ class _DetailPageState extends State<DetailPage> {
           SliverToBoxAdapter(child: SizedBox(height: topPadding)),
           ...widget.layout.buildSlivers(context, _data!),
           // The same room under the last section as on Home.
-          SliverToBoxAdapter(child: SizedBox(height: (isPhone ? 48 : 8) + 24)),
+          SliverToBoxAdapter(child: SizedBox(height: pageBottom(context, 32))),
         ],
       );
     }
 
     body = _StartFocus(node: _start, child: body);
 
-    // Only phones show a Back button: TVs go back with the remote, computers with Esc or the
-    // mouse's back button (_GoBackKeys). Layouts with a floating one use it in every state
-    // (loading, error and loaded), fixed in place, so it never changes style or position.
+    // Back is in the app's top bar (TVs use the remote's; computers can also use Esc or the
+    // mouse's back button, see _GoBackKeys).
     final backdrop = _data == null ? null : widget.layout.backdropOf(_data!);
-    if (widget.layout.floatingBackButton) {
-      final edgeToEdge = widget.layout.edgeToEdge;
-      final sides = edgeToEdge ? pageSides(context, extra: 12) : EdgeInsets.zero;
-      final offset = widget.layout.backButtonOffset;
-      final backButton = !isPhone
-          ? null
-          : Positioned(
-              top: topPadding + offset.dy,
-              left: widget.layout.backButtonOnRight ? null : sides.left + offset.dx,
-              right: widget.layout.backButtonOnRight ? sides.right + offset.dx : null,
-              child: _FloatingIconButton(
-                icon: appIcons.back,
-                label: 'Back',
-                filled: _scrolled,
-                onPress: () => context.pop(),
-              ),
-            );
+    if (widget.layout.noAppBar) {
       final Widget page;
-      if (!edgeToEdge) {
-        page = Padding(
-          padding: pageSides(context, extra: 12),
-          child: Stack(children: [body, ?backButton]),
-        );
+      if (!widget.layout.edgeToEdge) {
+        page = Padding(padding: pageSides(context, extra: 12), child: body);
       } else {
         // No side padding here: each part adds its own, so rows can scroll to the screen's edge.
         page = Stack(
           children: [
             if (backdrop != null)
               Positioned.fill(
-                child: _PageBackdrop(item: backdrop, scroll: _scroll, soft: widget.layout is PersonLayout),
+                child: _PageBackdrop(item: backdrop, scroll: _scroll, collage: widget.layout.collageOf(_data!)),
               ),
             _BackdropScope(child: body),
-            ?backButton,
           ],
         );
       }
@@ -613,9 +567,7 @@ class _DetailPageState extends State<DetailPage> {
         child: Padding(
           padding: EdgeInsets.only(top: pageTop(context) - 12),
           child: AppBar(
-            // Only phones: TVs go back with the remote, computers with Esc or the mouse.
-            automaticallyImplyLeading: false,
-            leading: isPhone ? BackButton(onPressed: () => context.pop()) : null,
+            automaticallyImplyLeading: false, // Back is in the app's top bar
             title: title == null ? null : Text(title),
           ),
         ),
