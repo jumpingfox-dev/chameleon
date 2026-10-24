@@ -6,7 +6,9 @@
 #      signed iOS app (.ipa), side by side;
 #   2. once both have built, tag the commit and publish a GitHub release with
 #      docs/release-notes/<version>.md as its notes and the three files attached;
-#   3. upload the iOS build to TestFlight.
+#   3. upload the iOS build to TestFlight, and the Android bundle to Google Play's closed testing
+#      track (alpha) with the notes' "What's new" text. promote.yml moves it on to open testing
+#      (beta) a week later, and to production a week after that.
 #
 # Run it by hand from the Actions tab with "dry run" ticked to build and sign everything without
 # releasing: the files are kept on the run's page for a week.
@@ -22,6 +24,8 @@
 #   APP_STORE_CONNECT_KEY_ID     the App Store Connect API key's ID
 #   APP_STORE_CONNECT_ISSUER_ID  its issuer ID
 #   APP_STORE_CONNECT_KEY_P8     the key itself (the .p8 file's contents)
+#   PLAY_SERVICE_ACCOUNT_JSON    the Google Play service account's key (the .json file's contents);
+#                                without it the Play upload is skipped, with a warning
 
 name: Release
 
@@ -286,3 +290,58 @@ jobs:
           printf '%s\n' "$KEY_P8" > "$HOME/.appstoreconnect/private_keys/AuthKey_$KEY_ID.p8"
           xcrun altool --upload-app --type ios --file dist/*.ipa --apiKey "$KEY_ID" --apiIssuer "$ISSUER_ID"
           rm -f "$HOME/.appstoreconnect/private_keys/AuthKey_$KEY_ID.p8"
+
+  play:
+    name: Upload to Google Play
+    needs: [check, publish]
+    runs-on: ubuntu-latest
+    env:
+      VERSION: ${{ needs.check.outputs.version }}
+      BUILD: ${{ needs.check.outputs.build }}
+    steps:
+      - name: Is there a Play key?
+        id: key
+        env:
+          KEY: ${{ secrets.PLAY_SERVICE_ACCOUNT_JSON }}
+        run: |
+          if [ -z "$KEY" ]; then
+            echo "::warning::PLAY_SERVICE_ACCOUNT_JSON isn't set, so $VERSION wasn't uploaded to Google Play. Upload dist/chameleon-$VERSION.aab from the release by hand."
+            echo "set=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "set=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: actions/checkout@v5
+        if: steps.key.outputs.set == 'true'
+
+      - uses: actions/download-artifact@v4
+        if: steps.key.outputs.set == 'true'
+        with:
+          name: android
+          path: dist
+
+      # The first fenced block under the notes' "Google Play" heading.
+      - name: What's new
+        if: steps.key.outputs.set == 'true'
+        run: |
+          mkdir -p whatsnew
+          python3 - "docs/release-notes/$VERSION.md" > whatsnew/whatsnew-en-US <<'PY'
+          import re, sys
+          notes = open(sys.argv[1]).read()
+          section = notes[notes.index("Google Play"):]
+          text = re.search(r"```\n(.*?)```", section, re.S).group(1).strip()
+          if len(text) > 500:
+              sys.exit(f"The Google Play notes are {len(text)} characters; the limit is 500.")
+          print(text)
+          PY
+
+      - uses: r0adkll/upload-google-play@v1
+        if: steps.key.outputs.set == 'true'
+        with:
+          serviceAccountJsonPlainText: ${{ secrets.PLAY_SERVICE_ACCOUNT_JSON }}
+          packageName: dev.jumpingfox.chameleon
+          releaseFiles: dist/chameleon-${{ needs.check.outputs.version }}.aab
+          releaseName: ${{ needs.check.outputs.version }} (${{ needs.check.outputs.build }})
+          track: alpha # closed testing; promote.yml takes it on to beta and production
+          status: completed
+          whatsNewDirectory: whatsnew

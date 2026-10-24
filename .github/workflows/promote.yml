@@ -1,0 +1,86 @@
+# Moves the latest release along Google Play's tracks as it ages. release.yml uploads it to closed
+# testing (alpha); then:
+#   7 days after its release  → open testing (beta)   (PLAY_BETA_AFTER_DAYS)
+#   14 days after its release → production            (PLAY_PRODUCTION_AFTER_DAYS)
+# Checks once a day; does nothing if it's too soon or the track already has it. A missed step is
+# caught up: a release that's due for production goes there from beta, or from alpha if it never
+# reached beta.
+#
+# Run it by hand from the Actions tab to move the latest release to beta or production straight away.
+#
+# Uses the same PLAY_SERVICE_ACCOUNT_JSON secret as release.yml. Note that GitHub pauses scheduled
+# workflows in a repository with no activity for 60 days.
+
+name: Promote on Google Play
+
+on:
+  schedule:
+    - cron: "0 16 * * *" # every day, 16:00 UTC
+  workflow_dispatch:
+    inputs:
+      to:
+        description: Where to move the latest release (auto goes by its age)
+        type: choice
+        options: [auto, beta, production]
+        default: auto
+
+concurrency:
+  group: promote
+  cancel-in-progress: false
+
+jobs:
+  promote:
+    runs-on: ubuntu-latest
+    env:
+      KEY: ${{ secrets.PLAY_SERVICE_ACCOUNT_JSON }}
+      BETA_AFTER: ${{ vars.PLAY_BETA_AFTER_DAYS || 7 }}
+      PRODUCTION_AFTER: ${{ vars.PLAY_PRODUCTION_AFTER_DAYS || 14 }}
+      TO: ${{ github.event_name == 'workflow_dispatch' && inputs.to || 'auto' }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0 # the tags
+
+      - name: Where is the latest release due?
+        id: due
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if [ -z "$KEY" ]; then
+            echo "PLAY_SERVICE_ACCOUNT_JSON isn't set; nothing to do."
+            echo "to=" >> "$GITHUB_OUTPUT"; exit 0
+          fi
+          tag=$(git tag --list 'v*' --sort=-v:refname | head -1)
+          if [ -z "$tag" ]; then
+            echo "No releases yet."
+            echo "to=" >> "$GITHUB_OUTPUT"; exit 0
+          fi
+          full=$(git show "$tag:pubspec.yaml" | grep -m1 '^version:' | awk '{print $2}')
+          build=${full#*+}
+          published=$(gh release view "$tag" --json publishedAt -q .publishedAt)
+          age_days=$(( ( $(date +%s) - $(date -d "$published" +%s) ) / 86400 ))
+          echo "$tag (build $build) was released $age_days days ago."
+          echo "build=$build" >> "$GITHUB_OUTPUT"
+
+          to=$TO
+          if [ "$to" = auto ]; then
+            if [ "$age_days" -ge "$PRODUCTION_AFTER" ]; then to=production
+            elif [ "$age_days" -ge "$BETA_AFTER" ]; then to=beta
+            else
+              echo "Staying on alpha: beta after $BETA_AFTER days, production after $PRODUCTION_AFTER."
+              to=
+            fi
+          fi
+          echo "to=$to" >> "$GITHUB_OUTPUT"
+
+      - name: Promote
+        if: steps.due.outputs.to != ''
+        env:
+          PLAY_SERVICE_ACCOUNT_JSON: ${{ secrets.PLAY_SERVICE_ACCOUNT_JSON }}
+          TO_TRACK: ${{ steps.due.outputs.to }}
+          BUILD: ${{ steps.due.outputs.build }}
+        run: |
+          pip install --quiet google-auth requests
+          # From the track before it, or from alpha if a step was missed.
+          from=$([ "$TO_TRACK" = production ] && echo beta,alpha || echo alpha)
+          python3 tool/play_promote.py dev.jumpingfox.chameleon "$TO_TRACK" "$from" "$BUILD"
