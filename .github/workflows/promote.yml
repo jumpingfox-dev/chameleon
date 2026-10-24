@@ -8,6 +8,10 @@
 #
 # Run it by hand from the Actions tab to move the latest release to beta or production straight away.
 #
+# Off until the repository variable PLAY_PROMOTE is set to "on": a new personal Play account can't
+# use open testing or production until a closed test has had 12 testers for 14 days and Google
+# has granted production access. Until then releases stay on alpha.
+#
 # Uses the same PLAY_SERVICE_ACCOUNT_JSON secret as release.yml. Note that GitHub pauses scheduled
 # workflows in a repository with no activity for 60 days.
 
@@ -36,6 +40,7 @@ jobs:
       BETA_AFTER: ${{ vars.PLAY_BETA_AFTER_DAYS || 7 }}
       PRODUCTION_AFTER: ${{ vars.PLAY_PRODUCTION_AFTER_DAYS || 14 }}
       TO: ${{ github.event_name == 'workflow_dispatch' && inputs.to || 'auto' }}
+      ENABLED: ${{ vars.PLAY_PROMOTE == 'on' }}
     steps:
       - uses: actions/checkout@v5
         with:
@@ -48,6 +53,10 @@ jobs:
         run: |
           if [ -z "$KEY" ]; then
             echo "PLAY_SERVICE_ACCOUNT_JSON isn't set; nothing to do."
+            echo "to=" >> "$GITHUB_OUTPUT"; exit 0
+          fi
+          if [ "$ENABLED" != true ]; then
+            echo "Promotion is off (set the PLAY_PROMOTE variable to \"on\" once the app has production access); releases stay on alpha."
             echo "to=" >> "$GITHUB_OUTPUT"; exit 0
           fi
           tag=$(git tag --list 'v*' --sort=-v:refname | head -1)
