@@ -378,7 +378,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             Expanded(child: _buildBody(context, view)),
-            _LetterRail(
+            ClearOfHiddenTopBar(child: _LetterRail(
               view: view,
               letters: _letters,
               // Until the server says which letters have titles, every letter works.
@@ -386,7 +386,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
               onLetter: _jumpTo,
               onToggleView: () => libraryViewOverride.value =
               view == LibraryView.poster ? LibraryView.thumbnail : LibraryView.poster,
-            ),
+            )),
           ],
         ),
         ),
@@ -557,10 +557,13 @@ class _LetterButton extends StatelessWidget {
       semanticsLabel: 'Jump to $letter',
       builder: (context, states, _) {
         final highlighted = isHighlighted(states);
-        return AnimatedContainer(
-          duration: const Duration(milliseconds: 100),
+        // Sized at once, not animated: as the page's height changes (the top bar sliding away),
+        // letters easing to their new height wouldn't fit for a moment. Only the highlight fades.
+        return SizedBox(
           width: double.infinity,
           height: height,
+          child: AnimatedContainer(
+          duration: const Duration(milliseconds: 100),
           alignment: Alignment.center,
           decoration: BoxDecoration(
             color: highlighted ? theme.colorScheme.secondaryContainer : null,
@@ -576,6 +579,7 @@ class _LetterButton extends StatelessWidget {
                   ? theme.colorScheme.onSurface
                   : theme.colorScheme.onSurfaceVariant,
             ),
+          ),
           ),
         );
       },

@@ -218,7 +218,8 @@ class PlaybackSettings extends ChangeNotifier {
   static Future<PlaybackSettings> load() async => PlaybackSettings._().._readSaved();
 
   void _readSaved() {
-    _read(appDefaults.section('playback')); // assets/defaults.json, under anything saved
+    // assets/defaults.json, under anything saved.
+    _read(appDefaults.settings('playback', const [], const {'skip'}));
     try {
       final raw = storage.getString(_key);
       if (raw != null) _read(jsonDecode(raw) as Map<String, dynamic>);

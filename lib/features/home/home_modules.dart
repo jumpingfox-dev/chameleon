@@ -20,7 +20,6 @@ import '../../widgets/nav_button.dart';
 import '../../widgets/tappable.dart';
 import '../library/item_menu.dart';
 import '../library/poster_card.dart';
-import '../previews/frames_preview.dart';
 import '../../core/focus/scroll_into_view.dart';
 import '../../theme/theme.dart';
 import '../../widgets/remote_text_field.dart';
@@ -465,7 +464,8 @@ class _HomeModuleViewState extends State<HomeModuleView>
 
   /// View toggle, move up, move down and remove: shown next to the title in edit mode.
   List<Widget> _editControls(BuildContext context) => [
-    if (widget.module.type != HomeModuleType.carousel)
+    // Not for the banner or My Media, which have one look each.
+    if (widget.module.type != HomeModuleType.carousel && widget.module.type != HomeModuleType.myMedia)
       IconButton(
         onPressed: () => homeLayout.setView(
           widget.module.id,
@@ -555,7 +555,7 @@ class _HomeModuleViewState extends State<HomeModuleView>
             // The banner is a rounded card, so it keeps a margin rather than running to the edge.
               Padding(padding: pageSides(context), child: _carousel(context))
             else if (isMyMedia)
-              _MyMediaRow(sides: _rowSides(context))
+              _MyMediaRow(sides: _rowSides(context), editing: widget.editing)
             else
               _row(context, _viewFor(context), captions: captions),
           ],
@@ -685,11 +685,6 @@ class _HomeModuleViewState extends State<HomeModuleView>
       );
     }
 
-    // Scrolled along with a remote, the card before the first one in view would peek out of
-    // the margin as a sliver. Phones keep rows running to the edge, for swiping.
-    if (!ScreenType.of(context).isPhone) {
-      content = ClipRect(clipper: _LeftMarginClipper(pageSides(context).left / 2), child: content);
-    }
     return SizedBox(height: rowHeight, child: content);
   }
 
@@ -747,15 +742,16 @@ class _HomeModuleViewState extends State<HomeModuleView>
     position.animateTo(offset, duration: const Duration(milliseconds: 200), curve: Curves.easeOutCubic);
   }
 
-  /// A tile's width in a row. Bigger on wider screens (a TV is watched from across the room),
-  /// where posters and thumbnails are the same height, so a poster widened for its preview is
-  /// a thumbnail's size. Phones keep theirs.
+  /// A tile's width in a row. On wider screens it's sized to the row, so as many fit whatever
+  /// the screen: 3½ thumbnails (the half one says there's more), and about 6 posters. Phones
+  /// keep theirs.
   static double _tileWidth(BuildContext context, LibraryView view) {
-    final isPhone = ScreenType.of(context).isPhone;
-    return switch (view) {
-      LibraryView.poster => isPhone ? 150.0 : PosterCard.height * 2 / 3, // 147 × 220
-      LibraryView.thumbnail => isPhone ? 280.0 : PosterCard.height * 16 / 9, // 391 × 220
-    };
+    if (ScreenType.of(context).isPhone) return view == LibraryView.poster ? 150.0 : 280.0;
+    final sides = _rowSides(context);
+    final row = MediaQuery.sizeOf(context).width - sides.horizontal;
+    final across = view == LibraryView.poster ? 6.3 : 3.5;
+    // The row's width, less the gaps between the tiles that show.
+    return (row - (across.ceil() - 1) * _rowGap) / across;
   }
 
   /// A row's padding at its ends: the first card in line with the section's title, and the
@@ -1002,13 +998,6 @@ class _CarouselState extends State<_Carousel> {
   int _page = 0;
 
   bool _engaged = false; // focus or pointer is on the carousel
-  bool _stills = false; // the showing slide's stills are playing
-
-  /// The showing slide's stills have played through: they aren't started again.
-  bool _stillsDone = false;
-
-  /// After the stills: the slide stays one interval, then the next comes.
-  Timer? _afterStills;
   DateTime _lastInteraction = DateTime.now();
 
   /// Each slide's own buttons. (Not one pair handed from slide to slide: a focused button whose
@@ -1044,7 +1033,6 @@ class _CarouselState extends State<_Carousel> {
   @override
   void dispose() {
     _timer?.cancel();
-    _afterStills?.cancel();
     _controller.dispose();
     for (final node in [..._playFocus, ..._infoFocus]) {
       node.dispose();
@@ -1059,8 +1047,6 @@ class _CarouselState extends State<_Carousel> {
     _timer?.cancel();
     if (widget.items.length < 2) return;
     _timer = Timer.periodic(_interval, (_) {
-      // Stills playing hold the slide until they're finished (see _onStillsFinished).
-      if (_stills || _stillsDone) return; // after them, _afterStills moves on
       final idle = DateTime.now().difference(_lastInteraction);
       if (_engaged && idle < _idleResume) return; // someone's here: hold still
       _goTo(_page + 1);
@@ -1068,20 +1054,9 @@ class _CarouselState extends State<_Carousel> {
   }
 
   void _setEngaged(bool engaged) {
-    if (engaged != _engaged && mounted) setState(() => _engaged = engaged); // the stills follow it
+    if (engaged != _engaged && mounted) setState(() => _engaged = engaged);
     _touch();
     if (!engaged) _restartTimer(); // leaving: a full 8 seconds before the next slide
-  }
-
-  /// The showing slide's stills have played through once: the backdrop comes back, the slide
-  /// stays one interval, then the next comes. Its own stills start after the usual moment.
-  void _onStillsFinished() {
-    setState(() {
-      _stills = false;
-      _stillsDone = true;
-    });
-    _afterStills?.cancel();
-    _afterStills = Timer(_interval, () => _goTo(_page + 1));
   }
 
   /// Slides to a page, wrapping around at either end.
@@ -1141,9 +1116,6 @@ class _CarouselState extends State<_Carousel> {
                       ? _infoFocus[page]
                       : null;
                   setState(() => _page = page);
-                  _stills = false; // the last slide's stills stopped with it
-                  _stillsDone = false;
-                  _afterStills?.cancel();
                   _restartTimer();
                   if (refocus != null) {
                     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -1153,16 +1125,6 @@ class _CarouselState extends State<_Carousel> {
                 },
                 itemBuilder: (context, i) => _CarouselSlide(
                   item: widget.items[i],
-                  // The showing slide's stills, while someone's on the carousel.
-                  previewing: _engaged && i == _page && !_stillsDone,
-                  onStills: (playing) {
-                    if (i != _page) return;
-                    _stills = playing;
-                    if (!playing) _restartTimer(); // a full interval before the next slide
-                  },
-                  onStillsFinished: () {
-                    if (i == _page) _onStillsFinished();
-                  },
                   playFocus: _playFocus[i],
                   infoFocus: _infoFocus[i],
                 ),
@@ -1208,19 +1170,9 @@ class _CarouselSlide extends StatefulWidget {
     required this.item,
     this.playFocus,
     this.infoFocus,
-    this.previewing = false,
-    this.onStills,
-    this.onStillsFinished,
   });
 
   final JellyfinItem item;
-  final bool previewing;
-
-  /// Told when this slide's stills start (true) and stop (false) showing.
-  final ValueChanged<bool>? onStills;
-
-  /// Told when this slide's stills have played through once.
-  final VoidCallback? onStillsFinished;
   final FocusNode? playFocus;
   final FocusNode? infoFocus;
 
@@ -1274,17 +1226,7 @@ class _CarouselSlideState extends State<_CarouselSlide> {
               errorBuilder: (_, _, _) =>
                   ColoredBox(color: context.colors.surfaceContainerHighest),
             ),
-            // After a moment on the carousel, stills from the title in place of the backdrop
-            // (under the fades, so the text stays readable). Not on phones, which have no focus
-            // or hover.
-            if (!isPhone && FramesPreview.supports(item))
-              FramesPreview(
-                item: item,
-                active: widget.previewing,
-                onShowing: widget.onStills,
-                onFinished: widget.onStillsFinished,
-              ),
-            // Everything over the artwork, stills or not.
+            // Everything over the artwork. (No preview here: the banner keeps its backdrop.)
             Positioned.fill(
                 child: Stack(
                   fit: StackFit.expand,
@@ -1595,25 +1537,17 @@ class _PlaceholderBanner extends StatelessWidget {
 
 /// Hides everything in the first [left] pixels of a row, and nothing else (a focused card can
 /// still grow past the row's top and bottom).
-class _LeftMarginClipper extends CustomClipper<Rect> {
-  const _LeftMarginClipper(this.left);
-
-  final double left;
-
-  @override
-  Rect getClip(Size size) => Rect.fromLTRB(left, -size.height, size.width * 2, size.height * 2);
-
-  @override
-  bool shouldReclip(_LeftMarginClipper old) => old.left != left;
-}
-
 // ─── My Media ────────────────────────────────────────────────────────────────
 
-/// Your libraries as colored tiles, each with its icon and name, opening the library.
+/// Your libraries as tiles of their own artwork (or a colored tile with its icon and name,
+/// without any), each opening the library.
 class _MyMediaRow extends StatelessWidget {
-  const _MyMediaRow({required this.sides});
+  const _MyMediaRow({required this.sides, this.editing = false});
 
   final EdgeInsets sides; // the row's padding at its ends
+
+  /// Editing Home: just the tiles' shapes, as other sections show.
+  final bool editing;
 
   /// Tile colors, in turn.
   static const _colors = [
@@ -1627,60 +1561,98 @@ class _MyMediaRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final isPhone = ScreenType.of(context).isPhone;
-    final width = isPhone ? 150.0 : 210.0;
+    // The size, spacing and look of the thumbnails in the rows below.
+    final width = _HomeModuleViewState._tileWidth(context, LibraryView.thumbnail);
     final height = width * 9 / 16;
     final libraries = jellyfin.libraries;
+    // Editing (just the layout), or the libraries not in yet: the tiles' shapes, as the other
+    // sections show them.
+    if (editing || libraries.isEmpty) {
+      return SizedBox(
+        height: height,
+        child: _Pulsing(child: _PlaceholderRow(tileWidth: width, imageHeight: height, captions: false)),
+      );
+    }
     return SizedBox(
-      height: height + 36,
+      height: height,
       child: FocusRow(
         child: ListView.separated(
           scrollDirection: Axis.horizontal,
           padding: sides,
           clipBehavior: Clip.none, // a focused tile grows past the row's ends
           itemCount: libraries.length,
-          separatorBuilder: (_, _) => const SizedBox(width: 12),
+          separatorBuilder: (_, _) => const SizedBox(width: _HomeModuleViewState._rowGap),
           itemBuilder: (context, i) {
             final library = libraries[i];
+            // As a card does: the first grows away from the screen's left edge, the last from its right.
+            final anchor = i == 0
+                ? Alignment.centerLeft
+                : i == libraries.length - 1
+                ? Alignment.centerRight
+                : Alignment.center;
             return SizedBox(
               width: width,
               child: Tappable(
                 onPress: () => context.go('/home/library/${library.id}'),
                 semanticsLabel: library.name,
+                // Like a card: resting in a little from its tile's edges, filling it when focused,
+                // with the focus border over the artwork's edge.
                 builder: (context, states, child) {
                   final active = isHighlighted(states);
-                  return Column(
-                    spacing: 8,
-                    children: [
-                      AnimatedScale(
-                        scale: active ? 1.05 : 1,
-                        duration: const Duration(milliseconds: 150),
-                        curve: Curves.easeOut,
-                        child: AnimatedContainer(
-                          duration: const Duration(milliseconds: 150),
-                          width: width,
-                          height: height,
-                          decoration: BoxDecoration(
-                            color: _colors[i % _colors.length],
-                            borderRadius: BorderRadius.circular(10),
-                            border: Border.all(
-                              color: active ? context.colors.onSurface : const Color(0x00000000),
-                              width: 2.5,
-                            ),
-                          ),
-                          child: child,
+                  return AnimatedPadding(
+                    padding: active ? EdgeInsets.zero : PosterCard.restInset(height, anchor: anchor),
+                    duration: const Duration(milliseconds: 150),
+                    curve: Curves.easeOut,
+                    child: AnimatedContainer(
+                      duration: const Duration(milliseconds: 150),
+                      clipBehavior: Clip.antiAlias,
+                      decoration: BoxDecoration(borderRadius: BorderRadius.circular(8)),
+                      foregroundDecoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(
+                          color: active ? context.colors.primary : const Color(0x00000000),
+                          width: PosterCard.borderWidth,
                         ),
                       ),
-                      Text(
-                        library.name,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: context.text.bodyLarge,
-                      ),
-                    ],
+                      child: child,
+                    ),
                   );
                 },
-                child: Icon(libraryIcon(library.collectionType), size: height * 0.42, color: const Color(0xFFFFFFFF)),
+                // The library's own artwork from Jellyfin; its icon if it has none.
+                child: Image.network(
+                  jellyfin.client!.images.url(
+                    itemId: library.id,
+                    type: JellyfinImagesApi.typePrimary,
+                    fillWidth: (width * View.of(context).devicePixelRatio).round(),
+                    quality: 90,
+                  ),
+                  fit: BoxFit.cover,
+                  width: double.infinity,
+                  height: double.infinity,
+                  // A placeholder, pulsing, until the artwork arrives.
+                  frameBuilder: (context, child, frame, loaded) =>
+                      loaded || frame != null ? child : const _Pulsing(child: _PlaceholderBlock()),
+                  // (Jellyfin's own library pictures have the name on them, so it isn't repeated.)
+                  errorBuilder: (_, _, _) => ColoredBox(
+                    color: _colors[i % _colors.length],
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      spacing: 6,
+                      children: [
+                        Icon(libraryIcon(library.collectionType), size: height * 0.36, color: const Color(0xFFFFFFFF)),
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 8),
+                          child: Text(
+                            library.name,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: context.text.titleMedium?.copyWith(color: const Color(0xFFFFFFFF)),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
               ),
             );
           },

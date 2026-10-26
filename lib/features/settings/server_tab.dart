@@ -148,8 +148,12 @@ class _ServerCardState extends State<_ServerCard> {
 
     return _SettingsCard(
       children: [
+        // ── Servers: the ones signed in on this device ──
+        const _SectionTitle('Servers', first: true),
+        const _ServersSetting(),
+
         // ── Connection ──
-        const _SectionTitle('Connection', first: true),
+        const _SectionTitle('Connection'),
         _InfoRow(label: 'Server', value: waiting ? '…' : info?.name ?? 'Unreachable'),
         _InfoRow(label: 'Address', value: jellyfin.client?.baseUrl ?? 'Not connected'),
         _InfoRow(label: 'Version', value: waiting ? '…' : info?.version ?? '—'),
@@ -263,4 +267,103 @@ class _SessionRow extends StatelessWidget {
       ),
     );
   }
+}
+
+/// The servers signed in on this device: the one in use, and the others to switch to (on
+/// "Who's watching?", with that server's people) or remove. Plus Add a server.
+class _ServersSetting extends StatelessWidget {
+  const _ServersSetting();
+
+  Future<void> _remove(BuildContext context, String server, String name) async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('Remove $name?'),
+        content: const Text('Everyone signed in to it on this device is signed out. You can add it again later.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.of(context).pop(false), child: const Text('Keep')),
+          FilledButton(onPressed: () => Navigator.of(context).pop(true), child: const Text('Remove')),
+        ],
+      ),
+    );
+    if (ok == true) await jellyfin.forgetServer(server);
+  }
+
+  @override
+  Widget build(BuildContext context) => ListenableBuilder(
+    listenable: jellyfin,
+    builder: (context, _) {
+      final current = jellyfin.client?.baseUrl ?? jellyfin.lastServer;
+      final muted = context.text.bodyMedium?.copyWith(color: context.colors.onSurfaceVariant);
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        spacing: 8,
+        children: [
+          for (final server in jellyfin.servers)
+            FutureBuilder(
+              future: jellyfin.nameOf(server),
+              builder: (context, snap) {
+                final name = snap.data ?? displayServerUrl(server);
+                final inUse = server == current;
+                final people = jellyfin.accounts.where((a) => a.server == server).length;
+                return Tappable(
+                  // Another server: pick who's watching on it.
+                  onPress: inUse
+                      ? null
+                      : () => GoRouter.of(context).push(
+                          Uri(path: '/profiles', queryParameters: {'pick': '1', 'server': server}).toString(),
+                        ),
+                  builder: (context, states, child) => AnimatedContainer(
+                    duration: const Duration(milliseconds: 120),
+                    padding: const EdgeInsets.fromLTRB(12, 10, 4, 10),
+                    decoration: BoxDecoration(
+                      color: isHighlighted(states) ? context.colors.surfaceContainerHighest : context.colors.surfaceContainerHigh,
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: child,
+                  ),
+                  child: Row(
+                    spacing: 12,
+                    children: [
+                      Icon(appIcons.server, color: inUse ? context.colors.primary : null, fill: 1),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(name, style: context.text.titleMedium),
+                            Text(
+                              '${displayServerUrl(server)} · $people ${people == 1 ? 'account' : 'accounts'}',
+                              style: muted,
+                            ),
+                          ],
+                        ),
+                      ),
+                      if (inUse)
+                        Padding(
+                          padding: const EdgeInsets.only(right: 8),
+                          child: Text('In use', style: muted?.copyWith(color: context.colors.primary)),
+                        )
+                      else
+                        IconButton(
+                          onPressed: () => _remove(context, server, name),
+                          icon: Icon(appIcons.delete, fill: 1),
+                        ),
+                    ],
+                  ),
+                );
+              },
+            ),
+          Align(
+            alignment: Alignment.centerLeft,
+            child: OutlinedButton.icon(
+              // Sign-in from the start, with the address empty.
+              onPressed: () => GoRouter.of(context).push('/login?add=1&fresh=1'),
+              icon: Icon(appIcons.server, size: 18, fill: 1),
+              label: const Text('Add a server'),
+            ),
+          ),
+        ],
+      );
+    },
+  );
 }

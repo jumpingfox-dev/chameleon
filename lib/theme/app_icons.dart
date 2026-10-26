@@ -85,11 +85,11 @@ class AppIconSet {
       Symbols.theater_comedy_rounded
   );
   IconData get back => _pick(
-      Symbols.arrow_back_ios_new_rounded,
-      FPhosphorFillIcons.caretLeft,
-      FLucideIcons.chevronLeft,
-      CupertinoIcons.chevron_back,
-      FluentIcons.chevron_left_24_filled
+      Symbols.arrow_back_rounded,
+      FPhosphorFillIcons.arrowLeft,
+      FLucideIcons.arrowLeft,
+      CupertinoIcons.arrow_left,
+      FluentIcons.arrow_left_24_filled
   );
   IconData get forward => _pick(
       Symbols.arrow_forward_ios_rounded,
@@ -112,20 +112,6 @@ class AppIconSet {
       FLucideIcons.panelLeft,
       CupertinoIcons.sidebar_left,
       FluentIcons.panel_left_24_filled
-  );
-  IconData get cast => _pick(
-      Symbols.cast_rounded,
-      FPhosphorFillIcons.screencast,
-      FLucideIcons.cast,
-      CupertinoIcons.tv,
-      FluentIcons.cast_24_filled
-  );
-  IconData get castConnected => _pick(
-      Symbols.cast_connected_rounded,
-      FPhosphorFillIcons.screencast,
-      FLucideIcons.cast,
-      CupertinoIcons.tv_fill,
-      FluentIcons.cast_multiple_24_filled
   );
   IconData get download => _pick(
       Symbols.download_rounded,

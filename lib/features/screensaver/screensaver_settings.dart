@@ -134,7 +134,7 @@ class ScreensaverSettings extends ChangeNotifier {
 
   void _readSaved() {
     // assets/defaults.json, under anything saved. Its style is one for TVs and one for the rest.
-    final defaults = appDefaults.section('screensaver');
+    final defaults = appDefaults.settings('appearance', const ['screensaver']);
     _read({
       ...defaults,
       'style': ?(ScreenType.isTvDevice ? defaults['styleOnTv'] : defaults['styleElsewhere']),

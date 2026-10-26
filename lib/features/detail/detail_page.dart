@@ -163,6 +163,8 @@ Future<JellyfinItem?> nextEpisodeFor(String seriesId) async {
 class _DetailRoute extends PageRouteBuilder<void> {
   _DetailRoute({required super.pageBuilder})
     : super(
+        // The page's title, for the app's top bar (see detailTitleOf), once it's loaded.
+        settings: RouteSettings(name: 'detail', arguments: ValueNotifier<String?>(null)),
         transitionDuration: const Duration(milliseconds: 200),
         reverseTransitionDuration: const Duration(milliseconds: 200),
         transitionsBuilder: (context, animation, _, child) => FadeTransition(
@@ -185,6 +187,11 @@ Future<void> showDetailPage(
     ),
   ),
 );
+
+/// The title of [route] if it's a detail page (a movie's, a show's, a person's, ...), or null.
+/// It's null until the page has loaded, and the notifier tells when it changes.
+ValueNotifier<String?>? detailTitleOf(Route<dynamic>? route) =>
+    route is _DetailRoute ? route.settings.arguments as ValueNotifier<String?> : null;
 
 /// Closes every open detail page, e.g. before going to a full page like a genre.
 void closeDetailPages(BuildContext context) => Navigator.of(context).popUntil((route) => route is! _DetailRoute);
@@ -286,8 +293,8 @@ abstract class DetailLayout {
   /// The item whose backdrop fills the top of the page, behind everything, if any.
   JellyfinItem? backdropOf(DetailData data) => null;
 
-  /// Titles whose posters make the backdrop instead of [backdropOf]'s picture (a person's).
-  List<JellyfinItem> collageOf(DetailData data) => const [];
+  /// True if [backdropOf]'s picture isn't the page's own, so it's shown blurred (a person's).
+  bool get blurBackdrop => false;
 
   /// True if the page leaves its sides to each part (they're all [_BackdropScope]-aware), so
   /// rows can scroll to the screen's edge.
@@ -307,15 +314,16 @@ class PersonLayout extends DetailLayout {
       SliverToBoxAdapter(child: _PersonHero(person: data.item, movies: movies.length, shows: shows.length)),
       if (movies.isNotEmpty) SliverToBoxAdapter(child: _ItemRow(title: 'Movies', items: movies)),
       if (shows.isNotEmpty) SliverToBoxAdapter(child: _ItemRow(title: 'Shows', items: shows)),
+      SliverToBoxAdapter(child: _PersonCollections(titles: data.children)),
     ];
   }
 
+  /// Their best-rated title's, blurred.
   @override
-  JellyfinItem? backdropOf(DetailData data) => data.item;
+  JellyfinItem? backdropOf(DetailData data) => _personBackdrop(data.children);
 
-  /// A wall of everything they're in.
   @override
-  List<JellyfinItem> collageOf(DetailData data) => data.children;
+  bool get blurBackdrop => true;
 
   @override
   bool get edgeToEdge => true;
@@ -503,6 +511,11 @@ class _DetailPageState extends State<DetailPage> {
 
   @override
   Widget build(BuildContext context) {
+    // Its name in the app's top bar.
+    if (detailTitleOf(ModalRoute.of(context)) case final title?) {
+      final name = _data?.item.name;
+      if (title.value != name) WidgetsBinding.instance.addPostFrameCallback((_) => title.value = name);
+    }
     final topPadding = widget.layout.topPadding;
 
     Widget body;
@@ -549,7 +562,7 @@ class _DetailPageState extends State<DetailPage> {
           children: [
             if (backdrop != null)
               Positioned.fill(
-                child: _PageBackdrop(item: backdrop, scroll: _scroll, collage: widget.layout.collageOf(_data!)),
+                child: _PageBackdrop(item: backdrop, scroll: _scroll, blurred: widget.layout.blurBackdrop),
               ),
             _BackdropScope(child: body),
           ],

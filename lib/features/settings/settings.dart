@@ -25,7 +25,6 @@ import '../screensaver/screensaver_settings.dart';
 import 'custom_theme_editor.dart';
 import '../previews/youtube_notice.dart';
 import 'choice_picker.dart';
-import '../../widgets/app_logo.dart';
 import '../auth/profile_actions.dart';
 import '../../core/focus/focus_reveal.dart';
 import '../../core/format/format.dart';
@@ -64,11 +63,6 @@ final _tabs = <_SettingsTab>[
     label: 'Playback',
     icon: (i) => i.play,
     build: () => const _PlaybackCard(),
-  ),
-  (
-    label: 'Screensaver',
-    icon: (i) => i.photos,
-    build: () => const _ScreensaverCard(),
   ),
   (label: 'Server', icon: (i) => i.server, build: () => const _ServerCard()),
   (
@@ -169,7 +163,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         Padding(
                           key: _sections[t.label],
                           padding: EdgeInsets.only(top: i == 0 ? 0 : 28, bottom: 10, left: 4),
-                          child: Text(t.label, style: context.text.titleLarge),
+                          child: Row(
+                            spacing: 10,
+                            children: [
+                              Icon(t.icon(appIcons), color: context.colors.primary, fill: 1),
+                              Text(t.label, style: context.text.titleLarge),
+                            ],
+                          ),
                         ),
                         _SettingsView(tab: t.label, child: t.build()),
                       ],
@@ -182,7 +182,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 }
 
-/// One group in the Settings list, opening its page.
+/// One group in a Settings section's box, opening its page.
 class _SettingsLink extends StatelessWidget {
   const _SettingsLink({required this.label, required this.onPress});
 
@@ -194,17 +194,11 @@ class _SettingsLink extends StatelessWidget {
     final colors = context.colors;
     return Tappable(
       onPress: onPress,
+      // A row in its section's box: lit up under the remote or pointer (the box rounds it off).
       builder: (context, states, child) => AnimatedContainer(
         duration: const Duration(milliseconds: 120),
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
-        decoration: BoxDecoration(
-          color: isHighlighted(states) ? colors.surfaceContainerHigh : colors.surfaceContainer,
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(
-            color: isHighlighted(states) ? colors.primary : const Color(0x00000000),
-            width: 2,
-          ),
-        ),
+        color: isHighlighted(states) ? colors.surfaceContainerHighest : const Color(0x00000000),
         child: child,
       ),
       child: Text(label, style: context.text.titleMedium),
@@ -223,7 +217,7 @@ class _SettingsCard extends StatelessWidget {
   List<({String? title, String? description, List<Widget> children})> get _groups {
     final groups = <({String? title, String? description, List<Widget> children})>[];
     for (final child in children) {
-      if (child is _SectionTitle) {
+      if (child is _SectionTitle && !child.inline) {
         groups.add((title: child.text, description: child.description, children: []));
       } else if (groups.isEmpty) {
         groups.add((title: null, description: null, children: [child]));
@@ -242,18 +236,23 @@ class _SettingsCard extends StatelessWidget {
 
     // In the list: one item per group, opening its page.
     if (view != null && view.group == null) {
-      return Column(
-        crossAxisAlignment: .stretch,
-        spacing: 8,
-        children: [
-          for (final g in groups)
-            _SettingsLink(
-              label: nameOf(g.title),
-              onPress: () => context.push(
-                Uri(path: '/settings', queryParameters: {'tab': view.tab, 'group': nameOf(g.title)}).toString(),
+      // One rounded box for the section, its groups one under another with dividers between.
+      return Card(
+        clipBehavior: Clip.antiAlias,
+        child: Column(
+          crossAxisAlignment: .stretch,
+          children: [
+            for (final (i, g) in groups.indexed) ...[
+              if (i > 0) Divider(height: 1, thickness: 1, color: context.colors.outlineVariant.withValues(alpha: 0.5)),
+              _SettingsLink(
+                label: nameOf(g.title),
+                onPress: () => context.push(
+                  Uri(path: '/settings', queryParameters: {'tab': view.tab, 'group': nameOf(g.title)}).toString(),
+                ),
               ),
-            ),
-        ],
+            ],
+          ],
+        ),
       );
     }
 
@@ -454,6 +453,14 @@ class _AppearanceCard extends StatelessWidget {
             ),
             const _BottomBarSetting(),
           ],
+
+          // ── Screensaver: everything about it on one page ──
+          const _SectionTitle(
+            'Screensaver',
+            description: 'Comes on after a while without a button press, and never during a video. '
+                'Any button or touch brings the app back.',
+          ),
+          const _ScreensaverCard(),
         ],
       );
     },
@@ -574,11 +581,6 @@ class _AccountCardState extends State<_AccountCard> {
           ],
 
           // ── Server-side preferences ──
-          const _SectionTitle(
-            'Languages & Subtitles',
-            description: 'Saved to your Jellyfin account, so other apps use them too.',
-          ),
-
           if (s.loading)
             const Padding(
               padding: EdgeInsets.symmetric(vertical: 16),
@@ -589,31 +591,6 @@ class _AccountCardState extends State<_AccountCard> {
               Text(s.error!, style: muted?.copyWith(color: context.colors.error)),
               const SizedBox(height: 8),
             ],
-            _PickerSetting<Language>(
-              label: 'Audio language',
-              value: s.audioLanguage,
-              options: s.languages,
-              format: (l) => l.name,
-              searchable: true,
-              onChange: s.setAudioLanguage,
-            ),
-            const SizedBox(height: 16),
-            _PickerSetting<Language>(
-              label: 'Subtitle language',
-              value: s.subtitleLanguage,
-              options: s.languages,
-              format: (l) => l.name,
-              searchable: true,
-              onChange: s.setSubtitleLanguage,
-            ),
-            const SizedBox(height: 16),
-            _PickerSetting<SubtitleMode>(
-              label: 'When to show subtitles',
-              value: s.subtitleMode,
-              options: SubtitleMode.values,
-              format: (m) => m.label,
-              onChange: s.setSubtitleMode,
-            ),
 
             // ── Parental controls (read-only) ──
             _SectionTitle(
@@ -670,7 +647,11 @@ class _AccountCardState extends State<_AccountCard> {
 /// A heading inside a settings card, with an optional line of explanation under it.
 /// Brings its own spacing: a gap above (unless [first]) and a smaller one below.
 class _SectionTitle extends StatelessWidget {
-  const _SectionTitle(this.text, {this.description, this.first = false});
+  const _SectionTitle(this.text, {this.description, this.first = false, this.inline = false});
+
+  /// A heading inside a group's page (the screensaver's Backdrops, say) rather than one that
+  /// starts a group of its own in the Settings list.
+  final bool inline;
 
   final String text;
   final String? description;
@@ -834,12 +815,14 @@ class _PlaybackCard extends StatelessWidget {
 
       return _SettingsCard(
         children: [
-          // ── Skipping ──
+          // ── Episodes: skipping, and what comes next ──
+          const _SectionTitle('Episodes', first: true),
           const _SectionTitle(
             'Skipping',
             description: 'What happens when an intro, recap, credits or preview starts. '
                 'Needs Media Segments on your server, or chapters named "Intro", "Credits" and so on.',
             first: true,
+            inline: true,
           ),
           for (final (i, kind) in SkipKind.values.indexed) ...[
             if (i > 0) _gap,
@@ -853,7 +836,7 @@ class _PlaybackCard extends StatelessWidget {
           ],
 
           // ── Up next ──
-          const _SectionTitle('Up Next', description: 'When an episode ends.'),
+          const _SectionTitle('Up Next', description: 'When an episode ends.', inline: true),
           SwitchSetting(
             label: 'Autoplay next episode',
             description: 'Counts down during the credits, then plays the next one.',
@@ -910,7 +893,14 @@ class _PlaybackCard extends StatelessWidget {
           ),
 
           // ── Seeking ──
-          const _SectionTitle('Seeking', description: 'Left and right on the remote, and double-tap on phones.'),
+          // ── Seeking & resuming ──
+          const _SectionTitle('Seeking & Resuming'),
+          const _SectionTitle(
+            'Seeking',
+            description: 'Left and right on the remote, and double-tap on phones.',
+            first: true,
+            inline: true,
+          ),
           _PickerSetting<int>(
             label: 'Jump by',
             value: s.seekStep,
@@ -927,7 +917,7 @@ class _PlaybackCard extends StatelessWidget {
           ),
 
           // ── Resuming ──
-          const _SectionTitle('Resuming', description: 'Playing something you stopped partway through.'),
+          const _SectionTitle('Resuming', description: 'Playing something you stopped partway through.', inline: true),
           _PickerSetting<ResumeMode>(
             label: 'When you come back',
             value: s.resume,
@@ -936,10 +926,19 @@ class _PlaybackCard extends StatelessWidget {
             onChange: (m) => update((s) => s.resume = m),
           ),
 
-          // ── Subtitles ──
+          // ── Subtitles: which, and how they look ──
+          const _SectionTitle('Subtitles'),
           const _SectionTitle(
-            'Subtitle Appearance',
+            'Languages',
+            description: 'Saved to your Jellyfin account, so other apps use them too.',
+            first: true,
+            inline: true,
+          ),
+          const _LanguageSettings(),
+          const _SectionTitle(
+            'Appearance',
             description: 'For text subtitles. Picture subtitles (like Blu-ray PGS) keep their own look.',
+            inline: true,
           ),
           // ignore: prefer_const_constructors
           _SubtitlePreview(), // not const, so it redraws when a setting changes
@@ -1029,8 +1028,8 @@ class _PlaybackCard extends StatelessWidget {
             onChange: (v) => update((s) => s.nightMode = v),
           ),
 
-          // ── Display ──
-          const _SectionTitle('Display'),
+          // ── Video: the picture, and what plays it ──
+          const _SectionTitle('Video'),
           _PickerSetting<AspectMode>(
             label: 'Picture size',
             value: s.aspect,
@@ -1053,11 +1052,28 @@ class _PlaybackCard extends StatelessWidget {
             onChange: (v) => update((s) => s.trickplay = v),
           ),
 
+          // ── Engine (Android only: ExoPlayer is Android's own player) ──
+          if (Platform.isAndroid) ...[
+            const _SectionTitle(
+              'Engine',
+              description: 'mpv plays nearly anything. ExoPlayer plays Dolby Vision as Dolby Vision, and takes '
+                  'over if mpv can\'t open a file. Night mode and stereo mix-down only work with mpv.',
+              inline: true,
+            ),
+            _PickerSetting<VideoEngine>(
+              label: 'Engine',
+              value: s.engine,
+              options: VideoEngine.values,
+              format: (e) => e.label,
+              onChange: (e) => update((s) => s.engine = e),
+            ),
+          ],
+
           // ── Previews ──
           const _SectionTitle(
             'Previews',
             description: 'After a moment on a card or the featured banner, with the remote or the mouse, '
-                'show a few stills from across the title. Trailers play from the Trailer button.',
+                'show a few seconds of the title (a show\'s pilot) as quick frames. Trailers play from the Trailer button.',
           ),
           SwitchSetting(
             label: 'Previews',
@@ -1075,21 +1091,76 @@ class _PlaybackCard extends StatelessWidget {
             ),
           ],
 
-          // ── Engine (Android only: ExoPlayer is Android's own player) ──
-          if (Platform.isAndroid) ...[
-            const _SectionTitle(
-              'Video engine',
-              description: 'mpv plays nearly anything. ExoPlayer plays Dolby Vision as Dolby Vision, and takes '
-                  'over if mpv can\'t open a file. Night mode and stereo mix-down only work with mpv.',
-            ),
-            _PickerSetting<VideoEngine>(
-              label: 'Engine',
-              value: s.engine,
-              options: VideoEngine.values,
-              format: (e) => e.label,
-              onChange: (e) => update((s) => s.engine = e),
-            ),
-          ],
+        ],
+      );
+    },
+  );
+}
+
+/// Audio and subtitle languages and when subtitles show: saved to the Jellyfin account (so other
+/// apps follow them too), under Playback › Subtitles.
+class _LanguageSettings extends StatefulWidget {
+  const _LanguageSettings();
+
+  @override
+  State<_LanguageSettings> createState() => _LanguageSettingsState();
+}
+
+class _LanguageSettingsState extends State<_LanguageSettings> {
+  final _settings = AccountSettings();
+
+  @override
+  void initState() {
+    super.initState();
+    _settings.load();
+  }
+
+  @override
+  void dispose() {
+    _settings.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => ListenableBuilder(
+    listenable: _settings,
+    builder: (context, _) {
+      final s = _settings;
+      if (s.loading) {
+        return const Padding(
+          padding: EdgeInsets.symmetric(vertical: 16),
+          child: Center(child: CircularProgressIndicator()),
+        );
+      }
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        spacing: 16,
+        children: [
+          if (s.error != null)
+            Text(s.error!, style: context.text.bodyMedium?.copyWith(color: context.colors.error)),
+          _PickerSetting<Language>(
+            label: 'Audio language',
+            value: s.audioLanguage,
+            options: s.languages,
+            format: (l) => l.name,
+            searchable: true,
+            onChange: s.setAudioLanguage,
+          ),
+          _PickerSetting<Language>(
+            label: 'Subtitle language',
+            value: s.subtitleLanguage,
+            options: s.languages,
+            format: (l) => l.name,
+            searchable: true,
+            onChange: s.setSubtitleLanguage,
+          ),
+          _PickerSetting<SubtitleMode>(
+            label: 'When to show subtitles',
+            value: s.subtitleMode,
+            options: SubtitleMode.values,
+            format: (m) => m.label,
+            onChange: s.setSubtitleMode,
+          ),
         ],
       );
     },
@@ -1143,21 +1214,8 @@ class _AboutCardState extends State<_AboutCard> {
   @override
   Widget build(BuildContext context) => _SettingsCard(
     children: [
-      const Align(
-        alignment: Alignment.center,
-        child: AppLogo(
-          asset: 'assets/images/text_logo.svg',
-          colorAsset: 'assets/images/text_logo_color.svg',
-          height: 48,
-          variant: AppLogoVariant.auto,
-        ),
-      ),
-
-      const SizedBox(height: 8),
-      const Divider(height: 32),
-
-      // ── App ──
-      const _SectionTitle('App', first: true),
+      // ── Version ──
+      const _SectionTitle('Version', first: true),
       FutureBuilder(
         future: _app,
         builder: (context, snap) => _InfoRow(

@@ -266,6 +266,46 @@ class JellyfinController extends ChangeNotifier {
     await appCache.forget(cacheScope(server, userId));
   }
 
+  /// Every server with an account signed in on this device, the one in use first.
+  List<String> get servers {
+    final current = client?.baseUrl ?? lastServer;
+    return {?current, for (final a in accounts) a.server}.toList();
+  }
+
+  /// [server]'s name, as it calls itself (remembered once asked), or its address if it can't
+  /// be reached.
+  Future<String> nameOf(String server) async {
+    if (_serverNames[server] case final name?) return name;
+    try {
+      return _serverNames[server] = await checkServer(server);
+    } catch (_) {
+      return displayServerUrl(server);
+    }
+  }
+
+  final _serverNames = <String, String>{};
+
+  /// Removes [server] from this device: every account on it, and what's cached for them. Not
+  /// the server in use.
+  Future<void> forgetServer(String server) async {
+    if (server == (client?.baseUrl ?? lastServer)) return;
+    for (final a in [...accounts]) {
+      if (a.server == server) await _forgetAccount(a.server, a.userId);
+    }
+    notifyListeners();
+  }
+
+  /// Checks [server] is a Jellyfin server that can be reached, and returns its name. Needs no
+  /// sign-in. Throws if it can't be reached or isn't Jellyfin.
+  Future<String> checkServer(String server) async {
+    final url = normalizeServerUrl(server);
+    final res = await http.get(Uri.parse('$url/System/Info/Public')).timeout(const Duration(seconds: 8));
+    if (res.statusCode != 200) throw Exception('GET /System/Info/Public → ${res.statusCode}');
+    final info = jsonDecode(res.body);
+    if (info is! Map || info['Id'] == null) throw const FormatException('Not a Jellyfin server');
+    return (info['ServerName'] as String?) ?? 'Jellyfin';
+  }
+
   /// The users [server] shows on its login screen. Needs no sign-in.
   /// Returns an empty list if the server can't be reached.
   Future<List<PublicUser>> publicUsers(String server) async {
@@ -355,13 +395,14 @@ class JellyfinController extends ChangeNotifier {
     if (changed) notifyListeners();
   }
 
-  /// Restores a saved session at startup. With more than one account on this device,
-  /// it stays signed out so the app opens on "Who's watching?".
+  /// Restores the last session at startup: whoever used the app last, however many accounts
+  /// are saved. After signing out it opens on "Who's watching?" (or sign-in) instead.
   Future<void> load() async {
     lastServer = storage.getString(_kServer);
     accounts = await _readAccounts();
     unawaited(checkAccounts()); // tidy up accounts that no longer exist, in the background
-    if (accounts.length > 1) return;
+    // Back in as whoever used the app last (even with several accounts saved). "Who's
+    // watching?" is a tap on the profile picture away.
 
     final token = storage.getString(_kToken);
     final userId = storage.getString(_kUserId);

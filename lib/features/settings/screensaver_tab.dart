@@ -1,6 +1,6 @@
 part of 'settings.dart';
 
-/// Screensaver Settings Tab: which one, when, and each style's own options.
+/// The screensaver's settings (Appearance › Screensaver): which one, when, and each style's own options.
 class _ScreensaverCard extends StatelessWidget {
   const _ScreensaverCard();
 
@@ -64,14 +64,11 @@ class _ScreensaverCard extends StatelessWidget {
             onChange: (v) => update((s) => set(s, v)),
           );
 
-      return _SettingsCard(
+      // Its settings for the Screensaver page under Appearance (which has the heading): the
+      // style's own options under headings of their own, on the same page.
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          const _SectionTitle(
-            'Screensaver',
-            description: 'Comes on after a while without a button press, and never during a video. '
-                'Any button or touch brings the app back.',
-            first: true,
-          ),
           _PickerSetting<ScreensaverStyle>(
             label: 'Style',
             value: s.style,
@@ -162,7 +159,7 @@ class _ScreensaverCard extends StatelessWidget {
             // ── The chosen style's own options ──
             ...switch (s.style) {
               ScreensaverStyle.backdrops => [
-                const _SectionTitle('Backdrops', description: 'Artwork from your libraries, one at a time.'),
+                const _SectionTitle('Backdrops', description: 'Artwork from your libraries, one at a time.', inline: true),
                 contentPicker(s.backdropContent, (s, c) => s.backdropContent = c),
                 _gap,
                 _PickerSetting<int>(
@@ -193,7 +190,7 @@ class _ScreensaverCard extends StatelessWidget {
                 if (s.backdropClock) ...[_gap, clockFormatPicker()],
               ],
               ScreensaverStyle.posters => [
-                const _SectionTitle('Poster wall', description: 'Rows of posters drifting across the screen.'),
+                const _SectionTitle('Poster wall', description: 'Rows of posters drifting across the screen.', inline: true),
                 contentPicker(s.posterContent, (s, c) => s.posterContent = c),
                 _gap,
                 _SliderSetting(
@@ -216,7 +213,7 @@ class _ScreensaverCard extends StatelessWidget {
                 if (s.posterClock) ...[_gap, clockFormatPicker()],
               ],
               ScreensaverStyle.clock => [
-                const _SectionTitle('Clock', description: 'Moves to a new spot every minute.'),
+                const _SectionTitle('Clock', description: 'Moves to a new spot every minute.', inline: true),
                 clockFormatPicker(),
                 _gap,
                 sizePicker(s.clockSize, (s, v) => s.clockSize = v),
@@ -236,7 +233,7 @@ class _ScreensaverCard extends StatelessWidget {
                 ),
               ],
               ScreensaverStyle.logo => [
-                const _SectionTitle('Floating logo', description: 'Bounces off the edges of the screen.'),
+                const _SectionTitle('Floating logo', description: 'Bounces off the edges of the screen.', inline: true),
                 sizePicker(s.logoSize, (s, v) => s.logoSize = v),
                 _gap,
                 speedPicker(s.logoSpeed, (s, v) => s.logoSpeed = v),

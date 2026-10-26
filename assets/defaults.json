@@ -1,64 +1,88 @@
 {
   "appearance": {
+    "fonts": {
+      "headingFont": "Outfit",
+      "bodyFont": "Plus Jakarta Sans"
+    },
     "theme": "default",
-    "headingFont": "Space Grotesk",
-    "bodyFont": "Instrument Sans",
-    "icons": "materialSymbols",
-    "bottomBar": ["home", "search", "downloads", "movies"],
-    "menuPinned": false
+    "icons": "fluent",
+    "bottomBar": ["home", "search", "downloads", "settings"],
+    "menuPinned": false,
+    "screensaver": {
+      "styleOnTv": "backdrops",
+      "styleElsewhere": "off",
+      "startAfter": 3,
+      "dimAfter": 5,
+      "awakeFor": 60,
+      "turnOff": false,
+      "dim": 0,
+      "backdrops": {
+        "backdropContent": "all",
+        "backdropSeconds": 15,
+        "backdropMotion": true,
+        "backdropDetails": true,
+        "backdropClock": true
+      },
+      "posterWall": {
+        "posterContent": "all",
+        "posterRows": 3,
+        "posterSpeed": "slow",
+        "posterClock": false
+      },
+      "clock": {
+        "clockFormat": "device",
+        "clockDate": true,
+        "clockSize": "large",
+        "clockColor": "white",
+        "clockArtwork": false
+      },
+      "floatingLogo": {
+        "logoSize": "medium",
+        "logoSpeed": "medium",
+        "logoColor": "changing"
+      }
+    }
   },
   "home": ["carousel", "myMedia", "continueWatching", "nextUp", "recentlyAdded", "suggested"],
   "playback": {
-    "skip": { "intro": "ask", "recap": "ask", "credits": "ask", "preview": "ask" },
-    "autoplayNext": true,
-    "countdownSeconds": 10,
-    "stillWatchingAfter": 3,
-    "wifiBitrate": 0,
-    "mobileBitrate": 8000000,
-    "streamMode": "auto",
-    "seekStep": 10,
-    "seekAccelerates": true,
-    "resume": "resume",
-    "subtitleFont": "Noto Sans",
-    "subtitleSize": "medium",
-    "subtitleHeight": 4,
-    "subtitleColor": "white",
-    "subtitleBackground": "shadow",
-    "liftSubtitles": true,
-    "passthrough": false,
-    "downmix": false,
-    "nightMode": false,
-    "showRating": true,
-    "trickplay": true,
-    "aspect": "fit",
-    "engine": "auto",
-    "previews": true,
-    "previewDelay": 2
-  },
-  "screensaver": {
-    "styleOnTv": "logo",
-    "styleElsewhere": "off",
-    "startAfter": 3,
-    "dimAfter": 5,
-    "awakeFor": 60,
-    "turnOff": false,
-    "dim": 0,
-    "backdropContent": "all",
-    "backdropSeconds": 15,
-    "backdropMotion": true,
-    "backdropDetails": true,
-    "backdropClock": true,
-    "posterContent": "all",
-    "posterRows": 3,
-    "posterSpeed": "slow",
-    "posterClock": false,
-    "clockFormat": "device",
-    "clockDate": true,
-    "clockSize": "large",
-    "clockColor": "white",
-    "clockArtwork": false,
-    "logoSize": "medium",
-    "logoSpeed": "medium",
-    "logoColor": "changing"
+    "episodes": {
+      "skip": { "intro": "ask", "recap": "ask", "credits": "ask", "preview": "ask" },
+      "autoplayNext": true,
+      "countdownSeconds": 10,
+      "stillWatchingAfter": 3
+    },
+    "streamingQuality": {
+      "wifiBitrate": 0,
+      "mobileBitrate": 8000000,
+      "streamMode": "auto"
+    },
+    "seekingAndResuming": {
+      "seekStep": 10,
+      "seekAccelerates": true,
+      "resume": "resume"
+    },
+    "subtitles": {
+      "subtitleFont": "Noto Sans",
+      "subtitleSize": "medium",
+      "subtitleHeight": 4,
+      "subtitleColor": "white",
+      "subtitleBackground": "shadow",
+      "liftSubtitles": true
+    },
+    "audio": {
+      "passthrough": false,
+      "downmix": false,
+      "nightMode": false
+    },
+    "video": {
+      "aspect": "fit",
+      "showRating": true,
+      "trickplay": true,
+      "engine": "auto"
+    },
+    "previews": {
+      "previews": true,
+      "previewDelay": 2
+    }
   }
 }

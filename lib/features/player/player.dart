@@ -1033,6 +1033,12 @@ builder: (context) => Dialog(child: Padding(
       _castItem(item, start: _localOpened ? _player.state.position : _resumePosition(item));
     } else if (_casting && !castController.isConnected) {
       _returnFromCast();
+    } else if (_casting && _castLoaded && castController.nowPlaying == null && castController.error != null) {
+      // The Chromecast couldn't play it: say why, and carry on here instead.
+      final message = castController.error!;
+      castController.error = null;
+      ScaffoldMessenger.maybeOf(context)?.showSnackBar(SnackBar(content: Text(message)));
+      unawaited(castController.disconnect()); // back to playing here (the branch above)
     } else if (_casting && _castLoaded && castController.nowPlaying == null) {
       // Finished on the TV (or stopped from its remote): leave the player, as at the end here.
       _casting = false;

@@ -94,17 +94,54 @@ class CastController extends ChangeNotifier {
     final state = status?.playerState ?? CastMediaPlayerState.unknown;
     if (state == playerState) return;
     playerState = state;
+    if (state == CastMediaPlayerState.playing || state == CastMediaPlayerState.paused) _playing = true;
     // Finished, or stopped from the TV's own remote. ("Interrupted" is just a reload,
     // e.g. after changing audio, so it doesn't count.)
     final reason = status?.idleReason;
     final ended = reason == GoogleCastMediaIdleReason.finished ||
         reason == GoogleCastMediaIdleReason.cancelled ||
         reason == GoogleCastMediaIdleReason.error;
-    if (state == CastMediaPlayerState.idle && ended && nowPlaying != null && nowPlaying!.started) {
+    // Only once this video has actually played: a Chromecast reports idle for a moment while
+    // it loads, and that isn't the end.
+    if (state == CastMediaPlayerState.idle && ended && nowPlaying != null && _playing) {
+      _finishReporting();
+    } else if (state == CastMediaPlayerState.idle && reason == GoogleCastMediaIdleReason.error && !_playing) {
+      // It couldn't play it at all: the player goes back to playing here, and says why.
+      error = "The Chromecast couldn't play this. Make sure it can reach your server.";
       _finishReporting();
     }
     notifyListeners();
   }
+
+  /// This video has started playing on the Chromecast (since [load]).
+  bool _playing = false;
+
+  /// Why the last video couldn't be played on the Chromecast, for the player to show. Cleared
+  /// on the next [load].
+  String? error;
+
+  /// The server's address as a Chromecast can use it. A Chromecast usually can't look up
+  /// `.local` names (nas.local), so for those it's the server's own local address instead, as
+  /// the server reports it.
+  Future<String> _castBase(String base) async {
+    final host = Uri.tryParse(base)?.host ?? '';
+    if (!host.endsWith('.local')) return base;
+    if (_castBaseFor case (final from, final to) when from == base) return to;
+    try {
+      final info = await jellyfin.getJson('/System/Info/Public', auth: false);
+      final local = (info as Map)['LocalAddress'] as String?;
+      if (local != null && local.isNotEmpty) {
+        final resolved = local.replaceAll(RegExp(r'/+$'), '');
+        _castBaseFor = (base, resolved);
+        return resolved;
+      }
+    } catch (_) {
+      // Couldn't ask: try the address as it is.
+    }
+    return base;
+  }
+
+  (String, String)? _castBaseFor;
 
   // ─── Connecting ──────────────────────────────────────────────────────────
 
@@ -133,9 +170,12 @@ class CastController extends ChangeNotifier {
     int? subtitleStreamIndex,
   }) async {
     final client = jellyfin.client;
-    final base = client?.baseUrl;
+    final serverBase = client?.baseUrl;
     final token = client?.token;
-    if (!isConnected || base == null || token == null) return;
+    if (!isConnected || serverBase == null || token == null) return;
+    final base = await _castBase(serverBase); // what the Chromecast fetches from
+    error = null;
+    _playing = false;
 
     final previous = nowPlaying;
     if (previous != null && previous.itemId != item.id) await _finishReporting();

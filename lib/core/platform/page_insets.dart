@@ -16,6 +16,30 @@ EdgeInsets pageSides(BuildContext context, {double extra = 16}) {
   final wide = ScreenType.of(context).isPhone ? 0.0 : _wideInset;
   return EdgeInsets.only(left: insets.left + extra + wide, right: insets.right + extra + wide);
 }
+/// On phones, while the app's top bar is hidden: the status bar's height, which the page now
+/// runs up under. Scrolling content goes past it; a page's fixed parts (Search's box, the A–Z
+/// column) keep clear by this much. 0 otherwise.
+final topBarHiddenInset = ValueNotifier<double>(0);
+
+/// [child], kept clear of the status bar while the top bar is hidden ([topBarHiddenInset]).
+class ClearOfHiddenTopBar extends StatelessWidget {
+  const ClearOfHiddenTopBar({super.key, required this.child});
+
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) => ValueListenableBuilder(
+    valueListenable: topBarHiddenInset,
+    builder: (context, inset, child) => AnimatedPadding(
+      duration: const Duration(milliseconds: 200),
+      curve: Curves.easeOut,
+      padding: EdgeInsets.only(top: inset),
+      child: child,
+    ),
+    child: child,
+  );
+}
+
 /// Room above a page's content, below the app's top bar.
 ///
 /// Like [pageSides], put it inside scroll views (in their `padding`) where there is one.

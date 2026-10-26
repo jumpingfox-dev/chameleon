@@ -4,13 +4,13 @@ import 'package:dart_jellyfin/dart_jellyfin.dart' show JellyfinItem;
 import 'package:flutter/foundation.dart';
 import 'package:flutter_chrome_cast/flutter_chrome_cast.dart' show CastMediaPlayerState;
 import 'package:flutter_to_airplay/flutter_to_airplay.dart';
+import 'package:material_symbols_icons/symbols.dart';
 import 'package:material_ui/material_ui.dart';
 
 import '../../core/cast/cast_controller.dart';
 import '../../core/format/format.dart';
 import '../../core/jellyfin/jellyfin_controller.dart';
 import 'playback_settings.dart';
-import '../../theme/app_icons.dart';
 import '../../theme/theme.dart';
 import '../../widgets/tappable.dart';
 
@@ -21,7 +21,11 @@ import '../../widgets/tappable.dart';
 Future<void> showCastMenu(BuildContext context) => showDialog<void>(
   context: context,
   builder: (context) => Dialog(
-    child: ConstrainedBox(constraints: const BoxConstraints(maxWidth: 420), child: const _CastMenuBody()),
+    child: ConstrainedBox(
+      // Scrolls when there are more devices than fit (and keeps AirPlay reachable below them).
+      constraints: BoxConstraints(maxWidth: 420, maxHeight: MediaQuery.sizeOf(context).height * 0.8),
+      child: const SingleChildScrollView(child: _CastMenuBody()),
+    ),
   ),
 );
 
@@ -69,7 +73,7 @@ class _CastMenuBody extends StatelessWidget {
                   ListTile(
                     autofocus: i == 0,
                     shape: const StadiumBorder(),
-                    leading: Icon(appIcons.cast, size: 20),
+                    leading: const Icon(Symbols.cast_rounded, size: 20),
                     title: Text(device.friendlyName, overflow: TextOverflow.ellipsis),
                     onTap: () {
                       castController.connect(device);
@@ -132,7 +136,8 @@ bool get showCastButton =>
     AirPlayButton.available ||
     (castController.supported && (castController.isConnected || castController.devices.isNotEmpty));
 
-IconData get castIcon => castController.isConnected ? appIcons.castConnected : appIcons.cast;
+/// Always Material Symbols' cast icon, whatever the icon style: it's the one people know.
+IconData get castIcon => castController.isConnected ? Symbols.cast_connected_rounded : Symbols.cast_rounded;
 
 // ─── AirPlay (iPhone and iPad) ───────────────────────────────────────────────
 

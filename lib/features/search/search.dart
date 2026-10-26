@@ -169,37 +169,40 @@ class _SearchScreenState extends State<SearchScreen> {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         SizedBox(height: pageTop(context)),
+        // (Fixed above the results: kept clear of the status bar while the top bar is hidden.)
         // Arriving from the menu, top bar or bottom bar: ready to type (on a TV, the remote is on
         // the box, and Select opens the keyboard).
-        RemoteTextField(
-          autofocus: _routeQuery == null,
-          builder: (context, focusNode, highlighted) => TextField(
-            controller: _query,
-            focusNode: focusNode,
-            textInputAction: TextInputAction.search,
-            onSubmitted: (text) {
-              _debounce?.cancel();
-              _search(text);
-            },
-            decoration: InputDecoration(
-              hintText: 'Search movies, shows, and actors',
-              border: searchFieldBorder,
-              enabledBorder: highlighted ? remoteFieldBorder(context, searchFieldBorder) : null,
-              contentPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
-              // A clear button while there's something to clear, in from the box's rounded end.
-              suffixIcon: ListenableBuilder(
-                listenable: _query,
-                builder: (context, _) => _query.text.isEmpty
-                    ? const SizedBox.shrink()
-                    : Padding(
-                        padding: const EdgeInsets.only(right: 10),
-                        child: IconButton(
-                          onPressed: _query.clear,
-                          visualDensity: VisualDensity.compact,
-                          iconSize: 20,
-                          icon: Icon(appIcons.close),
+        ClearOfHiddenTopBar(
+          child: RemoteTextField(
+            autofocus: _routeQuery == null,
+            builder: (context, focusNode, highlighted) => TextField(
+              controller: _query,
+              focusNode: focusNode,
+              textInputAction: TextInputAction.search,
+              onSubmitted: (text) {
+                _debounce?.cancel();
+                _search(text);
+              },
+              decoration: InputDecoration(
+                hintText: 'Search movies, shows, and actors',
+                border: searchFieldBorder,
+                enabledBorder: highlighted ? remoteFieldBorder(context, searchFieldBorder) : null,
+                contentPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+                // A clear button while there's something to clear, in from the box's rounded end.
+                suffixIcon: ListenableBuilder(
+                  listenable: _query,
+                  builder: (context, _) => _query.text.isEmpty
+                      ? const SizedBox.shrink()
+                      : Padding(
+                          padding: const EdgeInsets.only(right: 4),
+                          child: IconButton(
+                            onPressed: _query.clear,
+                            visualDensity: VisualDensity.standard,
+                            iconSize: 20,
+                            icon: Icon(appIcons.close),
+                          ),
                         ),
-                      ),
+                ),
               ),
             ),
           ),

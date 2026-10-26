@@ -69,6 +69,9 @@ class SyncPlayController extends ChangeNotifier {
 
   bool get inGroup => groupId != null;
 
+  /// The group was started here (rather than joined), so Settings shows it under Start a Group.
+  bool startedHere = false;
+
   // ── Queue ──
   List<SyncPlayEntry> queue = const [];
   int playingIndex = -1;
@@ -192,6 +195,7 @@ class SyncPlayController extends ChangeNotifier {
   }
 
   Future<void> create(String name) async {
+    startedHere = true;
     await _connect();
     await _client.syncPlay.createGroup(groupName: name);
   }
@@ -199,6 +203,7 @@ class SyncPlayController extends ChangeNotifier {
   /// Joins a group. If it's already watching something, the server sends its queue straight
   /// after, and the player opens at the group's spot: no need to find it and press play.
   Future<void> join(String id) async {
+    startedHere = false;
     await _connect();
     await _client.syncPlay.joinGroup(groupId: id);
   }

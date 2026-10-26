@@ -1,9 +1,11 @@
+import 'dart:math' as math;
 import 'dart:ui' show ImageFilter;
 
 import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 import 'package:material_ui/material_ui.dart';
 
+import '../features/detail/detail_page.dart' show detailTitleOf;
 import '../features/detail/detail_screens.dart';
 import '../features/downloads/downloads_screen.dart';
 import '../features/library/genres.dart';
@@ -20,6 +22,7 @@ import '../core/downloads/downloads.dart';
 import '../core/focus/focus_rows.dart';
 import '../features/home/home_layout.dart';
 import '../core/jellyfin/jellyfin_controller.dart';
+import '../core/platform/page_insets.dart';
 import '../core/platform/screen_type.dart';
 import '../core/storage/storage.dart';
 import '../widgets/app_logo.dart';
@@ -110,20 +113,38 @@ final pageStackChanged = ValueNotifier(0);
 /// Tells [pageStackChanged] about one page navigator. One per navigator: an observer can only
 /// watch one.
 class PageStackObserver extends NavigatorObserver {
+  /// The page on top of this navigator.
+  Route<dynamic>? top;
+
   void _changed() => WidgetsBinding.instance.addPostFrameCallback((_) => pageStackChanged.value++);
 
   @override
-  void didPush(Route<dynamic> route, Route<dynamic>? previousRoute) => _changed();
+  void didPush(Route<dynamic> route, Route<dynamic>? previousRoute) {
+    top = route;
+    _changed();
+  }
 
   @override
-  void didPop(Route<dynamic> route, Route<dynamic>? previousRoute) => _changed();
+  void didPop(Route<dynamic> route, Route<dynamic>? previousRoute) {
+    if (route == top) top = previousRoute;
+    _changed();
+  }
 
   @override
-  void didRemove(Route<dynamic> route, Route<dynamic>? previousRoute) => _changed();
+  void didRemove(Route<dynamic> route, Route<dynamic>? previousRoute) {
+    if (route == top) top = previousRoute;
+    _changed();
+  }
 
   @override
-  void didReplace({Route<dynamic>? newRoute, Route<dynamic>? oldRoute}) => _changed();
+  void didReplace({Route<dynamic>? newRoute, Route<dynamic>? oldRoute}) {
+    if (oldRoute == top) top = newRoute;
+    _changed();
+  }
 }
+
+/// One [PageStackObserver] per top-level page, in [destinations] order.
+final pageStackObservers = [for (final _ in destinations) PageStackObserver()];
 
 class AppShell extends StatefulWidget {
   const AppShell({super.key, required this.navigationShell, required this.location, this.tab, this.group});
@@ -157,6 +178,14 @@ class _AppShellState extends State<AppShell> {
   /// page is back at the top (or another page opens).
   final _barShown = ValueNotifier(true);
 
+  /// Tells pages how far to keep their fixed parts down while the bar is hidden (phones, where
+  /// the page then runs up under the status bar).
+  void _onBarShown() {
+    final view = View.of(context);
+    final statusBar = view.padding.top / view.devicePixelRatio;
+    topBarHiddenInset.value = !_barShown.value && ScreenType.of(context).isPhone ? statusBar : 0;
+  }
+
   /// A page scrolled: down hides the top bar, reaching the top shows it again. Only the page's
   /// own up-and-down scrolling, not rows scrolling sideways.
   bool _onPageScroll(ScrollUpdateNotification n) {
@@ -167,6 +196,21 @@ class _AppShellState extends State<AppShell> {
       _barShown.value = true;
     } else if ((n.scrollDelta ?? 0) > 4 && !_barScope.hasFocus) {
       _barShown.value = false;
+      _hiddenBy = n.context;
+    }
+    return false;
+  }
+
+  /// What scrolled the top bar away, so a change to it (below) can bring the bar back.
+  BuildContext? _hiddenBy;
+
+  /// The page that hid the bar changed size: with the bar gone it's taller, and a page only
+  /// just long enough to scroll may now fit, or sit at its top, with no scrolling left to bring
+  /// the bar back. Then it comes back now.
+  bool _onPageMetrics(ScrollMetricsNotification n) {
+    if (_barShown.value || n.context != _hiddenBy || n.metrics.axis != Axis.vertical) return false;
+    if (n.metrics.maxScrollExtent <= 0 || n.metrics.pixels <= n.metrics.minScrollExtent + 8) {
+      _barShown.value = true;
     }
     return false;
   }
@@ -175,7 +219,7 @@ class _AppShellState extends State<AppShell> {
   /// with the top bar showing.
   void _onPageStack() => _barShown.value = true;
 
-  late bool _pinned = storage.getBool(_kMenuPinned) ?? appDefaults.section('appearance')['menuPinned'] == true;
+  late bool _pinned = storage.getBool(_kMenuPinned) ?? appDefaults.settings('appearance')['menuPinned'] == true;
 
   /// Whether My Media's libraries show in the menu. Stays as you left it.
   bool _myMediaOpen = true;
@@ -288,6 +332,7 @@ class _AppShellState extends State<AppShell> {
       if (_barScope.hasFocus) _barShown.value = true;
     });
     pageStackChanged.addListener(_onPageStack);
+    _barShown.addListener(_onBarShown);
   }
 
   @override
@@ -470,7 +515,11 @@ class _AppShellState extends State<AppShell> {
           viewInsets: media.viewInsets.copyWith(bottom: 0),
           // Dropdowns and menus decide whether to open up or down by measuring the screen: it
           // ends where the bottom bar starts, so nothing opens behind the bar.
-          size: bottomBar ? Size(media.size.width, media.size.height - _footerHeight) : media.size,
+          // The page's own width too: narrower beside a pinned menu.
+          size: Size(
+            media.size.width - (pinned ? media.padding.left + _menuWidth : 0),
+            media.size.height - (bottomBar ? _footerHeight : 0),
+          ),
         ),
         child: SafeArea(
           top: false,
@@ -527,8 +576,10 @@ class _AppShellState extends State<AppShell> {
                       removeLeft: pinned, // the menu clears any camera cutout
                       child: Column(
                         children: [
-                          // The status bar's room stays, so the page never slides under it.
-                          SizedBox(height: MediaQuery.paddingOf(context).top),
+                          // Elsewhere the status bar's room stays, so the page never slides under
+                          // it. On phones it goes with the top bar: the page then fills the screen,
+                          // up past the camera and the notification icons.
+                          if (!type.isPhone) SizedBox(height: MediaQuery.paddingOf(context).top),
                           ValueListenableBuilder(
                             valueListenable: _barShown,
                             builder: (context, shown, bar) => ClipRect(
@@ -537,7 +588,12 @@ class _AppShellState extends State<AppShell> {
                                 curve: Curves.easeOut,
                                 alignment: Alignment.bottomCenter,
                                 heightFactor: shown ? 1 : 0,
-                                child: bar,
+                                child: type.isPhone
+                                    ? Column(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [SizedBox(height: MediaQuery.paddingOf(context).top), bar!],
+                                      )
+                                    : bar,
                               ),
                             ),
                             child: MediaQuery.removePadding(
@@ -548,16 +604,38 @@ class _AppShellState extends State<AppShell> {
                             onKeyEvent: _onBarKey,
                             child: ListenableBuilder(
                               listenable: pageStackChanged,
-                              builder: (context, _) => _TopBar(
-                                // On a TV the remote has its own Back.
-                                canGoBack: !type.isTv && GoRouter.of(context).canPop(),
-                                onBack: () => GoRouter.of(context).pop(),
-                                showMenuButton: !pinned,
-                                onMenu: _openMenu,
-                                title: _title,
-                                showLogo: !pinned,
-                                onSettings: () => _goTo('/settings'),
-                              ),
+                              builder: (context, _) {
+                                // On a detail page (a movie's, a person's, ...): its name, once
+                                // it's loaded.
+                                final detail = detailTitleOf(
+                                  pageStackObservers[widget.navigationShell.currentIndex].top,
+                                );
+                                return ValueListenableBuilder<String?>(
+                                  valueListenable: detail ?? ValueNotifier<String?>(null),
+                                  builder: (context, detailTitle, _) {
+                                    // Home has the menu button and the logo. Every other page has
+                                    // Back (to the page before, or Home) and its name, centered.
+                                    final home = detail == null && widget.location == '/home';
+                                    return _TopBar(
+                                      // Every page but Home, TVs too (alongside the remote's Back).
+                                      canGoBack: !home,
+                                      onBack: () {
+                                        final router = GoRouter.of(context);
+                                        if (router.canPop()) {
+                                          router.pop();
+                                        } else {
+                                          _goTo('/home');
+                                        }
+                                      },
+                                      showMenuButton: !pinned && home,
+                                      onMenu: _openMenu,
+                                      centeredTitle: home ? null : (detail != null ? (detailTitle ?? '') : (_title ?? '')),
+                                      showLogo: !pinned && home,
+                                      onSettings: () => _goTo('/settings'),
+                                    );
+                                  },
+                                );
+                              },
                             ),
                           ),
                           ),
@@ -567,9 +645,12 @@ class _AppShellState extends State<AppShell> {
                             child: Stack(
                               children: [
                                 Positioned.fill(
-                                  child: NotificationListener<ScrollUpdateNotification>(
-                                    onNotification: _onPageScroll,
-                                    child: page,
+                                  child: NotificationListener<ScrollMetricsNotification>(
+                                    onNotification: _onPageMetrics,
+                                    child: NotificationListener<ScrollUpdateNotification>(
+                                      onNotification: _onPageScroll,
+                                      child: page,
+                                    ),
                                   ),
                                 ),
                                 if (bottomBar)

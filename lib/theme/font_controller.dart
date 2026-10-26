@@ -9,23 +9,24 @@ import '../core/storage/app_defaults.dart';
 /// Every Google Fonts family, alphabetical.
 final allFonts = GoogleFonts.asMap().keys.toList()..sort();
 
-/// Shown when the search box is empty.
+/// Shown when the search box is empty, alphabetical.
 const suggestedFonts = [
-  'Space Grotesk',
+  'DM Sans',
+  'IBM Plex Sans',
   'Instrument Sans',
   'Inter',
-  'DM Sans',
+  'JetBrains Mono',
+  'Lora',
   'Manrope',
-  'Outfit',
-  'Sora',
-  'Poppins',
   'Montserrat',
   'Nunito',
-  'Work Sans',
-  'IBM Plex Sans',
+  'Outfit',
   'Playfair Display',
-  'Lora',
-  'JetBrains Mono',
+  'Plus Jakarta Sans',
+  'Poppins',
+  'Sora',
+  'Space Grotesk',
+  'Work Sans',
 ];
 
 /// Deletes cached Google Fonts files except those for [keepFamilies].

@@ -22,14 +22,37 @@ class AppDefaults {
     }
   }
 
-  /// A section, e.g. 'playback', as written in the file (empty if it isn't there).
-  Map<String, dynamic> section(String name) => switch (_json[name]) {
-    final Map<String, dynamic> m => m,
-    _ => const {},
-  };
+  /// A section, e.g. 'playback', as written in the file (empty if it isn't there). [path] goes
+  /// further in, e.g. ['appearance', 'screensaver'].
+  Map<String, dynamic> section(String name, [List<String> path = const []]) {
+    Object? value = _json[name];
+    for (final key in path) {
+      value = value is Map ? value[key] : null;
+    }
+    return value is Map<String, dynamic> ? value : const {};
+  }
 
-  /// A string from the 'appearance' section.
-  String? appearance(String key) => switch (section('appearance')[key]) {
+  /// A section's settings with its groups (the file is laid out like Settings: Playback's
+  /// "episodes", "subtitles", ...) opened up into one level. A map that's a setting's own value
+  /// (Playback's "skip") is kept as it is.
+  Map<String, dynamic> settings(String name, [List<String> path = const [], Set<String> mapValues = const {}]) {
+    final flat = <String, dynamic>{};
+    void add(Map<String, dynamic> m) {
+      for (final MapEntry(:key, :value) in m.entries) {
+        if (value is Map<String, dynamic> && !mapValues.contains(key)) {
+          add(value);
+        } else {
+          flat[key] = value;
+        }
+      }
+    }
+
+    add(section(name, path));
+    return flat;
+  }
+
+  /// A string from the 'appearance' section (its groups opened up: 'fonts' and so on).
+  String? appearance(String key) => switch (settings('appearance')[key]) {
     final String s => s,
     _ => null,
   };

@@ -2,15 +2,15 @@ part of 'app_shell.dart';
 
 // ─── Top bar ─────────────────────────────────────────────────────────────────
 
-/// Across the top of every page: Back (on a page opened from another), the menu button, and
-/// the logo or the page's name on the left; casting, Settings and who's signed in on the right.
+/// Across the top of every page: on Home the menu button and the logo, elsewhere Back and the
+/// page's name, centered; casting, Settings and who's signed in on the right.
 class _TopBar extends StatelessWidget {
   const _TopBar({
     required this.canGoBack,
     required this.onBack,
     required this.showMenuButton,
     required this.onMenu,
-    required this.title,
+    this.centeredTitle,
     required this.showLogo,
     required this.onSettings,
   });
@@ -19,7 +19,9 @@ class _TopBar extends StatelessWidget {
   final VoidCallback onBack;
   final bool showMenuButton;
   final VoidCallback onMenu;
-  final String? title;
+  /// Every page but Home: its name, centered (empty while a title's page loads). The menu
+  /// button and logo make way for it.
+  final String? centeredTitle;
   final bool showLogo; // when there's no title (the menu shows it while pinned)
   final VoidCallback onSettings;
 
@@ -35,48 +37,75 @@ class _TopBar extends StatelessWidget {
         padding: type.isTv
             ? const EdgeInsets.fromLTRB(24, 24, 24, 8)
             : EdgeInsets.symmetric(horizontal: isPhone ? 4 : 12, vertical: 4),
-        child: FocusRow(
-          child: Row(
-            children: [
-              // The menu button always first, so it never moves; Back after it, before the title.
-              if (showMenuButton) _BarButton(icon: appIcons.menu, label: 'Menu', onPress: onMenu),
-              if (canGoBack) _BarButton(icon: appIcons.back, label: 'Back', onPress: onBack),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Align(
-                  alignment: Alignment.centerLeft,
-                  child: title != null
-                      ? Text(title!, maxLines: 1, overflow: TextOverflow.ellipsis, style: context.text.titleLarge)
-                      : showLogo
-                      ? AppLogo(
-                          asset: 'assets/images/text_logo.svg',
-                          colorAsset: 'assets/images/text_logo_color.svg',
-                          height: isPhone ? 26 : 30,
-                        )
-                      : const SizedBox.shrink(),
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            final castShown = showCastButton;
+            const button = 52.0; // a bar button and its margin
+            // The right side: cast (when there's somewhere to cast to), Settings and the avatar.
+            final right = button * (castShown ? 3 : 2);
+            final left = button * ((showMenuButton ? 1 : 0) + (canGoBack ? 1 : 0)) + 8;
+            final row = FocusRow(
+              child: Row(
+                children: [
+                  // The menu button always first, so it never moves; Back after it, before the title.
+                  if (showMenuButton) _BarButton(icon: appIcons.menu, label: 'Menu', onPress: onMenu),
+                  if (canGoBack) _BarButton(icon: appIcons.back, label: 'Back', onPress: onBack),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Align(
+                      alignment: Alignment.centerLeft,
+                      child: centeredTitle != null
+                          ? const SizedBox.shrink() // centered over the row, below
+                          : showLogo
+                          ? AppLogo(
+                              asset: 'assets/images/text_logo.svg',
+                              colorAsset: 'assets/images/text_logo_color.svg',
+                              height: isPhone ? 26 : 30,
+                            )
+                          : const SizedBox.shrink(),
+                    ),
+                  ),
+                  // Somewhere to cast to (a Chromecast on the network, or AirPlay on iPhone and iPad).
+                  if (castShown)
+                    _BarButton(
+                      icon: castIcon,
+                      label: 'Play on another device',
+                      color: castController.isConnected ? context.colors.primary : null,
+                      onPress: () => showCastMenu(context),
+                    ),
+                  // Cast, Settings, then who's signed in. (Search is in the menu and the bottom bar.)
+                  _BarButton(icon: appIcons.settings, label: 'Settings', onPress: onSettings),
+                  _BarButton(
+                    label: 'Switch user (${jellyfin.userName ?? 'signed in'})',
+                    onPress: () => showProfilePicker(context), // "Who's watching?"
+                    child: UserAvatar(size: isPhone ? 30 : 34),
+                  ),
+                ],
+              ),
+            );
+            if (centeredTitle == null) return row;
+            // The title in the middle of the bar, as wide as the room both sides leave it (the
+            // wider side, mirrored), so it's centered and never runs into a button.
+            final width = (constraints.maxWidth - 2 * math.max(left, right) - 16).clamp(0.0, 720.0);
+            return Stack(
+              alignment: Alignment.center,
+              children: [
+                row,
+                IgnorePointer(
+                  child: SizedBox(
+                    width: width,
+                    child: Text(
+                      centeredTitle!,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      textAlign: TextAlign.center,
+                      style: context.text.titleLarge,
+                    ),
+                  ),
                 ),
-              ),
-              // Somewhere to cast to (a Chromecast on the network, or AirPlay on iPhone and iPad).
-              ListenableBuilder(
-                listenable: castController,
-                builder: (context, _) => showCastButton
-                    ? _BarButton(
-                        icon: castIcon,
-                        label: 'Play on another device',
-                        color: castController.isConnected ? context.colors.primary : null,
-                        onPress: () => showCastMenu(context),
-                      )
-                    : const SizedBox.shrink(),
-              ),
-              // Cast, Settings, then who's signed in. (Search is in the menu and the bottom bar.)
-              _BarButton(icon: appIcons.settings, label: 'Settings', onPress: onSettings),
-              _BarButton(
-                label: 'Switch user (${jellyfin.userName ?? 'signed in'})',
-                onPress: () => showProfilePicker(context), // "Who's watching?"
-                child: UserAvatar(size: isPhone ? 30 : 34),
-              ),
-            ],
-          ),
+              ],
+            );
+          },
         ),
       ),
     );

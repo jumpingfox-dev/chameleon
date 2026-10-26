@@ -72,46 +72,49 @@ class _SyncPlayCardState extends State<_SyncPlayCard> {
       final muted = theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.onSurfaceVariant);
       final message = _error ?? syncPlay.message;
 
+      // Join a Group and Start a Group keep their names; the group you're in shows under the one
+      // you used, and the other says so.
+      final inGroupView = <Widget>[
+        // ── In a group ──
+        _SectionTitle(
+          syncPlay.groupName ?? 'SyncPlay group',
+          description: 'Play anything and everyone here watches it with you. '
+              'Anyone can pause, seek or skip, and it happens for the whole group.',
+          first: true,
+          inline: true,
+        ),
+        // What the group is watching: select it to jump in.
+        if (syncPlay.current case final entry?)
+          _SyncPlayNowPlaying(itemId: entry.itemId, playerOpen: syncPlay.playerOpen)
+        else
+          Text('Nothing playing yet. Pick something to watch.', style: muted),
+
+        const _SectionTitle('In this group', inline: true),
+        for (final member in syncPlay.members)
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 4),
+            child: Row(
+              spacing: 10,
+              children: [
+                Icon(appIcons.profile, size: 18, fill: 1, color: theme.colorScheme.onSurfaceVariant),
+                Expanded(child: Text(member)),
+                if (member == jellyfin.userName) Text('You', style: muted),
+              ],
+            ),
+          ),
+        const SizedBox(height: 16),
+        OutlinedButton(
+          onPressed: _busy
+              ? null
+              : () => _run(() async {
+            await syncPlay.leave();
+            await _refresh();
+          }),
+          child: const Text('Leave group'),
+        ),
+      ];
       return _SettingsCard(
         children: [
-          if (syncPlay.inGroup) ...[
-            // ── In a group ──
-            _SectionTitle(
-              syncPlay.groupName ?? 'SyncPlay group',
-              description: 'Play anything and everyone here watches it with you. '
-                  'Anyone can pause, seek or skip, and it happens for the whole group.',
-              first: true,
-            ),
-            // What the group is watching: select it to jump in.
-            if (syncPlay.current case final entry?)
-              _SyncPlayNowPlaying(itemId: entry.itemId, playerOpen: syncPlay.playerOpen)
-            else
-              Text('Nothing playing yet. Pick something to watch.', style: muted),
-
-            const _SectionTitle('In this group'),
-            for (final member in syncPlay.members)
-              Padding(
-                padding: const EdgeInsets.symmetric(vertical: 4),
-                child: Row(
-                  spacing: 10,
-                  children: [
-                    Icon(appIcons.profile, size: 18, fill: 1, color: theme.colorScheme.onSurfaceVariant),
-                    Expanded(child: Text(member)),
-                    if (member == jellyfin.userName) Text('You', style: muted),
-                  ],
-                ),
-              ),
-            const SizedBox(height: 16),
-            OutlinedButton(
-              onPressed: _busy
-                  ? null
-                  : () => _run(() async {
-                await syncPlay.leave();
-                await _refresh();
-              }),
-              child: const Text('Leave group'),
-            ),
-          ] else ...[
             // ── Join one ──
             const _SectionTitle(
               'Join a Group',
@@ -119,6 +122,11 @@ class _SyncPlayCardState extends State<_SyncPlayCard> {
                   'you jump straight in where they are.',
               first: true,
             ),
+          if (syncPlay.inGroup && !syncPlay.startedHere)
+            ...inGroupView
+          else if (syncPlay.inGroup)
+            Text("You started a group (under Start a Group). Leave it to join another.", style: muted)
+          else ...[
             if (_loading)
               const Padding(
                 padding: EdgeInsets.symmetric(vertical: 16),
@@ -135,12 +143,19 @@ class _SyncPlayCardState extends State<_SyncPlayCard> {
                 ),
               ],
 
+          ],
+
             // ── Or start one ──
             const _SectionTitle(
               'Start a Group',
               description: 'Make a group, then have others join it from their own device. '
                   "Jellyfin's web app and other apps with SyncPlay can join too.",
             ),
+          if (syncPlay.inGroup && syncPlay.startedHere)
+            ...inGroupView
+          else if (syncPlay.inGroup)
+            Text("You're in ${syncPlay.groupName ?? 'a group'} (under Join a Group). Leave it to start your own.", style: muted)
+          else ...[
             Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               spacing: 8,

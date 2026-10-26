@@ -25,19 +25,34 @@ final GoRouter appRouter = GoRouter(
       return jellyfin.accounts.isEmpty ? '/login' : '/profiles';
     }
 
-    // Signed in. Login is still allowed when adding another account (/login?add=1).
+    // Signed in. Login is still allowed when adding another account (/login?add=1), and
+    // "Who's watching?" when opened from your profile picture (/profiles?pick=1).
     if (atLogin && state.uri.queryParameters['add'] == '1') return null;
+    if (atProfiles && state.uri.queryParameters['pick'] == '1') return null;
     if (atLogin || atProfiles) return '/home';
     return null;
   },
   routes: [
     GoRoute(
       path: '/login',
-      pageBuilder: (context, state) => const NoTransitionPage(child: LoginScreen()),
+      pageBuilder: (context, state) => NoTransitionPage(
+        child: LoginScreen(
+          // From "Who's watching?": straight to this user's password on this server.
+          server: state.uri.queryParameters['server'],
+          userId: state.uri.queryParameters['user'],
+          userName: state.uri.queryParameters['name'],
+          // From Add account on "Who's watching?": someone new, on [server].
+          newUser: state.uri.queryParameters['new'] == '1',
+          // From Add a server: the address starts empty.
+          freshServer: state.uri.queryParameters['fresh'] == '1',
+        ),
+      ),
     ),
     GoRoute(
       path: '/profiles',
-      pageBuilder: (context, state) => const NoTransitionPage(child: ProfilePickerScreen()),
+      // ?server= opens on that server's people (from Settings › Server › Servers).
+      pageBuilder: (context, state) =>
+          NoTransitionPage(child: ProfilePickerScreen(server: state.uri.queryParameters['server'])),
     ),
     GoRoute(
       path: '/play/:id',
@@ -73,7 +88,7 @@ final GoRouter appRouter = GoRouter(
         for (final (i, d) in destinations.indexed)
           StatefulShellBranch(
             navigatorKey: branchNavigatorKeys[i],
-            observers: [PageStackObserver()], // so the top bar's Back follows pages pushed here
+            observers: [pageStackObservers[i]], // so the top bar follows pages pushed here
             routes: [
               GoRoute(path: d.path, builder: (context, state) => d.screen(state), routes: d.routes),
             ],

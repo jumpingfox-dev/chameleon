@@ -17,13 +17,14 @@ class _BackdropScope extends InheritedWidget {
 /// bottom and darkened on the left where the details sit. It scrolls up more slowly than the
 /// page ([scroll]).
 class _PageBackdrop extends StatelessWidget {
-  const _PageBackdrop({required this.item, required this.scroll, this.collage = const []});
+  const _PageBackdrop({required this.item, required this.scroll, this.blurred = false});
 
   final JellyfinItem item;
   final ScrollController scroll;
 
-  /// Titles whose posters make the backdrop instead, as a tilted wall (a person's page).
-  final List<JellyfinItem> collage;
+  /// Blurred: a backdrop that isn't the page's own (a person's, from one of their titles), so
+  /// it sets a mood rather than showing a scene.
+  final bool blurred;
 
   static const _speed = 0.5; // how fast it moves with the page: 0 stays put, 1 scrolls with it
 
@@ -35,19 +36,18 @@ class _PageBackdrop extends StatelessWidget {
   Widget build(BuildContext context) {
     final tag = (item.raw['BackdropImageTags'] as List?)?.firstOrNull as String?;
     final background = Theme.of(context).scaffoldBackgroundColor;
-    if (tag == null && collage.isEmpty) return const SizedBox.shrink();
+    if (tag == null) return const SizedBox.shrink();
     return LayoutBuilder(
       builder: (context, constraints) {
         final height = heightIn(constraints.biggest);
         final pixels = View.of(context).physicalSize.width / MediaQuery.sizeOf(context).width;
-        final image = collage.isNotEmpty
-            ? _PosterWall(items: collage)
-            : Image.network(
+        final image = Image.network(
           jellyfin.client!.images.url(
             itemId: item.id,
             type: JellyfinImagesApi.typeBackdrop,
-            tag: tag!,
-            fillWidth: ((constraints.maxWidth * pixels / 320).ceil() * 320).clamp(640, 3840),
+            tag: tag,
+            // Blurred, a small copy will do: it's cheap to blur, and to fetch.
+            fillWidth: blurred ? 480 : ((constraints.maxWidth * pixels / 320).ceil() * 320).clamp(640, 3840),
             quality: 90,
           ),
           fit: BoxFit.cover,
@@ -69,32 +69,34 @@ class _PageBackdrop extends StatelessWidget {
               child: Stack(
                 fit: StackFit.expand,
                 children: [
-                  image,
-                  // Darker on the left, where the logo and details are.
-                  DecoratedBox(
-                    decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        begin: Alignment.centerLeft,
-                        end: Alignment.centerRight,
-                        // Solid at the left edge, so the artwork fades into the page's background.
-                        stops: const [0.0, 0.12, 0.4, 0.75],
-                        colors: [
-                          background,
-                          background.withValues(alpha: 0.8),
-                          background.withValues(alpha: 0.4),
-                          background.withValues(alpha: 0),
-                        ],
+                  if (blurred)
+                    // A small picture, blurred a little and dimmed: light enough for a TV to draw.
+                    // Clipped: a blur spreads past the picture's edges, which would show below
+                    // the fade as a band.
+                    ClipRect(
+                      child: ImageFiltered(
+                        imageFilter: ImageFilter.blur(sigmaX: 12, sigmaY: 12, tileMode: TileMode.clamp),
+                        child: image,
                       ),
-                    ),
-                  ),
-                  // Into the page at the bottom.
+                    )
+                  else
+                    image,
+                  if (blurred) ColoredBox(color: background.withValues(alpha: 0.35)),
+                  // Fading into the page at the bottom only: a long, gentle fade, so its end
+                  // never shows as an edge.
                   DecoratedBox(
                     decoration: BoxDecoration(
                       gradient: LinearGradient(
                         begin: Alignment.topCenter,
                         end: Alignment.bottomCenter,
-                        stops: const [0.35, 1.0],
-                        colors: [background.withValues(alpha: 0), background],
+                        stops: const [0.25, 0.5, 0.7, 0.85, 1.0],
+                        colors: [
+                          background.withValues(alpha: 0),
+                          background.withValues(alpha: 0.25),
+                          background.withValues(alpha: 0.6),
+                          background.withValues(alpha: 0.88),
+                          background,
+                        ],
                       ),
                     ),
                   ),
@@ -156,80 +158,6 @@ class _HeroTitle extends StatelessWidget {
           ),
         ),
       ),
-    );
-  }
-}
-
-/// A person's titles as a wall of posters, tilted, softened and dimmed: a backdrop that's theirs
-/// alone, of everything they're in. Rows of posters, each row shifted along from the last.
-class _PosterWall extends StatelessWidget {
-  const _PosterWall({required this.items});
-
-  final List<JellyfinItem> items;
-
-  @override
-  Widget build(BuildContext context) {
-    final posters = [for (final i in items) if (i.imageTags['Primary'] != null) i];
-    if (posters.isEmpty) return const SizedBox.shrink();
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        // Wider than the area, so the tilt never shows a corner.
-        final width = constraints.maxWidth * 1.4;
-        final posterWidth = (width / 9).clamp(90.0, 220.0);
-        final posterHeight = posterWidth * 1.5;
-        const gap = 10.0;
-        final perRow = (width / (posterWidth + gap)).ceil() + 1;
-        final rows = (constraints.maxHeight * 1.4 / (posterHeight + gap)).ceil() + 1;
-        var n = 0;
-        Widget poster() {
-          final item = posters[n++ % posters.length];
-          return Padding(
-            padding: const EdgeInsets.all(gap / 2),
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(8),
-              child: SizedBox(
-                width: posterWidth,
-                height: posterHeight,
-                child: Image.network(
-                  jellyfin.client!.images.url(
-                    itemId: item.id,
-                    type: JellyfinImagesApi.typePrimary,
-                    tag: item.imageTags['Primary'],
-                    fillWidth: 240,
-                    quality: 80,
-                  ),
-                  fit: BoxFit.cover,
-                  errorBuilder: (_, _, _) => const SizedBox.shrink(),
-                ),
-              ),
-            ),
-          );
-        }
-
-        return ClipRect(
-          child: ImageFiltered(
-            imageFilter: ImageFilter.blur(sigmaX: 2.5, sigmaY: 2.5, tileMode: TileMode.clamp),
-            child: OverflowBox(
-              maxWidth: width,
-              maxHeight: constraints.maxHeight * 1.4,
-              child: Transform.rotate(
-                angle: -0.12,
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    for (var r = 0; r < rows; r++)
-                      Transform.translate(
-                        // Each row along by part of a poster, so they don't line up in columns.
-                        offset: Offset(-posterWidth * ((r * 0.37) % 1), 0),
-                        child: Row(mainAxisSize: MainAxisSize.min, children: [for (var c = 0; c < perRow; c++) poster()]),
-                      ),
-                  ],
-                ),
-              ),
-            ),
-          ),
-        );
-      },
     );
   }
 }
@@ -464,29 +392,82 @@ Future<List<JellyfinItem>> _collectionItems(String collectionId) async => (await
   fields: const ['ProductionYear'],
 )).items;
 
-/// The collections [item] is in, each with the rest of what's in it. A movie's franchise comes
-/// from the collection id the server matched it to (TMDb's); collections made by hand (without
-/// such an id) are looked through, a few at most.
-Future<List<_CollectionRow>> _collectionsWith(JellyfinItem item) async {
-  final franchise = (item.raw['ProviderIds'] as Map?)?['TmdbCollection'] as String?;
-  final all = await _collections();
-  final candidates = [
-    for (final c in all)
-      if (franchise != null && (c.raw['ProviderIds'] as Map?)?['Tmdb'] == franchise) c,
-  ];
-  final handmade = [for (final c in all) if ((c.raw['ProviderIds'] as Map?)?['Tmdb'] == null) c];
-  if (handmade.length <= 10) candidates.addAll(handmade);
+/// What's in every collection: collection id → its titles. Built once (every collection
+/// looked through, a few at a time) and kept for half an hour, so a title's or a person's page
+/// can find their collections straight away, however many there are.
+Future<Map<String, List<JellyfinItem>>>? _collectionContents;
+DateTime _collectionContentsAt = DateTime(0);
 
-  final rows = await Future.wait([
-    for (final c in candidates)
-      _collectionItems(c.id).then<_CollectionRow?>(
-        (items) => items.any((i) => i.id == item.id)
-            ? (collection: c, items: [for (final i in items) if (i.id != item.id) i])
-            : null,
-        onError: (Object _) => null,
-      ),
-  ]);
-  return [for (final r in rows) if (r != null && r.items.isNotEmpty) r];
+Future<Map<String, List<JellyfinItem>>> _contentsOfCollections() {
+  if (_collectionContents == null ||
+      DateTime.now().difference(_collectionContentsAt) > const Duration(minutes: 30)) {
+    _collectionContentsAt = DateTime.now();
+    _collectionContents = () async {
+      final all = await _collections();
+      final contents = <String, List<JellyfinItem>>{};
+      // Six at a time: quick, without flooding the server.
+      for (var i = 0; i < all.length; i += 6) {
+        await Future.wait([
+          for (final c in all.skip(i).take(6))
+            _collectionItems(c.id).then((items) => contents[c.id] = items, onError: (Object _) => const <JellyfinItem>[]),
+        ]);
+      }
+      return contents;
+    }();
+    _collectionContents!.catchError((Object _) {
+      _collectionContents = null; // try again next time
+      return const <String, List<JellyfinItem>>{};
+    });
+  }
+  return _collectionContents!;
+}
+
+/// The collections [item] is in, each with the rest of what's in it.
+Future<List<_CollectionRow>> _collectionsWith(JellyfinItem item) async {
+  final all = await _collections();
+  final contents = await _contentsOfCollections();
+  return [
+    for (final c in all)
+      if (contents[c.id] case final items? when items.any((i) => i.id == item.id))
+        if ([for (final i in items) if (i.id != item.id) i] case final rest when rest.isNotEmpty)
+          (collection: c, items: rest),
+  ];
+}
+
+/// The collections any of [titles] are in (a person's: everything they're in), in name order.
+Future<List<JellyfinItem>> _collectionsWithAny(List<JellyfinItem> titles) async {
+  final ids = {for (final t in titles) t.id};
+  final all = await _collections();
+  final contents = await _contentsOfCollections();
+  return [
+    for (final c in all)
+      if (contents[c.id]?.any((i) => ids.contains(i.id)) ?? false) c,
+  ]..sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
+}
+
+/// A person's collections: a row of the collections their movies and shows are in. Nothing
+/// until they're found, or if there are none.
+class _PersonCollections extends StatefulWidget {
+  const _PersonCollections({required this.titles});
+
+  final List<JellyfinItem> titles;
+
+  @override
+  State<_PersonCollections> createState() => _PersonCollectionsState();
+}
+
+class _PersonCollectionsState extends State<_PersonCollections> {
+  late final _found = _collectionsWithAny(widget.titles).catchError((Object _) => <JellyfinItem>[]);
+
+  @override
+  Widget build(BuildContext context) => FutureBuilder(
+    future: _found,
+    builder: (context, snap) {
+      final collections = snap.data ?? const <JellyfinItem>[];
+      if (collections.isEmpty) return const SizedBox.shrink();
+      return _ItemRow(title: 'Collections', items: collections);
+    },
+  );
 }
 
 /// The server's "more like this" for [item].
@@ -618,9 +599,6 @@ class _ItemRowState extends State<_ItemRow> {
         ),
       ),
     );
-    // Scrolled along with a remote, the card before the first one in view would peek out of
-    // the margin as a sliver. Phones keep rows running to the edge, for swiping.
-    if (!isPhone) row = ClipRect(clipper: _LeftMarginClipper(_sides(context).left / 2), child: row);
 
     return Padding(
       padding: const EdgeInsets.only(top: 24),
@@ -652,20 +630,6 @@ class _ItemRowState extends State<_ItemRow> {
       ),
     );
   }
-}
-
-/// Clips off the left [left] of a row, where a card scrolled past would peek out, and nothing
-/// above, below or to the right (so a focused card can still grow there).
-class _LeftMarginClipper extends CustomClipper<Rect> {
-  const _LeftMarginClipper(this.left);
-
-  final double left;
-
-  @override
-  Rect getClip(Size size) => Rect.fromLTRB(left, -size.height, size.width * 2, size.height * 2);
-
-  @override
-  bool shouldReclip(_LeftMarginClipper old) => old.left != left;
 }
 
 // ─── Media info ──────────────────────────────────────────────────────────────
@@ -720,19 +684,51 @@ class _MediaInfo extends StatelessWidget {
     List<String> capped(List<String> values) =>
         values.length <= most ? values : [...values.take(most), '+${values.length - most} more'];
 
+    // A box the remote can land on, so it can reach (and scroll to) the end of the page: a
+    // border shows while it's there. Selecting it does nothing.
     return Padding(
-      padding: pageSides(context, extra: 12).copyWith(top: 24),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        spacing: 10,
-        children: [
-          Text('Media info', style: context.text.titleLarge),
-          if (video.isNotEmpty) line('Video', video),
-          if (audio.isNotEmpty) line('Audio', capped(audio)),
-          if (subtitles.isNotEmpty) line('Subtitles', capped(subtitles)),
-          if (file.isNotEmpty) line('File', [file]),
-        ],
+      // In by the box's own padding less, so its text lines up with the rest of the page.
+      padding: pageSides(context, extra: 0).copyWith(top: 24),
+      child: ScrollIntoViewOnFocus(
+        child: Tappable(
+          onPress: () {},
+          semanticsLabel: 'Media info',
+          builder: (context, states, child) => AnimatedContainer(
+            duration: const Duration(milliseconds: 120),
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(
+                color: isHighlighted(states) ? context.colors.primary : const Color(0x00000000),
+                width: PosterCard.borderWidth,
+              ),
+            ),
+            child: child,
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            spacing: 10,
+            children: [
+              Text('Media info', style: context.text.titleLarge),
+              if (video.isNotEmpty) line('Video', video),
+              if (audio.isNotEmpty) line('Audio', capped(audio)),
+              if (subtitles.isNotEmpty) line('Subtitles', capped(subtitles)),
+              if (file.isNotEmpty) line('File', [file]),
+            ],
+          ),
+        ),
       ),
     );
   }
+}
+
+/// The backdrop behind a person's page: their best-rated title that has one.
+JellyfinItem? _personBackdrop(List<JellyfinItem> titles) {
+  final withBackdrop = [
+    for (final t in titles)
+      if ((t.raw['BackdropImageTags'] as List?)?.isNotEmpty ?? false) t,
+  ];
+  if (withBackdrop.isEmpty) return null;
+  num score(JellyfinItem t) => (t.raw['CommunityRating'] as num?) ?? 0;
+  return withBackdrop.reduce((best, t) => score(t) > score(best) ? t : best);
 }
