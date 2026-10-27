@@ -27,6 +27,7 @@ import 'theme/theme.dart';
 import 'theme/theme_controller.dart';
 import 'core/storage/app_defaults.dart';
 import 'features/library/genres.dart';
+import 'core/theming/server_themes.dart';
 
 Future<void> main() async {
   _quietMediaKit();
@@ -50,7 +51,11 @@ Future<void> main() async {
   storage = await Storage.open(); // before anything that reads a setting
   await appDefaults.load(); // assets/defaults.json: what each setting starts as
   unawaited(storage.pruneCache(DateTime.now().subtract(AppCache.keepFor)));
+  // The server's own themes, as saved for it last time, so one of them can be in use from the
+  // first frame (see docs/themes.md). Fetched again once signed in.
+  serverThemes = await ServerThemes.load(storage.getString('jf_token') == null ? null : storage.getString('jf_server'));
   themeController = await ThemeController.load();
+  serverThemes.sheetChanged.addListener(themeController.serverThemesChanged);
   fontController = await FontController.load();
   iconController = await IconController.load();
   playbackSettings = await PlaybackSettings.load();
@@ -70,6 +75,7 @@ Future<void> main() async {
 
   jellyfin = JellyfinController();
   await jellyfin.load();
+  serverThemes.follow(); // the signed-in server's themes, fetched again
 
   // Downloads for offline viewing: picks up any that carried on while the app was closed, then
   // tells the server where you got to in them while offline (if it can be reached now).

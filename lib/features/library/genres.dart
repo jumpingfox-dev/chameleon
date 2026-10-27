@@ -4,6 +4,8 @@ import 'package:material_ui/material_ui.dart';
 
 import '../../core/focus/scroll_into_view.dart';
 import '../../core/jellyfin/jellyfin_controller.dart';
+import '../../core/theming/server_themes.dart';
+import '../../widgets/layered_image.dart';
 import '../../core/storage/app_defaults.dart';
 import '../../core/storage/storage.dart';
 import '../../theme/app_icons.dart';
@@ -25,7 +27,9 @@ IconData _iconFor(String genre) {
 /// How genre cards look (Settings › Appearance › Genre cards).
 enum GenreCardStyle {
   icons('Icons'),
-  pictures('Jellyfin pictures');
+  pictures('Jellyfin pictures'),
+  /// The server's theme's (see docs/themes.md).
+  theme('Theme pictures');
 
   const GenreCardStyle(this.label);
   final String label;
@@ -69,7 +73,7 @@ double genreCardWidth(BuildContext context) =>
 /// A genre card's width over its height: a thumbnail's 16:9 for icons; for Jellyfin's pictures,
 /// theirs (most often square), so they show whole.
 double genreCardAspect() {
-  if (genreCards.value == GenreCardStyle.icons) return 16 / 9;
+  if (genreCards.value != GenreCardStyle.pictures) return 16 / 9; // a theme's pictures fill a thumbnail
   final ratios = [
     for (final genre in jellyfin.genres)
       if ((jellyfin.genreItem(genre)?.raw['PrimaryImageAspectRatio'] as num?) case final ratio? when ratio > 0)
@@ -88,7 +92,7 @@ class GenresScreen extends StatelessWidget {
     body: Padding(
       padding: pageSides(context, extra: 12),
       child: ListenableBuilder(
-        listenable: Listenable.merge([jellyfin, genreCards]),
+        listenable: Listenable.merge([jellyfin, genreCards, serverThemes]),
         builder: (context, _) {
           final genres = jellyfin.genres;
           if (genres.isEmpty) {
@@ -129,7 +133,10 @@ class GenreTile extends StatelessWidget {
   Widget build(BuildContext context) {
     final item = jellyfin.genreItem(genre);
     final tag = item?.imageTags['Primary'];
-    final picture = genreCards.value == GenreCardStyle.pictures && item != null && tag != null;
+    final style = genreCards.value;
+    final picture = style == GenreCardStyle.pictures && item != null && tag != null;
+    // A server theme's pictures: its own, then the server's default, then the icon card.
+    final themePictures = style == GenreCardStyle.theme ? serverThemes.genrePicture(genre) : const <ImageProvider>[];
     final colors = context.colors;
     return Tappable(
       // On top of where you are, so Back returns to it.
@@ -153,7 +160,11 @@ class GenreTile extends StatelessWidget {
           ),
         );
       },
-      child: picture ? _PictureCard(genre: genre, item: item, tag: tag) : _IconCard(genre: genre),
+      child: picture
+          ? _PictureCard(genre: genre, item: item, tag: tag)
+          : themePictures.isNotEmpty
+          ? _ThemePictureCard(genre: genre, pictures: themePictures)
+          : _IconCard(genre: genre),
     );
   }
 }
@@ -231,6 +242,33 @@ class _IconCard extends StatelessWidget {
       ),
     );
   }
+}
+
+/// A server theme's picture for the genre, filling the card, with the name over a fade.
+class _ThemePictureCard extends StatelessWidget {
+  const _ThemePictureCard({required this.genre, required this.pictures});
+
+  final String genre;
+  final List<ImageProvider> pictures;
+
+  @override
+  Widget build(BuildContext context) => Stack(
+    fit: StackFit.expand,
+    children: [
+      LayeredImage(pictures: pictures, fit: BoxFit.cover, fallback: _IconCard(genre: genre)),
+      const DecoratedBox(
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            stops: [0.5, 1],
+            colors: [Color(0x00000000), Color(0xCC000000)],
+          ),
+        ),
+      ),
+      _GenreName(genre),
+    ],
+  );
 }
 
 /// Jellyfin's picture for the genre, whole, with the name over a fade at the bottom. Its icon

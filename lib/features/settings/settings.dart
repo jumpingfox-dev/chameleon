@@ -36,6 +36,7 @@ import '../../widgets/tappable.dart';
 import '../../core/platform/page_insets.dart';
 import '../../widgets/remote_text_field.dart';
 import '../library/genres.dart';
+import '../../core/theming/server_themes.dart';
 
 part 'screensaver_tab.dart';
 part 'server_tab.dart';
@@ -390,6 +391,7 @@ class _AppearanceCard extends StatelessWidget {
     listenable: Listenable.merge([themeController, fontController, iconController, playbackSettings]),
     builder: (context, _) {
       final preset = themeController.value;
+      final presets = themeController.allPresets; // listed once, so the one in use is among them
 
       return _SettingsCard(
         children: [
@@ -417,11 +419,37 @@ class _AppearanceCard extends StatelessWidget {
           const _SectionTitle('Theme', description: 'Pick a preset, or "Custom" to build your own.'),
           _PickerSetting<ThemePreset>(
             title: 'Theme',
-            value: preset,
-            options: themeController.allPresets.toList(),
+            // The listed one that's in use (the server's themes are listed afresh each time, so
+            // matched by id rather than as the same object).
+            value: presets.where((p) => p.id == preset.id).firstOrNull ?? preset,
+            options: presets,
             format: (p) => p.label,
             onChange: themeController.select,
+            // The server's themes say who made them, and if their pictures don't load.
+            itemBuilder: (context, p) {
+              final theme = ThemeController.isServerTheme(p) ? serverThemes.sheet.themeNamed(p.label) : null;
+              if (theme == null) return Text(p.label);
+              final broken = serverThemes.brokenLinks(theme).length;
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(p.label),
+                  Text(
+                    [
+                      'From your server${theme.author == null ? '' : ' · by ${theme.author}'}',
+                      if (broken > 0) '$broken ${broken == 1 ? "picture doesn't" : "pictures don't"} load',
+                    ].join(' · '),
+                    style: context.text.bodySmall?.copyWith(
+                      color: broken > 0 ? context.colors.error : context.colors.onSurfaceVariant,
+                    ),
+                  ),
+                ],
+              );
+            },
           ),
+          // Checks the server's links while this is open, and says what's wrong.
+          const _ServerThemeNotes(),
           if (preset.id == customThemeId) ...[
             const SizedBox(height: 16),
             const CustomThemeEditor(),
@@ -1305,5 +1333,54 @@ class _InfoRow extends StatelessWidget {
         ),
       ],
     ),
+  );
+}
+
+/// Under the theme picker: checks the server themes' links while it's open, and lists what
+/// doesn't work, for the current theme and the server's defaults, so whoever wrote them knows
+/// what to fix (see docs/themes.md).
+class _ServerThemeNotes extends StatefulWidget {
+  const _ServerThemeNotes();
+
+  @override
+  State<_ServerThemeNotes> createState() => _ServerThemeNotesState();
+}
+
+class _ServerThemeNotesState extends State<_ServerThemeNotes> {
+  @override
+  void initState() {
+    super.initState();
+    serverThemes.checkLinks();
+  }
+
+  @override
+  Widget build(BuildContext context) => ListenableBuilder(
+    listenable: Listenable.merge([serverThemes, themeController]),
+    builder: (context, _) {
+      final sheet = serverThemes.sheet;
+      final current = ThemeController.isServerTheme(themeController.value)
+          ? sheet.themeNamed(themeController.value.label)
+          : null;
+      final broken = [...?current == null ? null : serverThemes.brokenLinks(current), ...serverThemes.brokenDefaults];
+      final notes = <String>[
+        if (sheet.missingDefaultTheme)
+          "Your server's defaults start people on \"${sheet.defaults.theme}\", but there's no theme by that name.",
+        ...?current?.problems.map((p) => '${current.name}: $p'),
+        for (final b in broken) '${b.what}: ${b.problem}\n${b.url}',
+      ];
+      if (notes.isEmpty) return const SizedBox.shrink();
+      final style = context.text.bodySmall?.copyWith(color: context.colors.error);
+      return Padding(
+        padding: const EdgeInsets.only(top: 12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          spacing: 8,
+          children: [
+            Text("Some of your server's theme doesn't work", style: context.text.titleSmall),
+            for (final note in notes) Text(note, style: style),
+          ],
+        ),
+      );
+    },
   );
 }

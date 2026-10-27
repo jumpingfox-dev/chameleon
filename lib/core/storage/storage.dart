@@ -56,6 +56,10 @@ class Storage {
 
   String? getString(String key) => _settings[_scoped(key)] ?? _settings[key];
 
+  /// [key] as the current person set it, without the value from before settings were kept per
+  /// person.
+  String? getOwnString(String key) => _settings[_scoped(key)];
+
   bool? getBool(String key) => switch (getString(key)) {
     'true' => true,
     'false' => false,

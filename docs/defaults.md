@@ -16,7 +16,7 @@ rather than the device (audio and subtitle languages, Parental Controls) aren't 
 | `fonts.headingFont`, `fonts.bodyFont` | Any Google Fonts family name, e.g. `"Space Grotesk"` |
 | `theme` | `default`, `ruby`, `amber`, `citrine`, `emerald`, `sapphire`, `tanzanite`, `amethyst` |
 | `icons` | `materialSymbols`, `phosphor`, `lucide`, `cupertino`, `fluent` |
-| `genreCards` | `icons`, `pictures` (the pictures Jellyfin has for each genre) |
+| `genreCards` | `icons`, `pictures` (the pictures Jellyfin has for each genre), `theme` (the server theme's: see [themes.md](themes.md)) |
 | `bottomBar` | Up to 4 of `home`, `search`, `downloads`, `favorites`, `genres`, `settings`, or a library kind: `movies`, `tvshows`, `music`, `boxsets`, ... (the first library of that kind). `downloads` becomes `favorites` on devices without downloads. |
 | `menuPinned` | `true` keeps the menu open beside the page on wide screens |
 

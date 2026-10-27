@@ -7,6 +7,7 @@ import '../../theme/app_icons.dart';
 import '../../core/format/format.dart';
 import '../../core/jellyfin/jellyfin_controller.dart';
 import '../../widgets/app_logo.dart';
+import '../../widgets/server_backdrop.dart';
 import '../../theme/theme.dart';
 import '../../core/focus/focus_rows.dart';
 
@@ -25,7 +26,10 @@ class ProfilePickerScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Scaffold(
-    body: Padding(
+    // In the server's branding, as Jellyfin's sign-in page is (see ServerBranding).
+    body: ServerBranding(
+      server: server ?? jellyfin.lastServer,
+      child: Padding(
       padding: const EdgeInsets.symmetric(horizontal: 12),
       child: SafeArea(
       child: ListenableBuilder(
@@ -43,7 +47,7 @@ class ProfilePickerScreen extends StatelessWidget {
                 : Column(
                     mainAxisSize: .min,
                     children: [
-                      const AppLogo(
+                      AppLogo(
                         asset: 'assets/images/text_logo.svg',
                         colorAsset: 'assets/images/text_logo_color.svg',
                         height: 48,
@@ -54,13 +58,15 @@ class ProfilePickerScreen extends StatelessWidget {
                       // Opened from your profile picture: back to where you were.
                       if (jellyfin.isConnected && GoRouter.of(context).canPop()) ...[
                         const SizedBox(height: 16),
-                        OutlinedButton(onPressed: () => GoRouter.of(context).pop(), child: const Text('Back')),
+                        // Filled, so it reads over a splash screen.
+                        FilledButton.tonal(onPressed: () => GoRouter.of(context).pop(), child: const Text('Back')),
                       ],
                     ],
                   ),
           ),
         ),
       ),
+    ),
     ),
     ),
   );

@@ -15,8 +15,14 @@ class ThemeSeed {
 
   String get code => '${baseHue.toString().padLeft(3, '0')}${accentHue.toString().padLeft(3, '0')}$vibrance$depth';
 
-  /// Accepts "28533082" or "285-330-8-2".
+  /// Accepts "28533082", "285-330-8-2", or with the hues unpadded, "150-20-8-2".
   static ThemeSeed? parse(String input) {
+    final parts = input.trim().split(RegExp(r'\s*-\s*'));
+    if (parts.length == 4 && parts.every((p) => RegExp(r'^\d+$').hasMatch(p))) {
+      final [base, accent, vibrance, depth] = [for (final p in parts) int.parse(p)];
+      if (base > 359 || accent > 359 || vibrance > 9 || depth > 9) return null;
+      return ThemeSeed(base, accent, vibrance, depth);
+    }
     final digits = input.replaceAll(RegExp(r'[\s-]'), '');
     if (!RegExp(r'^\d{8}$').hasMatch(digits)) return null;
     final base = int.parse(digits.substring(0, 3));

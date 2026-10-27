@@ -10,6 +10,7 @@ import 'quick_connect_dialog.dart';
 import '../../theme/app_icons.dart';
 import '../../widgets/app_logo.dart';
 import '../../theme/theme.dart';
+import '../../widgets/server_backdrop.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({
@@ -55,6 +56,7 @@ class _LoginScreenState extends State<LoginScreen> {
 
   /// The server's name and its public users, once connected.
   String? _serverName;
+
   List<PublicUser> _users = const [];
 
   /// Signing in as one of the public users: their name is filled in, and only the password's
@@ -263,7 +265,11 @@ class _LoginScreenState extends State<LoginScreen> {
     };
 
     return Scaffold(
-      body: Padding(
+      // Once the server's known, everything in its branding (see ServerBranding).
+      body: ServerBranding(
+      server: _step == _Step.server ? null : _server.text,
+      fresh: true, // just connected: as the server has it now
+      child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 12),
         child: SafeArea(
           child: Center(
@@ -275,7 +281,8 @@ class _LoginScreenState extends State<LoginScreen> {
                 child: _step == _Step.users ? _usersScreen(context) : Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    const AppLogo(
+                    // The server's own logo once it's known (see ServerBranding).
+                    AppLogo(
                       asset: 'assets/images/text_logo.svg',
                       colorAsset: 'assets/images/text_logo_color.svg',
                       height: 48,
@@ -327,6 +334,7 @@ class _LoginScreenState extends State<LoginScreen> {
                         ),
                       ),
                     ),
+                    ..._disclaimerText(context),
                     // Room to scroll the field above a TV's keyboard while typing.
                     if (_typing && ScreenType.of(context).isTv)
                       SizedBox(height: MediaQuery.sizeOf(context).height * 0.5),
@@ -336,7 +344,7 @@ class _LoginScreenState extends State<LoginScreen> {
             ),
           ),
         ),
-      ),
+      )),
     );
   }
 
@@ -376,7 +384,7 @@ class _LoginScreenState extends State<LoginScreen> {
   Widget _usersScreen(BuildContext context) => Column(
     mainAxisSize: MainAxisSize.min,
     children: [
-      const AppLogo(
+      AppLogo(
         asset: 'assets/images/text_logo.svg',
         colorAsset: 'assets/images/text_logo_color.svg',
         height: 48,
@@ -391,12 +399,29 @@ class _LoginScreenState extends State<LoginScreen> {
         spacing: 12,
         runSpacing: 12,
         children: [
-          OutlinedButton(onPressed: _busy ? null : _quickConnect, child: const Text('Use Quick Connect')),
-          OutlinedButton(onPressed: _busy ? null : _stepBack, child: const Text('Change server')),
+          // Filled, so they read over a splash screen.
+          FilledButton.tonal(onPressed: _busy ? null : _quickConnect, child: const Text('Use Quick Connect')),
+          FilledButton.tonal(onPressed: _busy ? null : _stepBack, child: const Text('Change server')),
         ],
       ),
+      ..._disclaimerText(context),
     ],
   );
+
+  /// The server's login disclaimer, under everything, as Jellyfin's own sign-in page shows it.
+  List<Widget> _disclaimerText(BuildContext context) => [
+    if (SignInBrandingScope.maybeOf(context)?.disclaimer case final text? when _step != _Step.server) ...[
+      const SizedBox(height: 24),
+      ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 560),
+        child: Text(
+          text,
+          textAlign: TextAlign.center,
+          style: context.text.bodyMedium?.copyWith(color: context.colors.onSurfaceVariant),
+        ),
+      ),
+    ],
+  ];
 
   /// The account saved on this device for [user], if they've signed in here before.
   SavedAccount? _savedFor(PublicUser user) => jellyfin.accounts.where((a) => a.isSame(user.server, user.id)).firstOrNull;

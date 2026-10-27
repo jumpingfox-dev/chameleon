@@ -25,6 +25,7 @@ import '../../core/focus/scroll_into_view.dart';
 import '../../theme/theme.dart';
 import '../../widgets/remote_text_field.dart';
 import '../../widgets/title_logo.dart';
+import '../../core/theming/server_themes.dart';
 
 // ─── Definitions ─────────────────────────────────────────────────────────────
 
@@ -1575,9 +1576,9 @@ class _GenresRowState extends State<_GenresRow> {
   }
 
   @override
-  Widget build(BuildContext context) => ValueListenableBuilder(
-    valueListenable: genreCards, // icons or pictures: sized to match
-    builder: (context, _, _) => _build(context),
+  Widget build(BuildContext context) => ListenableBuilder(
+    listenable: Listenable.merge([genreCards, serverThemes]), // the cards' style, and a theme's pictures
+    builder: (context, _) => _build(context),
   );
 
   Widget _build(BuildContext context) {
