@@ -168,8 +168,8 @@ class _SearchScreenState extends State<SearchScreen> {
       child: Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        SizedBox(height: pageTop(context)),
-        // (Fixed above the results: kept clear of the status bar while the top bar is hidden.)
+        SizedBox(height: pageTopGap(context)),
+        // (Fixed above the results: kept clear of the top bar, moving up when it slides away.)
         // Arriving from the menu, top bar or bottom bar: ready to type (on a TV, the remote is on
         // the box, and Select opens the keyboard).
         ClearOfHiddenTopBar(

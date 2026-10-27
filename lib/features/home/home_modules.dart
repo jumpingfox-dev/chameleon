@@ -18,6 +18,7 @@ import '../detail/detail_page.dart';
 import 'package:go_router/go_router.dart';
 import '../../widgets/nav_button.dart';
 import '../../widgets/tappable.dart';
+import '../library/genres.dart';
 import '../library/item_menu.dart';
 import '../library/poster_card.dart';
 import '../../core/focus/scroll_into_view.dart';
@@ -82,6 +83,12 @@ final homeModuleSpecs = <HomeModuleType, HomeModuleSpec>{
     description: 'Your libraries, as tiles',
     icon: (i) => i.folder,
     load: (_, _) async => const HomeModuleContent([]), // drawn from the libraries, already loaded
+  ),
+  HomeModuleType.genres: HomeModuleSpec(
+    title: 'Genres',
+    description: 'Ten genres, picked at random',
+    icon: (i) => i.genres,
+    load: (_, _) async => const HomeModuleContent([]), // drawn from the genres, already loaded
   ),
   HomeModuleType.continueWatching: HomeModuleSpec(
     title: 'Continue Watching',
@@ -464,8 +471,8 @@ class _HomeModuleViewState extends State<HomeModuleView>
 
   /// View toggle, move up, move down and remove: shown next to the title in edit mode.
   List<Widget> _editControls(BuildContext context) => [
-    // Not for the banner or My Media, which have one look each.
-    if (widget.module.type != HomeModuleType.carousel && widget.module.type != HomeModuleType.myMedia)
+    // Not for the banner, My Media or Genres, which have one look each.
+    if (!const {HomeModuleType.carousel, HomeModuleType.myMedia, HomeModuleType.genres}.contains(widget.module.type))
       IconButton(
         onPressed: () => homeLayout.setView(
           widget.module.id,
@@ -503,11 +510,14 @@ class _HomeModuleViewState extends State<HomeModuleView>
     final module = widget.module;
     final isCarousel = module.type == HomeModuleType.carousel;
     final isMyMedia = module.type == HomeModuleType.myMedia;
+    final isGenres = module.type == HomeModuleType.genres;
 
     // Loaded and empty: hidden entirely, unless you're editing (then it says so).
     if (!widget.editing &&
         (isMyMedia
             ? jellyfin.libraries.isEmpty
+            : isGenres
+            ? jellyfin.genres.isEmpty
             : _error == null && (_content?.items.isEmpty ?? false))) {
       return const SizedBox.shrink();
     }
@@ -527,7 +537,8 @@ class _HomeModuleViewState extends State<HomeModuleView>
           crossAxisAlignment: CrossAxisAlignment.start,
           spacing: 8,
           children: [
-            if (!isCarousel || widget.editing)
+            // The banner and Genres speak for themselves: titled only while editing.
+            if (!(isCarousel || isGenres) || widget.editing)
               Padding(
                 padding: pageSides(
                   context,
@@ -556,6 +567,8 @@ class _HomeModuleViewState extends State<HomeModuleView>
               Padding(padding: pageSides(context), child: _carousel(context))
             else if (isMyMedia)
               _MyMediaRow(sides: _rowSides(context), editing: widget.editing)
+            else if (isGenres)
+              _GenresRow(sides: _rowSides(context))
             else
               _row(context, _viewFor(context), captions: captions),
           ],
@@ -689,7 +702,7 @@ class _HomeModuleViewState extends State<HomeModuleView>
   }
 
   /// The space between a row's tiles.
-  static const _rowGap = 4.0;
+  static const _rowGap = CardRows.gap;
 
   static const _widenDuration = Duration(milliseconds: 250);
 
@@ -742,24 +755,9 @@ class _HomeModuleViewState extends State<HomeModuleView>
     position.animateTo(offset, duration: const Duration(milliseconds: 200), curve: Curves.easeOutCubic);
   }
 
-  /// A tile's width in a row. On wider screens it's sized to the row, so as many fit whatever
-  /// the screen: 3½ thumbnails (the half one says there's more), and about 6 posters. Phones
-  /// keep theirs.
-  static double _tileWidth(BuildContext context, LibraryView view) {
-    if (ScreenType.of(context).isPhone) return view == LibraryView.poster ? 150.0 : 280.0;
-    final sides = _rowSides(context);
-    final row = MediaQuery.sizeOf(context).width - sides.horizontal;
-    final across = view == LibraryView.poster ? 6.3 : 3.5;
-    // The row's width, less the gaps between the tiles that show.
-    return (row - (across.ceil() - 1) * _rowGap) / across;
-  }
+  static double _tileWidth(BuildContext context, LibraryView view) => CardRows.tileWidth(context, view);
 
-  /// A row's padding at its ends: the first card in line with the section's title, and the
-  /// same room after the last one when the row is scrolled to its end.
-  static EdgeInsets _rowSides(BuildContext context) {
-    final sides = pageSides(context);
-    return sides.copyWith(right: sides.left);
-  }
+  static EdgeInsets _rowSides(BuildContext context) => CardRows.sides(context);
 }
 
 // ─── Adding sections ─────────────────────────────────────────────────────────
@@ -1541,6 +1539,84 @@ class _PlaceholderBanner extends StatelessWidget {
 
 /// Your libraries as tiles of their own artwork (or a colored tile with its icon and name,
 /// without any), each opening the library.
+/// Ten of the server's genres, picked at random (once per launch, so they don't shuffle as you
+/// scroll), as tiles like the Genres page's.
+class _GenresRow extends StatefulWidget {
+  const _GenresRow({required this.sides});
+
+  final EdgeInsets sides; // the row's padding at its ends
+
+  @override
+  State<_GenresRow> createState() => _GenresRowState();
+}
+
+class _GenresRowState extends State<_GenresRow> {
+  final _scroll = ScrollController();
+
+  static const _gap = 12.0;
+
+  static List<String>? _picked;
+  static List<String>? _pickedFrom;
+
+  static List<String> _pick(List<String> genres) {
+    if (!identical(genres, _pickedFrom)) {
+      _pickedFrom = genres;
+      _picked = ([...genres]..shuffle()).take(10).toList();
+    }
+    return _picked!;
+  }
+
+  @override
+  void dispose() {
+    _scroll.dispose();
+    super.dispose();
+  }
+
+  /// With a remote, as the other rows do: tile [index] sits in the last slot that fits whole,
+  /// so the row moves under it and it never runs to the screen's edge.
+  void _keepInSlot(int index, double width) {
+    if (FocusManager.instance.highlightMode != FocusHighlightMode.traditional) return;
+    if (!_scroll.hasClients) return;
+    final position = _scroll.position;
+    final step = width + _gap;
+    final slot = math.max(0, ((position.viewportDimension - widget.sides.left - width) / step).floor());
+    final offset = ((index - slot) * step).clamp(position.minScrollExtent, position.maxScrollExtent);
+    if ((offset - position.pixels).abs() < 0.5) return;
+    position.animateTo(offset, duration: const Duration(milliseconds: 200), curve: Curves.easeOutCubic);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final width = genreTileWidth(context);
+    final height = width * 9 / 16;
+    final genres = _pick(jellyfin.genres);
+    return SizedBox(
+      height: height,
+      child: FocusRow(
+        child: ListView.separated(
+          controller: _scroll,
+          scrollDirection: Axis.horizontal,
+          padding: widget.sides, // the first in line with the sections' titles
+          itemCount: genres.length,
+          separatorBuilder: (_, _) => const SizedBox(width: _gap),
+          itemBuilder: (context, i) => SizedBox(
+            width: width,
+            child: Focus(
+              // Doesn't take focus itself: notices the tile getting it, and scrolls the row.
+              canRequestFocus: false,
+              skipTraversal: true,
+              onFocusChange: (focused) {
+                if (focused) _keepInSlot(i, width);
+              },
+              child: GenreTile(genre: genres[i]),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class _MyMediaRow extends StatelessWidget {
   const _MyMediaRow({required this.sides, this.editing = false});
 

@@ -8,6 +8,7 @@ import '../../core/jellyfin/library_cache.dart';
 import '../../core/jellyfin/list_each.dart';
 import '../../core/storage/app_cache.dart';
 import '../detail/detail_page.dart';
+import '../../core/focus/scroll_into_view.dart';
 import 'poster_card.dart';
 import '../../theme/theme.dart';
 import '../../widgets/tappable.dart';
@@ -367,7 +368,8 @@ class _LibraryScreenState extends State<LibraryScreen> {
       final view = libraryViewFor(context);
       return Scaffold(
         body: Padding(
-          padding: pageSides(context, extra: 12).copyWith(top: pageTop(context)),
+          // (The room at the top is inside the grid, so titles scroll up under the top bar.)
+          padding: pageSides(context, extra: 12),
           child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -378,7 +380,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             Expanded(child: _buildBody(context, view)),
-            ClearOfHiddenTopBar(child: _LetterRail(
+            ClearOfHiddenTopBar(child: Padding(padding: EdgeInsets.only(top: pageTopGap(context)), child: _LetterRail(
               view: view,
               letters: _letters,
               // Until the server says which letters have titles, every letter works.
@@ -386,7 +388,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
               onLetter: _jumpTo,
               onToggleView: () => libraryViewOverride.value =
               view == LibraryView.poster ? LibraryView.thumbnail : LibraryView.poster,
-            )),
+            ))),
           ],
         ),
         ),
@@ -432,6 +434,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
         return CustomScrollView(
           controller: _scroll,
           slivers: [
+            SliverToBoxAdapter(child: SizedBox(height: pageTop(context))),
             for (final (letter, items) in _groupByLetter()) ...[
               SliverToBoxAdapter(
                 child: SizedBox(
@@ -451,10 +454,13 @@ class _LibraryScreenState extends State<LibraryScreen> {
               SliverGrid.builder(
                 gridDelegate: libraryGridDelegate(view),
                 itemCount: items.length,
-                itemBuilder: (context, i) => PosterCard(
-                  item: items[i],
-                  view: view,
-                  onPress: () => openItem(context, items[i]),
+                // With the remote, the focused card keeps some room from the screen's edges.
+                itemBuilder: (context, i) => KeepClearOfEdges(
+                  child: PosterCard(
+                    item: items[i],
+                    view: view,
+                    onPress: () => openItem(context, items[i]),
+                  ),
                 ),
               ),
             ],
@@ -465,7 +471,8 @@ class _LibraryScreenState extends State<LibraryScreen> {
                   child: Center(child: CircularProgressIndicator()),
                 ),
               ),
-            SliverToBoxAdapter(child: SizedBox(height: pageBottom(context))),
+            // Room after the last row, so it can come up off the bottom edge like the rest.
+            SliverToBoxAdapter(child: SizedBox(height: pageBottom(context, 64))),
           ],
         );
       },

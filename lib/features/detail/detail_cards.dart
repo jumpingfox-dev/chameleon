@@ -175,10 +175,7 @@ class _MovieInfoCard extends StatelessWidget {
     return ticks is int && ticks > 0 && userData?['Played'] != true;
   }
 
-  List<Map<String, dynamic>> get _cast => [
-    for (final p in (movie.raw['People'] as List?) ?? const [])
-      if (p is Map<String, dynamic> && p['Type'] == 'Actor') p,
-  ];
+  List<Map<String, dynamic>> get _cast => _actorsOf(movie);
 
   @override
   Widget build(BuildContext context) {
@@ -242,6 +239,7 @@ class _MovieInfoCard extends StatelessWidget {
                 ),
                 _FavoriteButton(item: movie),
                 _TrailerButton(item: movie),
+                _WatchedButton(item: movie),
                 DownloadButton(item: movie, style: actionButtonStyle),
               ],
             ),
@@ -259,27 +257,7 @@ class _MovieInfoCard extends StatelessWidget {
           if (genres.isNotEmpty) _GenreButtons(genres),
 
           // ── Cast ──
-          if (cast.isNotEmpty) ...[
-            const _CardDivider(),
-            Text('Cast', style: context.text.titleLarge),
-            _EdgeToEdge(
-              // Runs to the card's edges, so the cast scrolls all the way across.
-              builder: (padding) => ScrollIntoViewOnFocus(
-                child: SizedBox(
-                  height: 155,
-                  child: FocusRow(
-                    child: ListView.separated(
-                      scrollDirection: Axis.horizontal,
-                      padding: padding,
-                      itemCount: cast.length,
-                      separatorBuilder: (_, _) => const SizedBox(width: 8),
-                      itemBuilder: (context, i) => _CastTile(person: cast[i]),
-                    ),
-                  ),
-                ),
-              ),
-            ),
-          ],
+          ..._castSection(context, cast),
         ],
       ),
     );
@@ -288,86 +266,27 @@ class _MovieInfoCard extends StatelessWidget {
 
 // ─── Series pieces ───────────────────────────────────────────────────────────
 
-/// Years, season count, age rating and score, then the description, genres,
-/// a season picker and the chosen season's episodes.
-class _SeriesInfoCard extends StatefulWidget {
+/// Years, season count, age rating and score, then Play, Favorite, Trailer and Mark as
+/// watched, the description and genres. (The seasons are a row of their own, below.)
+class _SeriesInfoCard extends StatelessWidget {
   const _SeriesInfoCard({required this.series, required this.seasons});
 
   final JellyfinItem series;
   final List<JellyfinItem> seasons;
 
-  @override
-  State<_SeriesInfoCard> createState() => _SeriesInfoCardState();
-}
-
-class _SeriesInfoCardState extends State<_SeriesInfoCard> {
-  late JellyfinItem? _season = widget.seasons.firstOrNull;
-  final _episodes =
-  <String, List<JellyfinItem>>{}; // season id → its episodes, once loaded
-  String? _loadingSeasonId;
-  String? _error;
-
-  /// Whether a season's been picked here: then the next episode's season doesn't take over.
-  bool _picked = false;
-
-  @override
-  void initState() {
-    super.initState();
-    if (_season != null) _loadEpisodes(_season!);
-    // Opens on the season of the episode you're up to.
-    _nextEpisodeOf(widget.series, widget.seasons).then((next) {
-      final seasonId = next.episode?.raw['SeasonId'] as String?;
-      final season = widget.seasons.where((s) => s.id == seasonId).firstOrNull;
-      if (!mounted || _picked || season == null || season.id == _season?.id) return;
-      setState(() => _season = season);
-      _loadEpisodes(season);
-    });
-  }
-
-  Future<void> _loadEpisodes(JellyfinItem season) async {
-    if (_episodes.containsKey(season.id)) return; // already loaded: switching back is instant
-
-    final cacheKey = 'episodes:${season.id}';
-    // Saved from before: show it now, and refresh quietly if it's old.
-    final cached = appCache.peek(cacheKey, fromJson: itemsFromJson);
-    if (cached != null) {
-      setState(() => _episodes[season.id] = cached);
-      if (appCache.isFresh(cacheKey)) return;
-    } else {
-      setState(() {
-        _loadingSeasonId = season.id;
-        _error = null;
-      });
-    }
-    try {
-      final page = await jellyfin.client!.tvShows.episodes(
-        seriesId: widget.series.id,
-        seasonId: season.id,
-        fields: const ['Overview'],
-      );
-      if (mounted) setState(() => _episodes[season.id] = page.items);
-      appCache.put(cacheKey, page.items, toJson: itemsToJson);
-    } on JellyfinException catch (e) {
-      if (mounted && cached == null) setState(() => _error = describeJellyfinError(e));
-    } finally {
-      if (mounted && _loadingSeasonId == season.id) setState(() => _loadingSeasonId = null);
-    }
-  }
-
   /// "2008–2013", "2019–present" for a show still airing, or a single year.
   String? get _years {
-    final start = widget.series.raw['ProductionYear'];
+    final start = series.raw['ProductionYear'];
     if (start is! int) return null;
-    if (widget.series.raw['Status'] == 'Continuing') return '$start–present';
+    if (series.raw['Status'] == 'Continuing') return '$start–present';
     final end = DateTime.tryParse(
-      (widget.series.raw['EndDate'] as String?) ?? '',
+      (series.raw['EndDate'] as String?) ?? '',
     )?.year;
     return end == null || end == start ? '$start' : '$start–$end';
   }
 
   @override
   Widget build(BuildContext context) {
-    final series = widget.series;
     final colors = context.colors;
     final isPhone = ScreenType.of(context).isPhone;
     final muted = context.text.bodyMedium?.copyWith(
@@ -375,14 +294,12 @@ class _SeriesInfoCardState extends State<_SeriesInfoCard> {
     );
 
     final years = _years;
-    final seasonCount = widget.seasons.length;
+    final seasonCount = seasons.length;
     final rating = series.raw['OfficialRating'] as String?;
     final score = series.raw['CommunityRating'] as num?;
     final description = (series.raw['Overview'] as String?)?.trim();
     final genres =
         (series.raw['Genres'] as List?)?.cast<String>() ?? const <String>[];
-    final season = _season;
-    final episodes = season == null ? null : _episodes[season.id];
 
     return _DetailCard(
       edgeToEdge: true,
@@ -410,15 +327,16 @@ class _SeriesInfoCardState extends State<_SeriesInfoCard> {
             ],
           ),
 
-          // ── Play, Favorite ──
+          // ── Play, Favorite, Trailer, Mark as watched ──
           ScrollIntoViewOnFocus(
             child: Wrap(
               spacing: 8,
               runSpacing: 8,
               children: [
-                _StartsHere(child: _SeriesPlayButton(series: series, seasons: widget.seasons)),
+                _StartsHere(child: _SeriesPlayButton(series: series, seasons: seasons)),
                 _FavoriteButton(item: series),
                 _TrailerButton(item: series),
+                _WatchedButton(item: series),
               ],
             ),
           ),
@@ -433,73 +351,181 @@ class _SeriesInfoCardState extends State<_SeriesInfoCard> {
 
           // ── Genres ──
           if (genres.isNotEmpty) _GenreButtons(genres),
-
-          // ── Seasons and episodes ──
-          if (season != null) ...[
-            const _CardDivider(),
-            // ── Seasons: a compact dropdown on phones (touch only); chips elsewhere, which work
-            // with a remote (a dropdown traps the arrow keys) ──
-            if (isPhone)
-              SizedBox(
-                width: 240,
-                child: DropdownMenu<JellyfinItem>(
-                  initialSelection: season,
-                  expandedInsets: EdgeInsets.zero,
-                  requestFocusOnTap: false, // a short list: no keyboard
-                  onSelected: (picked) {
-                    if (picked == null || picked.id == season.id) return;
-                    _picked = true;
-                    setState(() => _season = picked);
-                    _loadEpisodes(picked);
-                  },
-                  dropdownMenuEntries: [
-                    for (final s in widget.seasons) DropdownMenuEntry(value: s, label: s.name),
-                  ],
-                ),
-              )
-            else
-              ScrollIntoViewOnFocus(
-                child: Wrap(
-                  spacing: 8,
-                  runSpacing: 8, // many seasons flow onto more lines instead of scrolling sideways
-                  children: [
-                    for (final s in widget.seasons)
-                      ChoiceChip(
-                        label: Text(s.name),
-                        selected: s.id == season.id, // the current season stands out
-                        onSelected: (_) {
-                          if (s.id == season.id) return;
-                          _picked = true;
-                          setState(() => _season = s);
-                          _loadEpisodes(s);
-                        },
-                      ),
-                  ],
-                ),
-              ),
-            if (_loadingSeasonId == season.id && episodes == null)
-              const Padding(
-                padding: EdgeInsets.symmetric(vertical: 24),
-                child: Center(child: CircularProgressIndicator()),
-              )
-            else if (_error != null && episodes == null)
-              Text(_error!, style: muted)
-            else if (episodes != null && episodes.isEmpty)
-                Text('No episodes in this season yet.', style: muted)
-              else if (episodes != null)
-                  Column(
-                    spacing: 8,
-                    children: [
-                      for (final episode in episodes)
-                        _EpisodeTile(episode: episode),
-                    ],
-                  ),
-          ],
         ],
       ),
     );
   }
 }
+
+// ─── Season pieces ───────────────────────────────────────────────────────────
+
+/// A season's Play, Favorite and Mark as watched, its description, the
+/// cast, then its episodes.
+class _SeasonInfoCard extends StatefulWidget {
+  const _SeasonInfoCard({required this.season, required this.series, required this.episodes});
+
+  final JellyfinItem season;
+  final JellyfinItem series;
+  final List<JellyfinItem> episodes;
+
+  @override
+  State<_SeasonInfoCard> createState() => _SeasonInfoCardState();
+}
+
+class _SeasonInfoCardState extends State<_SeasonInfoCard> {
+  // Kept here, so marking the season shows on every episode straight away.
+  late var _episodes = widget.episodes;
+  bool _saving = false;
+
+  @override
+  void didUpdateWidget(_SeasonInfoCard old) {
+    super.didUpdateWidget(old);
+    if (!identical(old.episodes, widget.episodes)) _episodes = widget.episodes; // refreshed
+  }
+
+  bool get _allWatched => _episodes.isNotEmpty && _episodes.every(isWatched);
+
+  /// [episode] with its watched state set to [played] (and its place forgotten either way).
+  static JellyfinItem _withPlayed(JellyfinItem episode, bool played) => JellyfinItem.fromJson({
+    ...episode.raw,
+    'UserData': {
+      ...?(episode.raw['UserData'] as Map?)?.cast<String, dynamic>(),
+      'Played': played,
+      'PlaybackPositionTicks': 0,
+      'PlayedPercentage': played ? 100 : 0,
+    },
+  });
+
+  /// Marks every episode in the season watched (or, all watched already, unwatched): shown at
+  /// once, put back if the server refuses.
+  Future<void> _toggleWatched() async {
+    if (_saving) return;
+    final before = _episodes;
+    final played = !_allWatched;
+    setState(() {
+      _saving = true;
+      _episodes = [for (final e in before) _withPlayed(e, played)];
+    });
+    try {
+      final userData = jellyfin.client!.userData;
+      // Marking the season marks all of its episodes.
+      await (played ? userData.markPlayed(widget.season.id) : userData.markUnplayed(widget.season.id));
+      // Saved pages for the season and the show now show the old state.
+      appCache.invalidateWhere(
+        (key) => key == 'episodes:${widget.season.id}' || key.endsWith(':${widget.season.id}') || key.endsWith(':${widget.series.id}'),
+      );
+    } on JellyfinException {
+      if (mounted) setState(() => _episodes = before);
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
+  }
+
+  /// Where Play picks up: an episode partway through, else the first not watched, else the first.
+  JellyfinItem? get _next =>
+      _episodes.where((e) => watchProgress(e) != null && !isWatched(e)).firstOrNull ??
+      _episodes.where((e) => !isWatched(e)).firstOrNull ??
+      _episodes.firstOrNull;
+
+  @override
+  Widget build(BuildContext context) {
+    final season = widget.season;
+    final isPhone = ScreenType.of(context).isPhone;
+    final muted = context.text.bodyMedium?.copyWith(color: context.colors.onSurfaceVariant);
+    final description = ((season.raw['Overview'] as String?)?.trim().isNotEmpty ?? false)
+        ? (season.raw['Overview'] as String).trim()
+        : (widget.series.raw['Overview'] as String?)?.trim();
+    // The season's own cast, or the show's.
+    final cast = _actorsOf(season).isNotEmpty ? _actorsOf(season) : _actorsOf(widget.series);
+    final next = _next;
+    final allWatched = _allWatched;
+    final started = !allWatched && _episodes.any((e) => isWatched(e) || watchProgress(e) != null);
+
+    return _DetailCard(
+      edgeToEdge: true,
+      child: _CardColumn(
+        children: [
+          // ── Play, Favorite, Mark as watched (the trailer is on the show's page) ──
+          ScrollIntoViewOnFocus(
+            child: Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                _StartsHere(
+                  child: FilledButton(
+                    style: actionButtonStyle,
+                    onPressed: next == null ? null : () => context.push('/play/${next.id}'),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      spacing: 8,
+                      children: [Icon(appIcons.play, size: 18, fill: 1), Text(started ? 'Continue' : 'Play')],
+                    ),
+                  ),
+                ),
+                _FavoriteButton(item: season),
+                _watchedButton(context, watched: allWatched, onPressed: _episodes.isEmpty ? null : _toggleWatched),
+              ],
+            ),
+          ),
+
+          // ── Description ──
+          if (description != null && description.isNotEmpty)
+            ExpandableText(
+              description,
+              limit: isPhone ? 150 : 400,
+              style: context.text.bodyLarge,
+            ),
+
+          // ── Cast ──
+          ..._castSection(context, cast),
+
+          // ── Episodes ──
+          const _CardDivider(),
+          Text('Episodes', style: context.text.titleLarge),
+          if (_episodes.isEmpty)
+            Text('No episodes in this season yet.', style: muted)
+          else
+            Column(
+              spacing: 8,
+              children: [for (final episode in _episodes) _EpisodeTile(episode: episode)],
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+/// A title's actors, in billing order, as Jellyfin lists them.
+List<Map<String, dynamic>> _actorsOf(JellyfinItem item) => [
+  for (final p in (item.raw['People'] as List?) ?? const [])
+    if (p is Map<String, dynamic> && p['Type'] == 'Actor') p,
+];
+
+/// The cast, under a divider: a heading, and a row of actors that scrolls sideways to the
+/// card's edges. Nothing when there's no one.
+List<Widget> _castSection(BuildContext context, List<Map<String, dynamic>> cast) => [
+  if (cast.isNotEmpty) ...[
+    const _CardDivider(),
+    Text('Cast', style: context.text.titleLarge),
+    _EdgeToEdge(
+      // Runs to the card's edges, so the cast scrolls all the way across.
+      builder: (padding) => ScrollIntoViewOnFocus(
+        child: SizedBox(
+          height: 155,
+          child: FocusRow(
+            child: ListView.separated(
+              scrollDirection: Axis.horizontal,
+              padding: padding,
+              itemCount: cast.length,
+              separatorBuilder: (_, _) => const SizedBox(width: 8),
+              itemBuilder: (context, i) => _CastTile(person: cast[i]),
+            ),
+          ),
+        ),
+      ),
+    ),
+  ],
+];
 
 /// One episode: thumbnail on the left; number, title, runtime, air date and description beside it.
 /// Lifts on hover or remote focus, and plays when selected.
@@ -799,6 +825,54 @@ class _FavoriteButtonState extends State<_FavoriteButton> {
     return FilledButton.tonalIcon(style: actionButtonStyle, onPressed: _toggle, icon: icon, label: label);
   }
 }
+
+/// Marks a movie watched (or a show: all of its episodes), or, watched already, unwatched.
+/// Updates instantly, and reverts if the server fails.
+class _WatchedButton extends StatefulWidget {
+  const _WatchedButton({required this.item});
+
+  final JellyfinItem item;
+
+  @override
+  State<_WatchedButton> createState() => _WatchedButtonState();
+}
+
+class _WatchedButtonState extends State<_WatchedButton> {
+  late bool _watched = isWatched(widget.item);
+  bool _saving = false;
+
+  Future<void> _toggle() async {
+    if (_saving) return;
+    final next = !_watched;
+    setState(() {
+      _watched = next; // show the change right away
+      _saving = true;
+    });
+    try {
+      final userData = jellyfin.client!.userData;
+      await (next ? userData.markPlayed(widget.item.id) : userData.markUnplayed(widget.item.id));
+      // Saved pages for it (and a show's seasons' episodes) now show the old state.
+      appCache.invalidateWhere((key) => key.endsWith(':${widget.item.id}') || key.startsWith('episodes:'));
+    } on JellyfinException {
+      if (mounted) setState(() => _watched = !next); // the server refused: undo
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) => _watchedButton(context, watched: _watched, onPressed: _toggle);
+}
+
+/// Mark as watched (or unwatched, when [watched]): filled, like Favorite, as an outline alone
+/// gets lost on a busy backdrop.
+Widget _watchedButton(BuildContext context, {required bool watched, required VoidCallback? onPressed}) =>
+    FilledButton.tonalIcon(
+      style: actionButtonStyle,
+      onPressed: onPressed,
+      icon: Icon(appIcons.check, size: 18, color: watched ? context.colors.primary : null, fill: 1),
+      label: Text(watched ? 'Mark as unwatched' : 'Mark as watched'),
+    );
 
 /// Plays the title's trailer in the app: one on the server in the app's player, a YouTube one
 /// full screen in YouTube's player (in the browser on desktops). Only there once a trailer

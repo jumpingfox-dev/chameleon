@@ -51,6 +51,8 @@ void openItem(BuildContext context, JellyfinItem item) {
         layout: const SeriesLayout(),
         cacheKey: 'series:${item.id}',
       );
+    case JellyfinItemKind.season:
+      openSeason(context, item);
     case JellyfinItemKind.episode:
       context.push('/play/${item.id}');
     case 'BoxSet':
@@ -75,6 +77,14 @@ void openSeries(BuildContext context, String seriesId) => showDetailPage(
   load: seriesDetails(seriesId),
   layout: const SeriesLayout(),
   cacheKey: 'series:$seriesId',
+);
+
+/// Opens a season's page: its artwork over the show's backdrop, its episodes.
+void openSeason(BuildContext context, JellyfinItem season) => showDetailPage(
+  context,
+  load: seasonDetails(season.id, (season.raw['SeriesId'] as String?) ?? ''),
+  layout: const SeasonLayout(),
+  cacheKey: 'season:${season.id}',
 );
 
 /// Plays an item: a movie (or episode) directly, a series from where you left off, or a
@@ -271,6 +281,17 @@ DetailLoader seriesDetails(String id) => (client) async {
   return DetailData(item: series!, children: ordered);
 };
 
+/// A season, its show (for the backdrop, the trailer and a cast when the season has none) in
+/// [DetailData.extra]'s 'series', and its episodes.
+DetailLoader seasonDetails(String id, String seriesId) => (client) async {
+  final (season, series, episodes) = await together3(
+    client.items.byId(id),
+    client.items.byId(seriesId),
+    client.tvShows.episodes(seriesId: seriesId, seasonId: id, fields: const ['Overview']),
+  );
+  return DetailData(item: season!, children: episodes.items, extra: {'series': series});
+};
+
 // ─── Layouts ─────────────────────────────────────────────────────────────────
 
 /// How a detail page looks. Each kind of page gets its own subclass,
@@ -380,8 +401,8 @@ class MovieLayout extends DetailLayout {
 }
 
 /// A series, over its backdrop: logo, details (years, seasons, age rating, score, description,
-/// genres), a season picker and that season's episodes, then the collections it's in and more
-/// like it.
+/// genres), its seasons as a row of posters (each opening its own page), then the collections
+/// it's in and more like it.
 class SeriesLayout extends DetailLayout {
   const SeriesLayout();
 
@@ -391,11 +412,46 @@ class SeriesLayout extends DetailLayout {
     SliverToBoxAdapter(
       child: _SeriesInfoCard(series: data.item, seasons: data.children),
     ),
+    if (data.children.isNotEmpty)
+      SliverToBoxAdapter(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Padding(padding: pageSides(context, extra: 12), child: const _CardDivider()),
+            _ItemRow(title: 'Seasons', items: data.children, view: LibraryView.poster, top: 8),
+          ],
+        ),
+      ),
     SliverToBoxAdapter(child: _RelatedRows(item: data.item)),
   ];
 
   @override
   JellyfinItem? backdropOf(DetailData data) => data.item;
+
+  @override
+  bool get edgeToEdge => true;
+
+  @override
+  bool get noAppBar => true;
+}
+
+/// A season, over its show's backdrop: the season's poster, Play, Trailer, Favorite and Mark
+/// as watched, its description, the cast, then its episodes.
+class SeasonLayout extends DetailLayout {
+  const SeasonLayout();
+
+  JellyfinItem _series(DetailData data) => (data.extra['series'] as JellyfinItem?) ?? data.item;
+
+  @override
+  List<Widget> buildSlivers(BuildContext context, DetailData data) => [
+    SliverToBoxAdapter(child: _SeasonHero(season: data.item, series: _series(data))),
+    SliverToBoxAdapter(
+      child: _SeasonInfoCard(season: data.item, series: _series(data), episodes: data.children),
+    ),
+  ];
+
+  @override
+  JellyfinItem? backdropOf(DetailData data) => _series(data);
 
   @override
   bool get edgeToEdge => true;

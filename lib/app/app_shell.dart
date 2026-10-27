@@ -178,13 +178,16 @@ class _AppShellState extends State<AppShell> {
   /// page is back at the top (or another page opens).
   final _barShown = ValueNotifier(true);
 
-  /// Tells pages how far to keep their fixed parts down while the bar is hidden (phones, where
-  /// the page then runs up under the status bar).
-  void _onBarShown() {
-    final view = View.of(context);
-    final statusBar = view.padding.top / view.devicePixelRatio;
-    topBarHiddenInset.value = !_barShown.value && ScreenType.of(context).isPhone ? statusBar : 0;
-  }
+  /// The page is scrolled to its top: only then does the top bar show its logo or title.
+  final _atTop = ValueNotifier(true);
+
+  /// The room the top bar takes when it shows (see TopBarSpace), and the status bar's share
+  /// of it (phones), set as the page builds.
+  double _barRoom = 0;
+  double _barRoomStatus = 0;
+
+  /// Tells pages how far to keep their fixed parts down now (see topBarRoom).
+  void _onBarShown() => topBarRoom.value = _barShown.value ? _barRoom : _barRoomStatus;
 
   /// A page scrolled: down hides the top bar, reaching the top shows it again. Only the page's
   /// own up-and-down scrolling, not rows scrolling sideways.
@@ -192,6 +195,7 @@ class _AppShellState extends State<AppShell> {
     // The page's own scrolling only: not a list inside it (depth > 0), and not something that
     // can't scroll at all (a short side column, which always reads as "at the top").
     if (n.depth != 0 || n.metrics.axis != Axis.vertical || n.metrics.maxScrollExtent <= 0) return false;
+    _atTop.value = n.metrics.pixels <= n.metrics.minScrollExtent + 8;
     if (n.metrics.pixels <= n.metrics.minScrollExtent + 8) {
       _barShown.value = true;
     } else if ((n.scrollDelta ?? 0) > 4 && !_barScope.hasFocus) {
@@ -215,9 +219,28 @@ class _AppShellState extends State<AppShell> {
     return false;
   }
 
-  /// A page opened or closed (a title's page, say, which doesn't change the address): it starts
-  /// with the top bar showing.
-  void _onPageStack() => _barShown.value = true;
+  /// A page opened or closed (a title's page, say, which doesn't change the address).
+  void _onPageStack() => _syncBarToPage();
+
+  /// Each page's top bar as it was left (shown, and at its top), so going back to a page finds
+  /// it as it was: hidden, if you'd scrolled down.
+  final _barStates = Expando<(bool, bool)>('top bar');
+
+  /// The page [_barShown] and [_atTop] are about.
+  Route<dynamic>? _barPage;
+
+  /// The page on top changed: keeps the last one's top bar, and gives the new one its own. A page
+  /// opened for the first time starts at its top, with the bar showing.
+  void _syncBarToPage() {
+    if (!mounted) return;
+    final page = pageStackObservers[widget.navigationShell.currentIndex].top;
+    if (page == _barPage) return;
+    if (_barPage case final last?) _barStates[last] = (_barShown.value, _atTop.value);
+    _barPage = page;
+    final (shown, atTop) = (page == null ? null : _barStates[page]) ?? (true, true);
+    _barShown.value = shown;
+    _atTop.value = atTop;
+  }
 
   late bool _pinned = storage.getBool(_kMenuPinned) ?? appDefaults.settings('appearance')['menuPinned'] == true;
 
@@ -338,7 +361,8 @@ class _AppShellState extends State<AppShell> {
   @override
   void didUpdateWidget(AppShell old) {
     super.didUpdateWidget(old);
-    if (old.location != widget.location) _barShown.value = true; // a new page starts with it
+    // Another page (or tab): its own top bar, once the navigator has it on top.
+    if (old.location != widget.location) WidgetsBinding.instance.addPostFrameCallback((_) => _syncBarToPage());
   }
 
   void _goTo(String path) {
@@ -398,10 +422,36 @@ class _AppShellState extends State<AppShell> {
 
     if (left) {
       if (!moveFocus(TraversalDirection.left)) _openMenu();
-    } else {
-      if (!moveFocus(TraversalDirection.up)) _focusFirstOrRemembered(_barScope);
+    } else if (!moveFocus(TraversalDirection.up)) {
+      // Nothing above on the page. If the page isn't at its top, what's above just isn't built
+      // yet (pressing ↑ faster than the page scrolls): scroll up a little and try again, rather
+      // than jumping to the top bar in the middle of the page.
+      if (!_scrollPageUp(focusedContext)) _focusFirstOrRemembered(_barScope);
     }
     return KeyEventResult.handled;
+  }
+
+  /// Scrolls the page [context] is on up by a third of the screen, then tries ↑ again. False if
+  /// the page is already at its top.
+  bool _scrollPageUp(BuildContext context) {
+    ScrollableState? page;
+    context.visitAncestorElements((element) {
+      if (element is StatefulElement && element.state is ScrollableState) {
+        final scrollable = element.state as ScrollableState;
+        if (scrollable.position.axis == Axis.vertical) page = scrollable;
+      }
+      return true; // the outermost vertical one: the page's own
+    });
+    final position = page?.position;
+    if (position == null || position.pixels <= position.minScrollExtent + 1) return false;
+    position.jumpTo(math.max(position.minScrollExtent, position.pixels - position.viewportDimension / 3));
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || !_pageScope.hasFocus) return;
+      if (!moveFocus(TraversalDirection.up) && position.pixels <= position.minScrollExtent + 1) {
+        _focusFirstOrRemembered(_barScope); // at the top after all, and nothing above
+      }
+    });
+    return true;
   }
 
   /// ↓ from the top bar: back into the page, where you were.
@@ -481,6 +531,83 @@ class _AppShellState extends State<AppShell> {
     }
     if (loc == '/settings' || loc == '/profile') return widget.group ?? 'Settings';
     return null;
+  }
+
+  /// The top bar, floating over the page and sliding up out of sight as the page scrolls
+  /// down: see-through, its buttons on glass islands. [withStatusBar]: it covers the status
+  /// bar too (phones, and detail pages, which run up under it).
+  Widget _collapsing(BuildContext context, Widget bar, {required bool withStatusBar}) {
+    final content = withStatusBar
+        ? Column(mainAxisSize: MainAxisSize.min, children: [SizedBox(height: MediaQuery.paddingOf(context).top), bar])
+        : bar;
+    return ValueListenableBuilder(
+      valueListenable: _barShown,
+      builder: (context, shown, content) => IgnorePointer(
+        ignoring: !shown,
+        child: AnimatedSlide(
+          duration: const Duration(milliseconds: 200),
+          curve: Curves.easeOut,
+          offset: shown ? Offset.zero : const Offset(0, -1.2), // past its islands' shadows
+          child: content,
+        ),
+      ),
+      child: content,
+    );
+  }
+
+  /// The top bar's height when it shows (not counting the status bar): its padding and a row of
+  /// buttons on islands (see _TopBar). Nothing when it's empty.
+  static double _barHeight(ScreenType type, {required bool empty}) =>
+      empty ? 0 : (type.isTv ? 24 + 8 : 4 + 4) + 48 + 6;
+
+  /// The top bar's contents for where you are ([detail]: the detail page on top, if any).
+  /// Nothing at all when it would be empty: Home beside a pinned menu (which has the logo,
+  /// Settings and your profile), with nowhere to cast to.
+  Widget _topBar(
+    BuildContext context, {
+    required ScreenType type,
+    required bool pinned,
+    required ValueNotifier<String?>? detail,
+  }) {
+    final home = detail == null && widget.location == '/home';
+    if (pinned && home && !showCastButton) return const SizedBox(width: double.infinity);
+    return MediaQuery.removePadding(
+      context: context,
+      removeTop: true,
+      child: FocusScope(
+        node: _barScope,
+        onKeyEvent: _onBarKey,
+        child: ValueListenableBuilder<String?>(
+          valueListenable: detail ?? ValueNotifier<String?>(null),
+          // Home has the menu button and the logo. Every other page has Back (to the page
+          // before, or Home) and its name, centered.
+          builder: (context, detailTitle, _) => ValueListenableBuilder(
+            valueListenable: _atTop,
+            builder: (context, atTop, _) => _TopBar(
+              textShown: atTop,
+              // Every page but Home, TVs too (alongside the remote's Back).
+              canGoBack: !home,
+              onBack: () {
+                final router = GoRouter.of(context);
+                if (router.canPop()) {
+                  router.pop();
+                } else {
+                  _goTo('/home');
+                }
+              },
+              showMenuButton: !pinned && home,
+              onMenu: _openMenu,
+              // (A detail page's own name is big on the page itself.)
+              centeredTitle: home || detail != null ? null : (_title ?? ''),
+              showLogo: !pinned && home,
+              // Pinned, the menu has Settings and your profile.
+              showAccount: !pinned,
+              onSettings: () => _goTo('/settings'),
+            ),
+          ),
+        ),
+      ),
+    );
   }
 
   @override
@@ -574,96 +701,80 @@ class _AppShellState extends State<AppShell> {
                     child: MediaQuery.removePadding(
                       context: context,
                       removeLeft: pinned, // the menu clears any camera cutout
-                      child: Column(
-                        children: [
-                          // Elsewhere the status bar's room stays, so the page never slides under
-                          // it. On phones it goes with the top bar: the page then fills the screen,
-                          // up past the camera and the notification icons.
-                          if (!type.isPhone) SizedBox(height: MediaQuery.paddingOf(context).top),
-                          ValueListenableBuilder(
-                            valueListenable: _barShown,
-                            builder: (context, shown, bar) => ClipRect(
-                              child: AnimatedAlign(
-                                duration: const Duration(milliseconds: 200),
-                                curve: Curves.easeOut,
-                                alignment: Alignment.bottomCenter,
-                                heightFactor: shown ? 1 : 0,
-                                child: type.isPhone
-                                    ? Column(
-                                        mainAxisSize: MainAxisSize.min,
-                                        children: [SizedBox(height: MediaQuery.paddingOf(context).top), bar!],
-                                      )
-                                    : bar,
-                              ),
-                            ),
-                            child: MediaQuery.removePadding(
-                            context: context,
-                            removeTop: true,
-                            child: FocusScope(
-                            node: _barScope,
-                            onKeyEvent: _onBarKey,
-                            child: ListenableBuilder(
-                              listenable: pageStackChanged,
-                              builder: (context, _) {
-                                // On a detail page (a movie's, a person's, ...): its name, once
-                                // it's loaded.
-                                final detail = detailTitleOf(
-                                  pageStackObservers[widget.navigationShell.currentIndex].top,
-                                );
-                                return ValueListenableBuilder<String?>(
-                                  valueListenable: detail ?? ValueNotifier<String?>(null),
-                                  builder: (context, detailTitle, _) {
-                                    // Home has the menu button and the logo. Every other page has
-                                    // Back (to the page before, or Home) and its name, centered.
-                                    final home = detail == null && widget.location == '/home';
-                                    return _TopBar(
-                                      // Every page but Home, TVs too (alongside the remote's Back).
-                                      canGoBack: !home,
-                                      onBack: () {
-                                        final router = GoRouter.of(context);
-                                        if (router.canPop()) {
-                                          router.pop();
-                                        } else {
-                                          _goTo('/home');
-                                        }
-                                      },
-                                      showMenuButton: !pinned && home,
-                                      onMenu: _openMenu,
-                                      centeredTitle: home ? null : (detail != null ? (detailTitle ?? '') : (_title ?? '')),
-                                      showLogo: !pinned && home,
-                                      onSettings: () => _goTo('/settings'),
-                                    );
-                                  },
-                                );
-                              },
-                            ),
-                          ),
-                          ),
-                          ),
-                          Expanded(
+                      // A detail page (a movie's, a person's, ...) runs up under a glass top bar;
+                      // other pages sit below a solid one.
+                      child: ListenableBuilder(
+                        listenable: pageStackChanged,
+                        builder: (context, _) {
+                          final detail = detailTitleOf(pageStackObservers[widget.navigationShell.currentIndex].top);
+                          final body = Stack(
                             // The bottom bar floats over the page, which shows around it.
-                            child: Stack(
-                              children: [
-                                Positioned.fill(
-                                  child: NotificationListener<ScrollMetricsNotification>(
-                                    onNotification: _onPageMetrics,
-                                    child: NotificationListener<ScrollUpdateNotification>(
-                                      onNotification: _onPageScroll,
-                                      child: page,
-                                    ),
+                            children: [
+                              Positioned.fill(
+                                child: NotificationListener<ScrollMetricsNotification>(
+                                  onNotification: _onPageMetrics,
+                                  child: NotificationListener<ScrollUpdateNotification>(
+                                    onNotification: _onPageScroll,
+                                    child: page,
                                   ),
                                 ),
-                                if (bottomBar)
-                                  Positioned(
-                                    left: 0,
-                                    right: 0,
-                                    bottom: 0,
-                                    child: _BottomBar(key: _footerKey, location: widget.location, goTo: _goTo),
-                                  ),
+                              ),
+                              if (bottomBar)
+                                Positioned(
+                                  left: 0,
+                                  right: 0,
+                                  bottom: 0,
+                                  child: _BottomBar(key: _footerKey, location: widget.location, goTo: _goTo),
+                                ),
+                            ],
+                          );
+                          final bar = _topBar(context, type: type, pinned: pinned, detail: detail);
+                          if (detail != null) {
+                            return Stack(
+                              children: [
+                                Positioned.fill(child: body),
+                                Positioned(top: 0, left: 0, right: 0, child: _collapsing(context, bar, withStatusBar: true)),
                               ],
-                            ),
-                          ),
-                        ],
+                            );
+                          }
+                          // Elsewhere the bar floats over the page too, which keeps room for it at
+                          // the top of its content (TopBarSpace), so the bar going doesn't move
+                          // anything. The status bar's room stays, except on phones, where it goes
+                          // with the top bar and the page fills the screen, up past the camera.
+                          final statusBar = MediaQuery.paddingOf(context).top;
+                          final empty = pinned && widget.location == '/home' && !showCastButton;
+                          _barRoomStatus = type.isPhone ? statusBar : 0;
+                          final room = _barRoomStatus + _barHeight(type, empty: empty);
+                          if (room != _barRoom) {
+                            _barRoom = room;
+                            WidgetsBinding.instance.addPostFrameCallback((_) => _onBarShown());
+                          }
+                          return Column(
+                            children: [
+                              if (!type.isPhone) SizedBox(height: statusBar),
+                              Expanded(
+                                child: TopBarSpace(
+                                  height: room,
+                                  child: Stack(
+                                    children: [
+                                      Positioned.fill(child: MediaQuery.removePadding(context: context, removeTop: true, child: body)),
+                                      Positioned(
+                                        top: 0,
+                                        left: 0,
+                                        right: 0,
+                                        child: MediaQuery.removePadding(
+                                          context: context,
+                                          removeTop: !type.isPhone,
+                                          child: _collapsing(context, bar, withStatusBar: type.isPhone),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            ],
+                          );
+                        },
                       ),
                     ),
                   ),
@@ -725,3 +836,4 @@ class _AppShellState extends State<AppShell> {
     },
   );
 }
+

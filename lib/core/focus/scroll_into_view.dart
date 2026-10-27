@@ -1,5 +1,6 @@
 import 'dart:math' as math;
 
+import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:material_ui/material_ui.dart';
 
@@ -48,6 +49,50 @@ class ScrollIntoViewOnFocus extends StatelessWidget {
     },
     child: child,
   );
+}
+
+/// Keeps this widget clear of the page's top and bottom edges while keyboard or remote focus is
+/// inside it: if it lands closer than [margin] (a share of the page's height) to either edge, the
+/// page scrolls just enough to give it that room. Unlike [ScrollIntoViewOnFocus], it doesn't
+/// move the page while the item is already comfortably in view. For grids.
+class KeepClearOfEdges extends StatelessWidget {
+  const KeepClearOfEdges({super.key, required this.child, this.margin = 0.12});
+
+  final Widget child;
+
+  /// The room to keep above and below, as a share of the page's height.
+  final double margin;
+
+  @override
+  Widget build(BuildContext context) => Focus(
+    canRequestFocus: false, // doesn't take focus itself; only notices it arriving inside
+    skipTraversal: true,
+    onFocusChange: (hasFocus) {
+      if (!hasFocus || FocusManager.instance.highlightMode != FocusHighlightMode.traditional) return;
+      // After the frame: Flutter's own scroll (just far enough to show it) goes first, then this.
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (context.mounted) _reveal(context);
+      });
+    },
+    child: child,
+  );
+
+  void _reveal(BuildContext context) {
+    final object = context.findRenderObject();
+    final position = Scrollable.maybeOf(context)?.position;
+    final viewport = object == null ? null : RenderAbstractViewport.maybeOf(object);
+    if (object == null || position == null || viewport == null) return;
+    final room = position.viewportDimension * margin;
+    // Where the page would be with this at its top edge, and at its bottom edge.
+    final atTop = viewport.getOffsetToReveal(object, 0).offset;
+    final atBottom = viewport.getOffsetToReveal(object, 1).offset;
+    // Anywhere in between (with the room above and below) leaves it clear of both edges.
+    final low = atBottom + room, high = atTop - room;
+    final target = (low > high ? high : position.pixels.clamp(low, high))
+        .clamp(position.minScrollExtent, position.maxScrollExtent);
+    if ((target - position.pixels).abs() < 0.5) return;
+    position.animateTo(target, duration: const Duration(milliseconds: 200), curve: Curves.easeOutCubic);
+  }
 }
 
 /// Makes a long block of content (like an expanded description) readable with a keyboard or remote.

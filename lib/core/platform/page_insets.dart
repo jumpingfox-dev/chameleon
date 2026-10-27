@@ -16,12 +16,13 @@ EdgeInsets pageSides(BuildContext context, {double extra = 16}) {
   final wide = ScreenType.of(context).isPhone ? 0.0 : _wideInset;
   return EdgeInsets.only(left: insets.left + extra + wide, right: insets.right + extra + wide);
 }
-/// On phones, while the app's top bar is hidden: the status bar's height, which the page now
-/// runs up under. Scrolling content goes past it; a page's fixed parts (Search's box, the A–Z
-/// column) keep clear by this much. 0 otherwise.
-final topBarHiddenInset = ValueNotifier<double>(0);
+/// The room the app's top bar takes at the top of the page right now: all of it while it
+/// shows, and once it's slid away, just the status bar's on phones (the page runs up under it
+/// there) and none elsewhere. A page's fixed parts (Search's box, the A–Z column) keep clear by
+/// this much, moving up as the bar goes.
+final topBarRoom = ValueNotifier<double>(0);
 
-/// [child], kept clear of the status bar while the top bar is hidden ([topBarHiddenInset]).
+/// [child], kept clear of the app's top bar, moving up when it slides away ([topBarRoom]).
 class ClearOfHiddenTopBar extends StatelessWidget {
   const ClearOfHiddenTopBar({super.key, required this.child});
 
@@ -29,21 +30,42 @@ class ClearOfHiddenTopBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => ValueListenableBuilder(
-    valueListenable: topBarHiddenInset,
-    builder: (context, inset, child) => AnimatedPadding(
+    valueListenable: topBarRoom,
+    builder: (context, room, child) => AnimatedPadding(
       duration: const Duration(milliseconds: 200),
       curve: Curves.easeOut,
-      padding: EdgeInsets.only(top: inset),
+      padding: EdgeInsets.only(top: room),
       child: child,
     ),
     child: child,
   );
 }
 
-/// Room above a page's content, below the app's top bar.
+/// The room the app's top bar takes when it shows, given to the pages under it: it floats over
+/// them, and they start their content below it (see [pageTop]). Its hiding then doesn't change
+/// a page's size, so nothing on the page moves.
+class TopBarSpace extends InheritedWidget {
+  const TopBarSpace({super.key, required this.height, required super.child});
+
+  final double height;
+
+  static double of(BuildContext context) =>
+      context.dependOnInheritedWidgetOfExactType<TopBarSpace>()?.height ?? 0;
+
+  @override
+  bool updateShouldNotify(TopBarSpace old) => old.height != height;
+}
+
+/// Room above a page's content: clear of the app's top bar (which floats over the page), and a
+/// little more.
 ///
-/// Like [pageSides], put it inside scroll views (in their `padding`) where there is one.
-double pageTop(BuildContext context) => ScreenType.of(context).isPhone ? 8 : 16;
+/// Like [pageSides], put it inside scroll views (in their `padding`) where there is one, so the
+/// content scrolls up under the bar once it's gone. A page's fixed parts take [pageTopGap]
+/// instead, inside a [ClearOfHiddenTopBar].
+double pageTop(BuildContext context) => TopBarSpace.of(context) + pageTopGap(context);
+
+/// The little room between the top bar and a page's content.
+double pageTopGap(BuildContext context) => ScreenType.of(context).isPhone ? 8 : 16;
 
 /// Room below a page's content: [extra], plus whatever floats over the bottom of the page (the
 /// bottom bar on phones), so the last of it can scroll clear.

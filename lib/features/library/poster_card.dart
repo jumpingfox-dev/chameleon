@@ -5,6 +5,7 @@ import 'package:material_ui/material_ui.dart';
 
 import '../../theme/app_icons.dart';
 import '../../core/jellyfin/jellyfin_controller.dart';
+import '../../core/platform/page_insets.dart';
 import '../../core/platform/screen_type.dart';
 import '../../widgets/hover_lift.dart';
 import '../../theme/theme.dart';
@@ -166,6 +167,36 @@ class WatchProgressBar extends StatelessWidget {
       ),
     ),
   );
+}
+
+/// The size and spacing of cards in a sideways row (Home's, and a title page's): on wider
+/// screens sized to the row, so as many fit whatever the screen: 3½ thumbnails (the half one
+/// says there's more), and about 6 posters. Phones keep theirs.
+abstract final class CardRows {
+  /// The space between a row's cards.
+  static const gap = 4.0;
+
+  /// A row's padding at its ends: the first card in line with the page's titles (it rests in
+  /// from its edge), and the same room after the last one.
+  static EdgeInsets sides(BuildContext context) {
+    final sides = pageSides(context);
+    return sides.copyWith(right: sides.left);
+  }
+
+  /// A card's width in a row.
+  static double tileWidth(BuildContext context, LibraryView view) {
+    if (ScreenType.of(context).isPhone) return view == LibraryView.poster ? 150.0 : 280.0;
+    final row = MediaQuery.sizeOf(context).width - sides(context).horizontal;
+    final across = view == LibraryView.poster ? 6.3 : 3.5;
+    // The row's width, less the gaps between the cards that show.
+    return (row - (across.ceil() - 1) * gap) / across;
+  }
+
+  /// The height of a card's picture.
+  static double imageHeight(BuildContext context, LibraryView view) {
+    final width = tileWidth(context, view);
+    return view == LibraryView.poster ? width * 3 / 2 : width * 9 / 16;
+  }
 }
 
 class PosterCard extends StatefulWidget {

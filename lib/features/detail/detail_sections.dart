@@ -69,18 +69,23 @@ class _PageBackdrop extends StatelessWidget {
               child: Stack(
                 fit: StackFit.expand,
                 children: [
+                  // The picture stops a little short of the fade's end, so no sliver of it can
+                  // show below (a fractional height or scroll offset can leave one).
                   if (blurred)
                     // A small picture, blurred a little and dimmed: light enough for a TV to draw.
                     // Clipped: a blur spreads past the picture's edges, which would show below
                     // the fade as a band.
-                    ClipRect(
-                      child: ImageFiltered(
-                        imageFilter: ImageFilter.blur(sigmaX: 12, sigmaY: 12, tileMode: TileMode.clamp),
-                        child: image,
+                    Positioned.fill(
+                      bottom: 4,
+                      child: ClipRect(
+                        child: ImageFiltered(
+                          imageFilter: ImageFilter.blur(sigmaX: 12, sigmaY: 12, tileMode: TileMode.clamp),
+                          child: image,
+                        ),
                       ),
                     )
                   else
-                    image,
+                    Positioned.fill(bottom: 4, child: image),
                   if (blurred) ColoredBox(color: background.withValues(alpha: 0.35)),
                   // Fading into the page at the bottom only: a long, gentle fade, so its end
                   // never shows as an edge.
@@ -89,12 +94,13 @@ class _PageBackdrop extends StatelessWidget {
                       gradient: LinearGradient(
                         begin: Alignment.topCenter,
                         end: Alignment.bottomCenter,
-                        stops: const [0.25, 0.5, 0.7, 0.85, 1.0],
+                        stops: const [0.25, 0.5, 0.7, 0.85, 0.93, 0.97],
                         colors: [
                           background.withValues(alpha: 0),
-                          background.withValues(alpha: 0.25),
-                          background.withValues(alpha: 0.6),
-                          background.withValues(alpha: 0.88),
+                          background.withValues(alpha: 0.3),
+                          background.withValues(alpha: 0.7),
+                          background.withValues(alpha: 0.93),
+                          background.withValues(alpha: 0.99),
                           background,
                         ],
                       ),
@@ -157,6 +163,42 @@ class _HeroTitle extends StatelessWidget {
                   ),
           ),
         ),
+      ),
+    );
+  }
+}
+
+/// The top of a season's page over its show's backdrop: room to see the artwork, with the
+/// season's poster (or the show's, if it has none) at the bottom left, where a title's logo goes.
+class _SeasonHero extends StatelessWidget {
+  const _SeasonHero({required this.season, required this.series});
+
+  final JellyfinItem season;
+  final JellyfinItem series;
+
+  @override
+  Widget build(BuildContext context) {
+    final isPhone = ScreenType.of(context).isPhone;
+    final size = MediaQuery.sizeOf(context);
+    final hasBackdrop = ((series.raw['BackdropImageTags'] as List?)?.isNotEmpty ?? false);
+    final height = hasBackdrop ? _PageBackdrop.heightIn(size) * (isPhone ? 0.7 : 0.55) : 0.0;
+    final poster = season.imageTags['Primary'] != null ? season : series;
+    final posterHeight = isPhone ? 180.0 : (height * 0.85).clamp(180.0, 300.0);
+    // Its top where the top of the show's logo sits on the show's page (the logo's box sits at
+    // the bottom of the same room), so it starts as low and runs on down past it.
+    final logoBox = isPhone ? 64.0 : 120.0;
+    final above = math.max(height - logoBox, isPhone ? 96.0 : 84.0); // clear of the top bar
+    return Padding(
+      padding: pageSides(context, extra: 12).copyWith(top: above, bottom: 8),
+      child: Align(
+          alignment: Alignment.bottomLeft,
+          child: DecoratedBox(
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(8),
+              boxShadow: const [BoxShadow(color: Color(0x66000000), blurRadius: 18, offset: Offset(0, 6))],
+            ),
+            child: DetailPoster(item: poster, width: posterHeight * 2 / 3),
+          ),
       ),
     );
   }
@@ -517,11 +559,16 @@ class _RelatedRowsState extends State<_RelatedRows> {
 /// starting in line with the page, and with the remote the focused card keeps its place
 /// while the row moves under it. [onTitle] makes the title a link (a collection's page).
 class _ItemRow extends StatefulWidget {
-  const _ItemRow({required this.title, required this.items, this.onTitle});
+  const _ItemRow({required this.title, required this.items, this.onTitle, this.view, this.top = 24});
 
   final String title;
   final List<JellyfinItem> items;
   final VoidCallback? onTitle;
+
+  /// Always this view (a show's seasons: posters), rather than the poster/thumbnail setting.
+  final LibraryView? view;
+
+  final double top; // room above it
 
   @override
   State<_ItemRow> createState() => _ItemRowState();
@@ -530,7 +577,7 @@ class _ItemRow extends StatefulWidget {
 class _ItemRowState extends State<_ItemRow> {
   final _scroll = ScrollController();
 
-  static const _gap = 4.0;
+  static const _gap = CardRows.gap;
 
   @override
   void dispose() {
@@ -538,12 +585,8 @@ class _ItemRowState extends State<_ItemRow> {
     super.dispose();
   }
 
-  /// The row's padding at its ends: the first card in line with the page, and the same room
-  /// after the last one.
-  EdgeInsets _sides(BuildContext context) {
-    final sides = pageSides(context, extra: 12);
-    return sides.copyWith(right: sides.left);
-  }
+  /// The row's padding at its ends, as Home's rows have.
+  EdgeInsets _sides(BuildContext context) => CardRows.sides(context);
 
   /// With a remote, scrolls the row so card [index] sits in the last slot that fits whole (or
   /// as far as the row goes), as Home's rows do.
@@ -560,11 +603,11 @@ class _ItemRowState extends State<_ItemRow> {
 
   @override
   Widget build(BuildContext context) {
-    final isPhone = ScreenType.of(context).isPhone;
-    final view = libraryViewFor(context);
+    final view = widget.view ?? libraryViewFor(context);
     final items = widget.items;
-    final height = isPhone ? (view == LibraryView.poster ? 180.0 : 135.0) : PosterCard.height;
-    final width = view == LibraryView.poster ? height * 2 / 3 : height * 16 / 9;
+    // The same size as Home's cards.
+    final width = CardRows.tileWidth(context, view);
+    final height = CardRows.imageHeight(context, view);
     final heading = Text(widget.title, style: context.text.titleLarge);
     Widget row = FocusRow(
       child: ListView.separated(
@@ -601,13 +644,13 @@ class _ItemRowState extends State<_ItemRow> {
     );
 
     return Padding(
-      padding: const EdgeInsets.only(top: 24),
+      padding: EdgeInsets.only(top: widget.top),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         spacing: 12,
         children: [
           Padding(
-            padding: pageSides(context, extra: 12),
+            padding: pageSides(context, extra: 12), // in line with the rest of the page
             child: widget.onTitle == null
                 ? heading
                 : Tappable(

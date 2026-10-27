@@ -8,6 +8,7 @@ import '../../core/storage/app_defaults.dart';
 enum HomeModuleType {
   carousel,
   myMedia,
+  genres,
   continueWatching,
   nextUp,
   favorites,

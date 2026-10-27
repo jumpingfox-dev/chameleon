@@ -43,7 +43,7 @@
       }
     }
   },
-  "home": ["carousel", "myMedia", "continueWatching", "nextUp", "recentlyAdded", "suggested"],
+  "home": ["carousel", "genres", "myMedia", "continueWatching", "nextUp", "recentlyAdded", "suggested"],
   "playback": {
     "episodes": {
       "skip": { "intro": "ask", "recap": "ask", "credits": "ask", "preview": "ask" },

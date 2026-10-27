@@ -38,7 +38,7 @@ rather than the device (audio and subtitle languages, Parental Controls) aren't 
 
 ## home
 
-The Home sections, in order: `carousel`, `myMedia`, `continueWatching`, `nextUp`, `favorites`,
+The Home sections, in order: `carousel`, `myMedia`, `genres`, `continueWatching`, `nextUp`, `favorites`,
 `recentlyAdded`, `recentlyAddedMovies`, `recentlyAddedSeries`, `suggested`, `becauseYouWatched`.
 (Collection and genre sections need a choice, so they're added in the app.)
 

@@ -12,6 +12,8 @@ class _TopBar extends StatelessWidget {
     required this.onMenu,
     this.centeredTitle,
     required this.showLogo,
+    this.showAccount = true,
+    this.textShown = true,
     required this.onSettings,
   });
 
@@ -23,6 +25,11 @@ class _TopBar extends StatelessWidget {
   /// button and logo make way for it.
   final String? centeredTitle;
   final bool showLogo; // when there's no title (the menu shows it while pinned)
+  /// Settings and your profile picture (false while the menu is pinned: they're in it).
+  final bool showAccount;
+  /// The logo or title shows: only while the page is at its top, so if the bar ever comes
+  /// down over the middle of a page, it's just its buttons over the content.
+  final bool textShown;
   final VoidCallback onSettings;
 
   @override
@@ -42,14 +49,19 @@ class _TopBar extends StatelessWidget {
             final castShown = showCastButton;
             const button = 52.0; // a bar button and its margin
             // The right side: cast (when there's somewhere to cast to), Settings and the avatar.
-            final right = button * (castShown ? 3 : 2);
+            final right = button * ((castShown ? 1 : 0) + (showAccount ? 2 : 0));
             final left = button * ((showMenuButton ? 1 : 0) + (canGoBack ? 1 : 0)) + 8;
             final row = FocusRow(
               child: Row(
                 children: [
                   // The menu button always first, so it never moves; Back after it, before the title.
-                  if (showMenuButton) _BarButton(icon: appIcons.menu, label: 'Menu', onPress: onMenu),
-                  if (canGoBack) _BarButton(icon: appIcons.back, label: 'Back', onPress: onBack),
+                  if (showMenuButton || canGoBack)
+                    _Island(
+                      children: [
+                        if (showMenuButton) _BarButton(icon: appIcons.menu, label: 'Menu', onPress: onMenu),
+                        if (canGoBack) _BarButton(icon: appIcons.back, label: 'Back', onPress: onBack),
+                      ],
+                    ),
                   const SizedBox(width: 8),
                   Expanded(
                     child: Align(
@@ -57,29 +69,39 @@ class _TopBar extends StatelessWidget {
                       child: centeredTitle != null
                           ? const SizedBox.shrink() // centered over the row, below
                           : showLogo
-                          ? AppLogo(
-                              asset: 'assets/images/text_logo.svg',
-                              colorAsset: 'assets/images/text_logo_color.svg',
-                              height: isPhone ? 26 : 30,
+                          ? _FadeText(
+                              shown: textShown,
+                              child: AppLogo(
+                                asset: 'assets/images/text_logo.svg',
+                                colorAsset: 'assets/images/text_logo_color.svg',
+                                height: isPhone ? 26 : 30,
+                              ),
                             )
                           : const SizedBox.shrink(),
                     ),
                   ),
-                  // Somewhere to cast to (a Chromecast on the network, or AirPlay on iPhone and iPad).
-                  if (castShown)
-                    _BarButton(
-                      icon: castIcon,
-                      label: 'Play on another device',
-                      color: castController.isConnected ? context.colors.primary : null,
-                      onPress: () => showCastMenu(context),
+                  if (castShown || showAccount)
+                    _Island(
+                      children: [
+                        // Somewhere to cast to (a Chromecast on the network, or AirPlay on iPhone and iPad).
+                        if (castShown)
+                          _BarButton(
+                            icon: castIcon,
+                            label: 'Play on another device',
+                            color: castController.isConnected ? context.colors.primary : null,
+                            onPress: () => showCastMenu(context),
+                          ),
+                        // Cast, Settings, then who's signed in. (Search is in the menu and the bottom bar.)
+                        if (showAccount) ...[
+                          _BarButton(icon: appIcons.settings, label: 'Settings', onPress: onSettings),
+                          _BarButton(
+                            label: 'Switch user (${jellyfin.userName ?? 'signed in'})',
+                            onPress: () => showProfilePicker(context), // "Who's watching?"
+                            child: UserAvatar(size: isPhone ? 30 : 34),
+                          ),
+                        ],
+                      ],
                     ),
-                  // Cast, Settings, then who's signed in. (Search is in the menu and the bottom bar.)
-                  _BarButton(icon: appIcons.settings, label: 'Settings', onPress: onSettings),
-                  _BarButton(
-                    label: 'Switch user (${jellyfin.userName ?? 'signed in'})',
-                    onPress: () => showProfilePicker(context), // "Who's watching?"
-                    child: UserAvatar(size: isPhone ? 30 : 34),
-                  ),
                 ],
               ),
             );
@@ -94,18 +116,66 @@ class _TopBar extends StatelessWidget {
                 IgnorePointer(
                   child: SizedBox(
                     width: width,
-                    child: Text(
-                      centeredTitle!,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      textAlign: TextAlign.center,
-                      style: context.text.titleLarge,
+                    child: _FadeText(
+                      shown: textShown,
+                      child: Text(
+                        centeredTitle!,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        textAlign: TextAlign.center,
+                        style: context.text.titleLarge,
+                      ),
                     ),
                   ),
                 ),
               ],
             );
           },
+        ),
+      ),
+    );
+  }
+}
+
+/// The top bar's logo or title, faded out while [shown] is false.
+class _FadeText extends StatelessWidget {
+  const _FadeText({required this.shown, required this.child});
+
+  final bool shown;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) => AnimatedOpacity(
+    duration: const Duration(milliseconds: 150),
+    opacity: shown ? 1 : 0,
+    child: child,
+  );
+}
+
+/// Some of the top bar's buttons side by side, on a pill of frosted glass like the bottom
+/// bar's. (The logo and a page's title sit straight on the page, with no island.)
+class _Island extends StatelessWidget {
+  const _Island({required this.children});
+
+  final List<Widget> children;
+
+  @override
+  Widget build(BuildContext context) {
+    final row = Row(mainAxisSize: MainAxisSize.min, children: children);
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(999),
+        boxShadow: const [BoxShadow(color: Color(0x55000000), blurRadius: 14, offset: Offset(0, 4))],
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(999),
+        child: BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 24, sigmaY: 24),
+          child: ColoredBox(
+            color: context.colors.surfaceContainer.withValues(alpha: 0.55),
+            // As close around the buttons as above and below them (each has 2 of its own at the sides).
+            child: Padding(padding: const EdgeInsets.symmetric(vertical: 3, horizontal: 1), child: row),
+          ),
         ),
       ),
     );
@@ -228,7 +298,7 @@ class _Menu extends StatelessWidget {
                 ),
                 Expanded(
                   child: ListView(
-                    padding: const EdgeInsets.fromLTRB(12, 8, 12, 16),
+                    padding: EdgeInsets.fromLTRB(12, 8, 12, pinned ? 8 : 16),
                     children: [
                       item('Home', 'Home', appIcons.home, '/home'),
                       item('Search', 'Search', appIcons.search, '/search'),
@@ -278,10 +348,35 @@ class _Menu extends StatelessWidget {
                     ],
                   ),
                 ),
+                // ── Pinned: Settings and who's signed in, out of the top bar ──
+                if (pinned)
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(12, 0, 12, 16),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        Divider(height: 17, color: colors.outlineVariant.withValues(alpha: 0.5)),
+                        _MenuItem(
+                          label: 'Settings',
+                          icon: appIcons.settings,
+                          focusNode: nodeFor('Settings'),
+                          selected: location.startsWith('/settings'), // any of its sections too
+                          onPress: () => goTo('/settings'),
+                        ),
+                        _MenuItem(
+                          label: jellyfin.userName ?? 'Switch user',
+                          leading: const UserAvatar(size: 26),
+                          focusNode: nodeFor('Profile'),
+                          onPress: () => showProfilePicker(context), // "Who's watching?"
+                        ),
+                      ],
+                    ),
+                  ),
               ],
             ),
           );
         if (pinned) return Material(color: colors.surfaceContainerLow, child: content);
+
         return ClipRect(
           child: BackdropFilter(
             filter: ImageFilter.blur(sigmaX: 24, sigmaY: 24),
@@ -297,14 +392,16 @@ class _Menu extends StatelessWidget {
 class _MenuItem extends StatelessWidget {
   const _MenuItem({
     required this.label,
-    required this.icon,
+    this.icon,
+    this.leading,
     required this.onPress,
     this.focusNode,
     this.selected = false,
   });
 
   final String label;
-  final IconData icon;
+  final IconData? icon;
+  final Widget? leading; // in place of the icon (your profile picture)
   final VoidCallback onPress;
   final FocusNode? focusNode;
   final bool selected;
@@ -338,7 +435,7 @@ class _MenuItem extends StatelessWidget {
         child: Row(
           spacing: 14,
           children: [
-            Icon(icon, size: 24, color: foreground, fill: 1),
+            leading ?? Icon(icon, size: 24, color: foreground, fill: 1),
             Expanded(
               child: Text(
                 label,
