@@ -183,11 +183,7 @@ class _SeasonHero extends StatelessWidget {
     final hasBackdrop = ((series.raw['BackdropImageTags'] as List?)?.isNotEmpty ?? false);
     final height = hasBackdrop ? _PageBackdrop.heightIn(size) * (isPhone ? 0.7 : 0.55) : 0.0;
     final poster = season.imageTags['Primary'] != null ? season : series;
-    final posterHeight = isPhone ? 180.0 : (height * 0.85).clamp(180.0, 300.0);
-    // Its top where the top of the show's logo sits on the show's page (the logo's box sits at
-    // the bottom of the same room), so it starts as low and runs on down past it.
-    final logoBox = isPhone ? 64.0 : 120.0;
-    final above = math.max(height - logoBox, isPhone ? 96.0 : 84.0); // clear of the top bar
+    final (:above, :posterHeight) = _heroPoster(context, height);
     return Padding(
       padding: pageSides(context, extra: 12).copyWith(top: above, bottom: 8),
       child: Align(
@@ -202,6 +198,19 @@ class _SeasonHero extends StatelessWidget {
       ),
     );
   }
+}
+
+/// Where a poster (a season's) or a photo (a person's) goes at the top of a page, in place of a
+/// title's logo, given the room for the artwork above the details ([room]): its top where the
+/// top of a show's logo would sit (the logo's box sits at the bottom of the same room), so it
+/// starts as low and runs on down past it, clear of the top bar; and its height.
+({double above, double posterHeight}) _heroPoster(BuildContext context, double room) {
+  final isPhone = ScreenType.of(context).isPhone;
+  final logoBox = isPhone ? 64.0 : 120.0;
+  return (
+    above: math.max(room - logoBox, isPhone ? 96.0 : 84.0),
+    posterHeight: isPhone ? 180.0 : (room * 0.85).clamp(180.0, 300.0),
+  );
 }
 
 // ─── A person ────────────────────────────────────────────────────────────────
@@ -255,41 +264,36 @@ class _PersonHero extends StatelessWidget {
       if (movies > 0) '$movies ${movies == 1 ? 'movie' : 'movies'}',
       if (shows > 0) '$shows ${shows == 1 ? 'show' : 'shows'}',
     ];
-    final photoSize = isPhone ? 72.0 : 120.0;
-    // As tall as a title's logo area, so the artwork shows above the name.
+    // The photo sized and placed as a season's poster is, where a title's logo goes.
     final room = _PageBackdrop.heightIn(size) * (isPhone ? 0.7 : 0.55);
+    final (:above, :posterHeight) = _heroPoster(context, room);
     final shadow = const [Shadow(blurRadius: 8, color: Color(0x99000000))];
 
     return Padding(
-      padding: pageSides(context, extra: 12).copyWith(bottom: 8),
+      padding: pageSides(context, extra: 12).copyWith(top: above, bottom: 8),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         spacing: 12,
         children: [
-          // ── Photo and name, where a title's logo goes ──
-          ConstrainedBox(
-            constraints: BoxConstraints(minHeight: room),
-            child: Align(
-              alignment: Alignment.bottomLeft,
-              child: Row(
-                spacing: isPhone ? 14 : 20,
-                children: [
-                  // Where the page starts with a remote; selecting it shows the photo full size.
-                  _StartsHere(child: _PersonPortrait(person: person, height: photoSize * 1.5)),
-                  Expanded(
-                    child: Text(
-                      person.name,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: (isPhone ? context.text.headlineMedium : context.text.displaySmall)?.copyWith(
-                        color: const Color(0xFFFFFFFF),
-                        shadows: shadow,
-                      ),
-                    ),
+          // ── Photo, and the name beside its foot ──
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            spacing: isPhone ? 14 : 20,
+            children: [
+              // Where the page starts with a remote; selecting it shows the photo full size.
+              _StartsHere(child: _PersonPortrait(person: person, height: posterHeight)),
+              Expanded(
+                child: Text(
+                  person.name,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: (isPhone ? context.text.headlineMedium : context.text.displaySmall)?.copyWith(
+                    color: const Color(0xFFFFFFFF),
+                    shadows: shadow,
                   ),
-                ],
+                ),
               ),
-            ),
+            ],
           ),
 
           // ── Their details, as a title's are ──
