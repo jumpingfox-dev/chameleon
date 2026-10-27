@@ -4,7 +4,6 @@ import 'package:dart_jellyfin/dart_jellyfin.dart' show JellyfinItem;
 import 'package:flutter/foundation.dart';
 import 'package:flutter_chrome_cast/flutter_chrome_cast.dart' show CastMediaPlayerState;
 import 'package:flutter_to_airplay/flutter_to_airplay.dart';
-import 'package:material_symbols_icons/symbols.dart';
 import 'package:material_ui/material_ui.dart';
 
 import '../../core/cast/cast_controller.dart';
@@ -73,7 +72,7 @@ class _CastMenuBody extends StatelessWidget {
                   ListTile(
                     autofocus: i == 0,
                     shape: const StadiumBorder(),
-                    leading: const Icon(Symbols.cast_rounded, size: 20),
+                    leading: const Icon(Icons.cast_rounded, size: 20), // a Chromecast to pick
                     title: Text(device.friendlyName, overflow: TextOverflow.ellipsis),
                     onTap: () {
                       castController.connect(device);
@@ -136,8 +135,9 @@ bool get showCastButton =>
     AirPlayButton.available ||
     (castController.supported && (castController.isConnected || castController.devices.isNotEmpty));
 
-/// Always Material Symbols' cast icon, whatever the icon style: it's the one people know.
-IconData get castIcon => castController.isConnected ? Symbols.cast_connected_rounded : Symbols.cast_rounded;
+/// The cast icon everywhere (top bar, menu, player, casting screen): always Material Icons' own,
+/// whatever the icon style, as it's the one people know. Connected while casting.
+IconData get castIcon => castController.isConnected ? Icons.cast_connected_rounded : Icons.cast_rounded;
 
 // ─── AirPlay (iPhone and iPad) ───────────────────────────────────────────────
 
@@ -214,14 +214,14 @@ class CastRemote extends StatelessWidget {
                         _RemoteButton(icon: Icons.graphic_eq_rounded, label: 'Audio', onPress: onAudio),
                         _RemoteButton(icon: Icons.subtitles_rounded, label: 'Subtitles', onPress: onSubtitles),
                         _RemoteButton(
-                          icon: Icons.cast_connected_rounded,
+                          icon: castIcon,
                           label: 'Stop casting',
                           onPress: () => showCastMenu(context),
                         ),
                       ],
                     ),
                     const Spacer(),
-                    const Icon(Icons.cast_connected_rounded, size: 40, color: dim),
+                    Icon(castIcon, size: 40, color: dim),
                     const SizedBox(height: 8),
                     Text(
                       'Casting to ${castController.deviceName ?? 'Chromecast'}',
