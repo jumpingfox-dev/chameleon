@@ -16,6 +16,7 @@ extension ListEach on JellyfinItemsApi {
     List<String> filters = const [],
     List<String> personIds = const [],
     List<String> excludeItemIds = const [],
+    List<int> years = const [],
     String? searchTerm,
     List<String> sortBy = const [],
     bool descending = false,
@@ -35,6 +36,7 @@ extension ListEach on JellyfinItemsApi {
           filters: filters,
           personIds: personIds,
           excludeItemIds: excludeItemIds,
+          years: years,
           searchTerm: searchTerm,
           sortBy: sortBy,
           descending: descending,
@@ -62,11 +64,19 @@ extension ListEach on JellyfinItemsApi {
 }
 
 /// The field to ask for so an item carries a sort key; null for keys always sent.
-const _sortFields = {'SortName': 'SortName', 'DateCreated': 'DateCreated', 'DatePlayed': null};
+const _sortFields = {
+  'SortName': 'SortName',
+  'DateCreated': 'DateCreated',
+  'DatePlayed': null,
+  'PremiereDate': 'PremiereDate',
+  'CommunityRating': null,
+  'Runtime': null,
+};
 
 Object? _sortValue(JellyfinItem item, String key) => switch (key) {
   'SortName' => ((item.raw['SortName'] as String?) ?? item.name).toLowerCase(),
   'DatePlayed' => (item.raw['UserData'] as Map?)?['LastPlayedDate'],
+  'Runtime' => item.raw['RunTimeTicks'],
   _ => item.raw[key],
 };
 

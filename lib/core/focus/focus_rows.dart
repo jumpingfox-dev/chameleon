@@ -15,11 +15,18 @@ final _isRow = Expando<bool>('FocusRow');
 final _lastInRow = Expando<FocusNode>('FocusRow.last');
 final _isColumn = Expando<bool>('FocusColumn');
 
+/// Rows a page doesn't start in (see [FocusRow.startsPage]).
+final _notStart = Expando<bool>('not where a page starts');
+
 /// Marks its focusable descendants as one horizontal row (a section's cards, a row of buttons...).
 class FocusRow extends StatefulWidget {
-  const FocusRow({super.key, required this.child});
+  const FocusRow({super.key, required this.child, this.startsPage = true});
 
   final Widget child;
+
+  /// False for a row of controls at the top of a page (a library's filters): the page starts on
+  /// what's under it instead (see [firstFocusable]).
+  final bool startsPage;
 
   @override
   State<FocusRow> createState() => _FocusRowState();
@@ -36,6 +43,7 @@ class _FocusRowState extends State<FocusRow> {
   void initState() {
     super.initState();
     _isRow[_node] = true;
+    if (!widget.startsPage) _notStart[_node] = true;
   }
 
   @override
@@ -106,7 +114,9 @@ FocusNode? firstFocusable(FocusScopeNode scope, {bool mainOnly = false}) {
   )
       .toList();
   bool isTextField(FocusNode n) => n.context?.findAncestorStateOfType<EditableTextState>() != null;
-  final main = nodes.where((n) => _columnOf(n) == null && !isTextField(n)).firstOrNull;
+  bool notStart(FocusNode n) => n.ancestors.any((a) => _notStart[a] == true);
+  final main = nodes.where((n) => _columnOf(n) == null && !isTextField(n) && !notStart(n)).firstOrNull ??
+      nodes.where((n) => _columnOf(n) == null && !isTextField(n)).firstOrNull;
   return mainOnly ? main : main ?? nodes.firstOrNull;
 }
 

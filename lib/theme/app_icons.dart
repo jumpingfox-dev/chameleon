@@ -157,6 +157,29 @@ class AppIconSet {
       CupertinoIcons.shuffle,
       FluentIcons.arrow_shuffle_24_filled
   );
+  /// Sorting a list, and narrowing it down.
+  IconData get sort => _pick(
+      Symbols.swap_vert_rounded,
+      FPhosphorFillIcons.arrowsDownUp,
+      FLucideIcons.arrowDownUp,
+      CupertinoIcons.arrow_up_arrow_down,
+      FluentIcons.arrow_sort_24_filled
+  );
+  IconData get filter => _pick(
+      Symbols.filter_list_rounded,
+      FPhosphorFillIcons.funnelSimple,
+      FLucideIcons.listFilter,
+      CupertinoIcons.line_horizontal_3_decrease,
+      FluentIcons.filter_24_filled
+  );
+  /// Something picked at random.
+  IconData get random => _pick(
+      Symbols.casino_rounded,
+      FPhosphorFillIcons.diceFive,
+      FLucideIcons.dices,
+      CupertinoIcons.cube,
+      FluentIcons.cube_24_filled
+  );
   IconData get pause => _pick(
       Symbols.pause_rounded,
       FPhosphorFillIcons.pause,

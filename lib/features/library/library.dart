@@ -9,6 +9,7 @@ import '../../core/jellyfin/list_each.dart';
 import '../../core/storage/app_cache.dart';
 import '../detail/detail_page.dart';
 import '../../core/focus/scroll_into_view.dart';
+import 'library_filters.dart';
 import 'poster_card.dart';
 import '../../theme/theme.dart';
 import '../../widgets/tappable.dart';
@@ -45,7 +46,62 @@ class _LibraryScreenState extends State<LibraryScreen> {
   int? get _total => _cache.total;
   Set<String>? get _availableLetters => _cache.letters;
 
-  String _keyFor(LibraryScreen w) => w.genre != null ? 'genre:${w.genre}' : 'library:${w.libraryId}';
+  String _baseKey(LibraryScreen w) => w.genre != null ? 'genre:${w.genre}' : 'library:${w.libraryId}';
+
+  /// Each page's sort and filters, kept while the app's open.
+  static final _filtersByPage = <String, LibraryFilters>{};
+
+  LibraryFilters _filtersFor(LibraryScreen w) => _filtersByPage[_baseKey(w)] ?? const LibraryFilters();
+  LibraryFilters get _filters => _filtersFor(widget);
+
+  /// Where a page's titles are kept: filtered ones apart from the rest.
+  String _keyFor(LibraryScreen w) {
+    final filters = _filtersFor(w);
+    return filters.isDefault ? _baseKey(w) : '${_baseKey(w)}|${filters.signature}';
+  }
+
+  /// The genres to ask for: a genre page's own, or the one picked in the filters.
+  List<String> get _genres => [?(widget.genre ?? _filters.genre)];
+
+  /// A new sort or filter: its own titles, from the top.
+  void _setFilters(LibraryFilters filters) {
+    setState(() {
+      _filtersByPage[_baseKey(widget)] = filters;
+      _cache = _entryFor(widget);
+      _error = null;
+    });
+    if (_scroll.hasClients) _scroll.jumpTo(0);
+    _loadOrRefresh();
+  }
+
+  /// Opens a title from this library (within the filters) picked at random.
+  Future<void> _openRandom() async {
+    final client = jellyfin.client;
+    if (client == null) return;
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      final page = await client.items.list(
+        parentId: widget.libraryId,
+        genres: _genres,
+        includeItemTypes: _itemTypes,
+        recursive: true,
+        sortBy: const ['Random'],
+        filters: _filters.filters,
+        years: _filters.years,
+        limit: 1,
+        enableTotalRecordCount: false,
+      );
+      if (!mounted) return;
+      final item = page.items.firstOrNull;
+      if (item == null) {
+        messenger.showSnackBar(const SnackBar(content: Text('Nothing here to pick from.')));
+      } else {
+        openItem(context, item);
+      }
+    } on JellyfinException catch (e) {
+      messenger.showSnackBar(SnackBar(content: Text(describeJellyfinError(e))));
+    }
+  }
 
   /// This page's cache entry: what's already loaded (in this run or saved from the last), or
   /// a new empty one.
@@ -59,7 +115,9 @@ class _LibraryScreenState extends State<LibraryScreen> {
   }
 
   /// Saves what's loaded so far, for next time.
-  void _save() => appCache.put(_keyFor(widget), _cache, toJson: LibraryCacheEntry.toJson);
+  /// (Filtered titles are kept only while the app's open.)
+  void _save() =>
+      appCache.put(_keyFor(widget), _cache, toJson: _filters.isDefault ? LibraryCacheEntry.toJson : null);
 
   /// Loads what this page needs: the first titles if there are none yet, or, if what's here is
   /// old, a fresh copy of it (swapped in place, so nothing jumps).
@@ -75,7 +133,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
     } else if (!appCache.isFresh(_keyFor(widget))) {
       _refresh();
     }
-    if (_availableLetters == null || !appCache.isFresh(_keyFor(widget))) _loadLetterCounts();
+    if (_filters.byLetter && (_availableLetters == null || !appCache.isFresh(_keyFor(widget)))) _loadLetterCounts();
   }
 
   JellyfinLibrary? get _library =>
@@ -103,6 +161,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
             ? 1
             : a.compareTo(b),
       );
+    if (_filters.descending) return [for (final letter in letters.reversed) (letter, groups[letter]!)];
     return [for (final letter in letters) (letter, groups[letter]!)];
   }
 
@@ -125,6 +184,9 @@ class _LibraryScreenState extends State<LibraryScreen> {
   }
 
   bool get _hasMore => _total == null || _items.length < _total!;
+
+  /// The filters, measured when jumping to a letter.
+  final _filterBarKey = GlobalKey();
 
   @override
   void initState() {
@@ -195,7 +257,10 @@ class _LibraryScreenState extends State<LibraryScreen> {
       final items = await client.items.listEach(
         genres: [genre],
         types: _itemTypes,
-        sortBy: const ['SortName'],
+        sortBy: _filters.sortBy,
+        descending: _filters.descending,
+        filters: _filters.filters,
+        years: _filters.years,
         fields: const ['SortName'], // to group by letter the same way the server sorts
       );
       if (!mounted || !identical(entry, _cache)) return;
@@ -227,10 +292,13 @@ class _LibraryScreenState extends State<LibraryScreen> {
     try {
       final page = await client.items.list(
         parentId: widget.libraryId,
-        genres: widget.genre == null ? const [] : [widget.genre!],
+        genres: _genres,
         includeItemTypes: _itemTypes,
         recursive: true,
-        sortBy: const ['SortName'],
+        sortBy: _filters.sortBy,
+        descending: _filters.descending,
+        filters: _filters.filters,
+        years: _filters.years,
         fields: const [
           'SortName',
         ], // needed to group by letter the same way the server sorts
@@ -261,10 +329,13 @@ class _LibraryScreenState extends State<LibraryScreen> {
     try {
       final page = await client.items.list(
         parentId: widget.libraryId,
-        genres: widget.genre == null ? const [] : [widget.genre!],
+        genres: _genres,
         includeItemTypes: _itemTypes,
         recursive: true,
-        sortBy: const ['SortName'],
+        sortBy: _filters.sortBy,
+        descending: _filters.descending,
+        filters: _filters.filters,
+        years: _filters.years,
         fields: const ['SortName'],
         limit: entry.items.length.clamp(_pageSize, LibraryCacheEntry.refreshLimit),
       );
@@ -293,7 +364,8 @@ class _LibraryScreenState extends State<LibraryScreen> {
       'Recursive': true,
       'IncludeItemTypes': _itemTypes.join(','),
       if (widget.libraryId != null) 'ParentId': widget.libraryId,
-      if (widget.genre != null) 'Genres': widget.genre,
+      if (_genres.isNotEmpty) 'Genres': _genres.join('|'),
+      ..._filters.query..remove('Genres'),
       'Limit': 0,
       'EnableTotalRecordCount': true,
     };
@@ -346,7 +418,8 @@ class _LibraryScreenState extends State<LibraryScreen> {
     if (!mounted) return;
 
     final view = libraryViewFor(context);
-    var offset = 0.0;
+    // The filters come first (one line of buttons, or two on a narrow screen).
+    var offset = _filterBarKey.currentContext?.size?.height ?? 0;
     for (final (sectionLetter, items) in _groupByLetter()) {
       if (sectionLetter == letter) break;
       offset +=
@@ -380,16 +453,20 @@ class _LibraryScreenState extends State<LibraryScreen> {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             Expanded(child: _buildBody(context, view)),
-            // (Clear of the home indicator at the bottom, which the page now runs under.)
-            ClearOfHiddenTopBar(child: Padding(padding: EdgeInsets.only(top: pageTopGap(context), bottom: MediaQuery.paddingOf(context).bottom), child: _LetterRail(
-              view: view,
-              letters: _letters,
-              // Until the server says which letters have titles, every letter works.
-              isAvailable: (letter) => _availableLetters?.contains(letter) ?? true,
-              onLetter: _jumpTo,
-              onToggleView: () => libraryViewOverride.value =
-              view == LibraryView.poster ? LibraryView.thumbnail : LibraryView.poster,
-            ))),
+            // A–Z to jump to, when sorted by name. Sorted another way there are no letters, and
+            // the titles take its room. (Clear of the home indicator, which the page runs under.)
+            if (_filters.byLetter)
+              ClearOfHiddenTopBar(
+                child: Padding(
+                  padding: EdgeInsets.only(top: pageTopGap(context), bottom: MediaQuery.paddingOf(context).bottom),
+                  child: _LetterRail(
+                    letters: _letters,
+                    // Until the server says which letters have titles, every letter works.
+                    isAvailable: (letter) => _availableLetters?.contains(letter) ?? true,
+                    onLetter: _jumpTo,
+                  ),
+                ),
+              ),
           ],
         ),
         ),
@@ -401,32 +478,36 @@ class _LibraryScreenState extends State<LibraryScreen> {
   );
 
   Widget _buildBody(BuildContext context, LibraryView view) {
-    if (_items.isEmpty && _loading) {
-      return const Center(child: CircularProgressIndicator());
-    }
-    if (_items.isEmpty && _error != null) {
-      return Center(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          spacing: 12,
-          children: [
-            Text(_error!),
-            FilledButton(
-              onPressed: _loadMore,
-              child: const Text('Try again'),
-            ),
-          ],
-        ),
+    final filters = _filters;
+    // Instead of the titles, while there are none to show.
+    Widget? message;
+    if (_items.isEmpty && (_loading || (_total == null && _error == null))) {
+      message = const CircularProgressIndicator();
+    } else if (_items.isEmpty && _error != null) {
+      message = Column(
+        mainAxisSize: MainAxisSize.min,
+        spacing: 12,
+        children: [
+          Text(_error!),
+          FilledButton(onPressed: _loadMore, child: const Text('Try again')),
+        ],
       );
+    } else if (_items.isEmpty) {
+      message = Text(filters.showsAll ? 'Nothing here yet' : 'Nothing matches these filters', style: context.text.bodyLarge);
     }
-    if (_items.isEmpty) {
-      return Center(
-        child: Text(
-          'Nothing here yet',
-          style: context.text.bodyLarge,
+
+    Widget grid(List<JellyfinItem> items) => SliverGrid.builder(
+      gridDelegate: libraryGridDelegate(view),
+      itemCount: items.length,
+      // With the remote, the focused card keeps some room from the screen's edges.
+      itemBuilder: (context, i) => KeepClearOfEdges(
+        child: PosterCard(
+          item: items[i],
+          view: view,
+          onPress: () => openItem(context, items[i]),
         ),
-      );
-    }
+      ),
+    );
 
     return LayoutBuilder(
       builder: (context, constraints) {
@@ -436,36 +517,46 @@ class _LibraryScreenState extends State<LibraryScreen> {
           controller: _scroll,
           slivers: [
             SliverToBoxAdapter(child: SizedBox(height: pageTop(context))),
-            for (final (letter, items) in _groupByLetter()) ...[
-              SliverToBoxAdapter(
-                child: SizedBox(
-                  height: _sectionHeaderHeight,
-                  child: Align(
-                    alignment: Alignment.bottomLeft,
-                    child: Padding(
-                      padding: const EdgeInsets.only(bottom: 8),
-                      child: Text(
-                        letter,
-                        style: context.text.titleLarge,
+            // The filters, above the titles: they scroll away with them.
+            SliverToBoxAdapter(
+              child: LibraryFilterBar(
+                key: _filterBarKey,
+                filters: filters,
+                onChanged: _setFilters,
+                view: view,
+                onToggleView: () => libraryViewOverride.value =
+                    view == LibraryView.poster ? LibraryView.thumbnail : LibraryView.poster,
+                // Not for a library of collections.
+                onRandom: _library?.collectionType == 'boxsets' ? null : _openRandom,
+                showGenre: widget.genre == null,
+                showInProgress: _itemTypes.contains(JellyfinItemKind.movie),
+                showRuntime: !(_itemTypes.length == 1 && _itemTypes.first == JellyfinItemKind.series),
+              ),
+            ),
+            if (message != null)
+              SliverFillRemaining(hasScrollBody: false, child: Center(child: message))
+            else if (filters.byLetter)
+              for (final (letter, items) in _groupByLetter()) ...[
+                SliverToBoxAdapter(
+                  child: SizedBox(
+                    height: _sectionHeaderHeight,
+                    child: Align(
+                      alignment: Alignment.bottomLeft,
+                      child: Padding(
+                        padding: const EdgeInsets.only(bottom: 8),
+                        child: Text(
+                          letter,
+                          style: context.text.titleLarge,
+                        ),
                       ),
                     ),
                   ),
                 ),
-              ),
-              SliverGrid.builder(
-                gridDelegate: libraryGridDelegate(view),
-                itemCount: items.length,
-                // With the remote, the focused card keeps some room from the screen's edges.
-                itemBuilder: (context, i) => KeepClearOfEdges(
-                  child: PosterCard(
-                    item: items[i],
-                    view: view,
-                    onPress: () => openItem(context, items[i]),
-                  ),
-                ),
-              ),
-            ],
-            if (_hasMore)
+                grid(items),
+              ]
+            else
+              grid(_items),
+            if (message == null && _hasMore)
               const SliverToBoxAdapter(
                 child: Padding(
                   padding: EdgeInsets.symmetric(vertical: 24),
@@ -486,22 +577,18 @@ class _LibraryScreenState extends State<LibraryScreen> {
 /// scrolls only if the screen is too short for them to stay readable.
 class _LetterRail extends StatelessWidget {
   const _LetterRail({
-    required this.view,
     required this.letters,
     required this.isAvailable,
     required this.onLetter,
-    required this.onToggleView,
   });
 
-  final LibraryView view;
   final List<String> letters;
   final bool Function(String letter) isAvailable;
   final void Function(String letter) onLetter;
-  final VoidCallback onToggleView;
 
   static const _width = 36.0;
   static const _minLetterHeight = 14.0; // below this the letters scroll rather than shrink
-  static const _maxLetterHeight = 24.0;
+  static const _maxLetterHeight = 44.0; // the column to itself now (the view toggle moved out), so roomier
 
   @override
   Widget build(BuildContext context) => SizedBox(
@@ -513,16 +600,8 @@ class _LetterRail extends StatelessWidget {
         padding: const EdgeInsets.symmetric(vertical: 8),
         child: Column(
           children: [
-            // Shows the view you'll switch *to*: a tall rectangle for posters, a wide one for thumbnails.
-            IconButton(
-              onPressed: onToggleView,
-              icon: view == LibraryView.poster
-                  ? const AspectIcon(width: 18, height: 10) // 16:9 → thumbnails
-                  : const AspectIcon(width: 11, height: 16), // 2:3 → posters
-            ),
-            const SizedBox(height: 8),
-            // The letters share whatever height is left under the toggle, measured rather
-            // than guessed, so Z always fits. Only on a very short screen do they scroll.
+            // The letters share the height, measured rather than guessed, so Z always fits. Only
+            // on a very short screen do they scroll.
             Expanded(
               child: LayoutBuilder(
                 builder: (context, constraints) {

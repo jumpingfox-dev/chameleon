@@ -485,7 +485,14 @@ class _AppShellState extends State<AppShell> {
     if (first != null) {
       first.requestFocus();
       if (first.context case final context?) {
-        Scrollable.ensureVisible(context, duration: const Duration(milliseconds: 150), curve: Curves.easeOut);
+        // Only if it's out of sight: a page opens at its top, with whatever's above its first item
+        // (a library's filters) in view.
+        Scrollable.ensureVisible(
+          context,
+          duration: const Duration(milliseconds: 150),
+          curve: Curves.easeOut,
+          alignmentPolicy: ScrollPositionAlignmentPolicy.keepVisibleAtEnd,
+        );
       }
       scrollToStartIfFirst(first);
       return;
