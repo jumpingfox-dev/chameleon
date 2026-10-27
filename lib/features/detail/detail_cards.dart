@@ -500,9 +500,11 @@ class _SeasonInfoCardState extends State<_SeasonInfoCard> {
 /// appears once per job.
 List<Map<String, dynamic>> _peopleOf(JellyfinItem item) {
   final people = [for (final p in (item.raw['People'] as List?) ?? const []) if (p is Map<String, dynamic>) p];
-  bool acting(Map<String, dynamic> p) => p['Type'] == 'Actor' || p['Type'] == 'GuestStar';
-  return [...people.where(acting), ...people.where((p) => !acting(p))];
+  return [...people.where(_isActing), ...people.where((p) => !_isActing(p))];
 }
+
+/// In the cast (an actor or guest star), rather than the crew.
+bool _isActing(Map<String, dynamic> person) => person['Type'] == 'Actor' || person['Type'] == 'GuestStar';
 
 /// What someone did on a title, for under their name: an actor's character, or a crew member's
 /// job ("Director", "Writer", ...).
@@ -527,13 +529,19 @@ List<Widget> _castSection(BuildContext context, List<Map<String, dynamic>> cast)
       // Runs to the card's edges, so the cast scrolls all the way across.
       builder: (padding) => ScrollIntoViewOnFocus(
         child: SizedBox(
-          height: 155,
+          height: _CastTile.heightOf(context),
           child: FocusRow(
             child: ListView.separated(
               scrollDirection: Axis.horizontal,
               padding: padding,
               itemCount: cast.length,
-              separatorBuilder: (_, _) => const SizedBox(width: 8),
+              // Between the last of the cast and the first of the crew, a line down the middle.
+              separatorBuilder: (context, i) => _isActing(cast[i]) && !_isActing(cast[i + 1])
+                  ? Padding(
+                      padding: const EdgeInsets.fromLTRB(12, 16, 12, 40),
+                      child: VerticalDivider(width: 1, thickness: 1, color: context.colors.outlineVariant),
+                    )
+                  : const SizedBox(width: 8),
               itemBuilder: (context, i) => _CastTile(person: cast[i]),
             ),
           ),
@@ -705,6 +713,13 @@ class _CastTile extends StatelessWidget {
   const _CastTile({required this.person});
 
   final Map<String, dynamic> person;
+
+  /// Its height: the photo, then up to two lines of name and one of character or job, measured
+  /// in the font and text size in use (so nothing's cut off with larger text).
+  static double heightOf(BuildContext context) {
+    final small = context.text.bodySmall;
+    return 96 + 4 + 2 * lineHeightOf(context, small) + 4 + lineHeightOf(context, small) + 2;
+  }
 
   @override
   Widget build(BuildContext context) {

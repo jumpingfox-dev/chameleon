@@ -16,6 +16,7 @@ import '../../core/platform/screen_type.dart';
 import '../../theme/theme.dart';
 import '../../widgets/app_logo.dart';
 import 'screensaver_settings.dart';
+import '../../widgets/title_logo.dart';
 
 part 'screensaver_views.dart';
 

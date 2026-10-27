@@ -29,6 +29,7 @@ import '../../theme/theme.dart';
 import '../../widgets/tappable.dart';
 import '../../core/platform/page_insets.dart';
 import '../../core/jellyfin/together.dart';
+import '../../widgets/title_logo.dart';
 
 part 'detail_blocks.dart';
 part 'detail_cards.dart';

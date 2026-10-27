@@ -383,22 +383,15 @@ class _TitleArt extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       spacing: 10,
       children: [
-        ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 360, maxHeight: 110),
-          child: logoTag == null
-              ? name
-              : Image.network(
-                  jellyfin.client!.images.url(
-                    itemId: item.id,
-                    type: JellyfinImagesApi.typeLogo,
-                    tag: logoTag,
-                    fillWidth: 720,
-                  ),
-                  fit: BoxFit.contain,
-                  alignment: Alignment.bottomLeft,
-                  errorBuilder: (_, _, _) => name,
-                ),
-        ),
+        if (logoTag == null)
+          ConstrainedBox(constraints: const BoxConstraints(maxWidth: 360), child: name)
+        else
+          TitleLogo(
+            itemId: item.id,
+            tag: logoTag,
+            size: TitleLogo.screensaver(ScreenType.of(context).isPhone),
+            fallback: name,
+          ),
         if (genres.isNotEmpty)
           Text(
             genres,

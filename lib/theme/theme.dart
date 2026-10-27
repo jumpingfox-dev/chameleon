@@ -127,6 +127,21 @@ ButtonStyle genreButtonStyle(ColorScheme colors, {bool compact = false}) => Outl
   visualDensity: compact ? VisualDensity.compact : null,
 );
 
+/// How tall one line of [style] really is on this device, with its font and the system's text
+/// size, for sizing a row to fit text under its pictures (rather than guessing, which overflows
+/// on a phone with larger text).
+double lineHeightOf(BuildContext context, TextStyle? style) {
+  final painter = TextPainter(
+    text: TextSpan(text: 'Ag', style: style),
+    textDirection: TextDirection.ltr,
+    textScaler: MediaQuery.textScalerOf(context),
+    maxLines: 1,
+  )..layout();
+  final height = painter.height;
+  painter.dispose();
+  return height;
+}
+
 /// Shortcuts to the current theme's colors and text styles.
 extension ThemeContext on BuildContext {
   ColorScheme get colors => Theme.of(this).colorScheme;

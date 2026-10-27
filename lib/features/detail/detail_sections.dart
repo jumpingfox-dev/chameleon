@@ -124,7 +124,7 @@ class _HeroTitle extends StatelessWidget {
   final JellyfinItem item;
 
   /// The tallest a logo gets (a season's poster and a person's photo start where its top would be).
-  static double logoBox(BuildContext context) => ScreenType.of(context).isPhone ? 64 : 120;
+  static double logoBox(BuildContext context) => TitleLogo.hero(ScreenType.of(context).isPhone).height;
 
   @override
   Widget build(BuildContext context) {
@@ -153,22 +153,9 @@ class _HeroTitle extends StatelessWidget {
         constraints: BoxConstraints(minHeight: height),
         child: Align(
           alignment: Alignment.bottomLeft,
-          child: ConstrainedBox(
-            constraints: BoxConstraints(maxWidth: isPhone ? 220 : 400, maxHeight: logoBox(context)),
-            child: logoTag == null
-                ? name
-                : Image.network(
-                    jellyfin.client!.images.url(
-                      itemId: item.id,
-                      type: JellyfinImagesApi.typeLogo,
-                      tag: logoTag,
-                      fillWidth: 800,
-                    ),
-                    fit: BoxFit.contain,
-                    alignment: Alignment.bottomLeft,
-                    errorBuilder: (_, _, _) => name,
-                  ),
-          ),
+          child: logoTag == null
+              ? ConstrainedBox(constraints: BoxConstraints(maxWidth: isPhone ? 220 : 400), child: name)
+              : TitleLogo(itemId: item.id, tag: logoTag, size: TitleLogo.hero(isPhone), fallback: name),
         ),
       ),
     );
@@ -635,9 +622,7 @@ class _ItemRowState extends State<_ItemRow> {
     // Bold, as a show's name under Home's cards is.
     final captionStyle = context.text.bodyMedium?.copyWith(fontWeight: FontWeight.w600);
     // A line of text and the room above it.
-    final captionHeight = widget.captioned
-        ? 6 + MediaQuery.textScalerOf(context).scale((captionStyle?.fontSize ?? 14) * (captionStyle?.height ?? 1.43))
-        : 0.0;
+    final captionHeight = widget.captioned ? 6 + lineHeightOf(context, captionStyle) + 1 : 0.0;
     final heading = Text(widget.title, style: context.text.titleLarge);
     Widget row = FocusRow(
       child: ListView.separated(
@@ -676,9 +661,18 @@ class _ItemRowState extends State<_ItemRow> {
                 ),
                 if (widget.captioned)
                   Padding(
-                    // In line with the card's picture, which rests in from its edges.
+                    // Centered under the card's picture, which rests in from its edges.
                     padding: const EdgeInsets.only(top: 6, left: 8, right: 8),
-                    child: Text(items[i].name, maxLines: 1, overflow: TextOverflow.ellipsis, style: captionStyle),
+                    child: SizedBox(
+                      width: double.infinity,
+                      child: Text(
+                        items[i].name,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        textAlign: TextAlign.center,
+                        style: captionStyle,
+                      ),
+                    ),
                   ),
               ],
             ),
