@@ -367,8 +367,8 @@ class _Menu extends StatelessWidget {
                     ],
                   ),
                 ),
-                // ── Out of the top bar: Settings and who's signed in (pinned, or on phones, where
-                // the bar is narrow), and cast (pinned) ──
+                // ── Out of the top bar (pinned, or on phones, where the bar is narrow): cast,
+                // Settings and who's signed in ──
                 if (pinned || isPhone)
                   Padding(
                     padding: const EdgeInsets.fromLTRB(12, 0, 12, 16),
@@ -377,13 +377,16 @@ class _Menu extends StatelessWidget {
                       children: [
                         Divider(height: 17, color: colors.outlineVariant.withValues(alpha: 0.5)),
                         // Somewhere to cast to: the same cast symbol as in the top bar.
-                        if (pinned && showCastButton)
+                        if (showCastButton)
                           _MenuItem(
                             label: castController.isConnected ? 'Casting' : 'Cast',
                             icon: castIcon,
                             focusNode: nodeFor('Cast'),
                             selected: castController.isConnected,
-                            onPress: () => showCastMenu(context),
+                            onPress: () {
+                            if (!pinned) onClose(); // slid out (phones): it closes first
+                            showCastMenu(context);
+                          },
                           ),
                         _MenuItem(
                           label: 'Settings',

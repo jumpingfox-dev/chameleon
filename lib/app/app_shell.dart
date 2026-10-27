@@ -608,10 +608,10 @@ class _AppShellState extends State<AppShell> {
               // (A detail page's own name is big on the page itself.)
               centeredTitle: home || detail != null ? null : (_title ?? ''),
               showLogo: !pinned && home,
-              // Pinned, the menu has cast, Settings and your profile; on phones, Settings and your
-              // profile (the bar's narrow).
+              // Pinned, and on phones (the bar's narrow there), the menu has cast, Settings and
+              // your profile; elsewhere they're here, in that order.
               showAccount: !pinned && !type.isPhone,
-              showCast: !pinned,
+              showCast: !pinned && !type.isPhone,
               onSettings: () => _goTo('/settings'),
             ),
           ),
@@ -736,11 +736,16 @@ class _AppShellState extends State<AppShell> {
                           );
                           final bar = _topBar(context, type: type, pinned: pinned, detail: detail);
                           if (detail != null) {
-                            return Stack(
-                              children: [
-                                Positioned.fill(child: body),
-                                Positioned(top: 0, left: 0, right: 0, child: _collapsing(context, bar)),
-                              ],
+                            // (Its room told to the page too, so a title's logo or a poster keeps
+                            // clear of its buttons.)
+                            return TopBarSpace(
+                              height: MediaQuery.paddingOf(context).top + _barHeight(type, empty: false),
+                              child: Stack(
+                                children: [
+                                  Positioned.fill(child: body),
+                                  Positioned(top: 0, left: 0, right: 0, child: _collapsing(context, bar)),
+                                ],
+                              ),
                             );
                           }
                           // Elsewhere the bar floats over the page too, which keeps room for it at
