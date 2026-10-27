@@ -191,7 +191,7 @@ class PlaybackSettings extends ChangeNotifier {
   /// [subtitleHeight] as a share of the screen's height.
   double get subtitleRaise => subtitleHeight / 100;
   SubtitleColor subtitleColor = SubtitleColor.white;
-  SubtitleBackground subtitleBackground = SubtitleBackground.shadow;
+  SubtitleBackground subtitleBackground = SubtitleBackground.outline;
   bool liftSubtitles = true; // move up while the controls show
 
   // Audio

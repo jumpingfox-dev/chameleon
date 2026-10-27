@@ -76,6 +76,7 @@ class MainActivity : FlutterActivity() {
         val videoSurface = VideoSurface(this, flutterEngine.dartExecutor.binaryMessenger)
         ExoEngine(this, flutterEngine.dartExecutor.binaryMessenger, videoSurface)
         screenOff = ScreenOff(this, flutterEngine.dartExecutor.binaryMessenger)
+        CastStyle(applicationContext, flutterEngine.dartExecutor.binaryMessenger)
         // What this device can do with video and audio, so the player picks how to play each file
         // (see lib/core/platform/media_support.dart).
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "chameleon/media").setMethodCallHandler { call, result ->

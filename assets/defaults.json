@@ -66,7 +66,7 @@
       "subtitleSize": "medium",
       "subtitleHeight": 4,
       "subtitleColor": "white",
-      "subtitleBackground": "shadow",
+      "subtitleBackground": "outline",
       "liftSubtitles": true
     },
     "audio": {

@@ -5,6 +5,7 @@ import 'dart:io';
 import 'package:dart_jellyfin/dart_jellyfin.dart' show JellyfinItem, JellyfinItemKind;
 import 'package:flutter/foundation.dart';
 import 'package:flutter/painting.dart' show Color;
+import 'package:flutter/services.dart' show MethodChannel;
 import 'package:flutter_chrome_cast/flutter_chrome_cast.dart';
 import 'package:http/http.dart' as http;
 
@@ -80,6 +81,9 @@ class CastController extends ChangeNotifier {
             if (nowPlaying != null && p > Duration.zero) lastPosition = p;
           }),
         );
+      // Look for Chromecasts on the network. (iOS starts looking by itself; Android only once
+      // asked, so without this a phone never finds one and never shows the cast button.)
+      unawaited(GoogleCastDiscoveryManager.instance.startDiscovery().catchError((Object _) {}));
       supported = true;
       notifyListeners();
     } catch (_) {
@@ -98,7 +102,10 @@ class CastController extends ChangeNotifier {
     final state = status?.playerState ?? CastMediaPlayerState.unknown;
     if (state == playerState) return;
     playerState = state;
-    if (state == CastMediaPlayerState.playing || state == CastMediaPlayerState.paused) _playing = true;
+    if ((state == CastMediaPlayerState.playing || state == CastMediaPlayerState.paused) && !_playing) {
+      _playing = true;
+      _sendSubtitleStyle(); // the Chromecast takes a style once the video's loaded
+    }
     // Finished, or stopped from the TV's own remote. ("Interrupted" is just a reload,
     // e.g. after changing audio, so it doesn't count.)
     final reason = status?.idleReason;
@@ -137,14 +144,39 @@ class CastController extends ChangeNotifier {
   /// Changing the subtitle settings while casting restyles them on the Chromecast too.
   bool _followingSubtitleStyle = false;
 
+  /// Sets the subtitle style on the Chromecast: through the app's own native code (see
+  /// CastStyle.kt and AppDelegate.swift), as flutter_chrome_cast 1.5 doesn't pass styles on;
+  /// and through the plugin too, for when a version of it does.
   void _sendSubtitleStyle() {
     if (nowPlaying == null || !isConnected) return;
+    final s = playbackSettings;
+    unawaited(
+      _styleChannel
+          .invokeMethod<bool>('set', {
+            'edge': switch (s.subtitleBackground) {
+              SubtitleBackground.shadow => 'dropShadow',
+              SubtitleBackground.outline => 'outline',
+              SubtitleBackground.box => 'none',
+            },
+            'edgeColor': 0xFF000000,
+            'foreground': s.subtitleColor.color.toARGB32(),
+            'background': s.subtitleBackground == SubtitleBackground.box ? 0xB3000000 : 0x00000000,
+            'scale': s.subtitleSize.scale,
+            'font': castFontFamilyOf(s.subtitleFont).name,
+          })
+          .catchError((Object e) {
+            debugPrint('Cast subtitle style: $e');
+            return false;
+          }),
+    );
     unawaited(
       GoogleCastRemoteMediaClient.instance
-          .setTextTrackStyle(castSubtitleStyle(playbackSettings))
-          .catchError((Object e) => debugPrint('Cast subtitle style: $e')),
+          .setTextTrackStyle(castSubtitleStyle(s))
+          .catchError((Object _) {}), // not on Android or iOS yet (see above)
     );
   }
+
+  static const _styleChannel = MethodChannel('chameleon/cast_style');
 
   /// What was last sent to the Chromecast, to try again at a lower quality.
   _CastAttempt? _attempt;
@@ -524,8 +556,9 @@ class CastController extends ChangeNotifier {
 /// families a Chromecast has, with the font's own name for one that knows it), drop shadow,
 /// outline or dark box, color and size. (Where they sit can't be set: the Chromecast decides.)
 ///
-/// Note: flutter_chrome_cast 1.5 doesn't pass styles on to the Chromecast yet (its native code
-/// leaves them out), so this takes effect once a version of it does.
+/// Note: flutter_chrome_cast 1.5 doesn't pass styles on to the Chromecast (its native code leaves
+/// them out); the app sets them itself (see _sendSubtitleStyle). This is sent as well, for when
+/// a version of it does.
 TextTrackStyle castSubtitleStyle(PlaybackSettings s) => _CastSubtitleStyle(
   fontFamily: s.subtitleFont,
   fontGenericFamily: castFontFamilyOf(s.subtitleFont),

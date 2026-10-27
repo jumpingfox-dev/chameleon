@@ -71,4 +71,7 @@ dependencies {
     val media3 = "1.8.0"
     implementation("androidx.media3:media3-exoplayer:$media3")
     implementation("androidx.media3:media3-ui:$media3")
+    // Google's Cast SDK, for styling the subtitles on a Chromecast (CastStyle.kt). The same
+    // version as flutter_chrome_cast's, which brings it in for everything else.
+    implementation("com.google.android.gms:play-services-cast-framework:21.5.0")
 }
