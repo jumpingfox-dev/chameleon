@@ -346,7 +346,9 @@ class _Transcode {
         'AllowAudioStreamCopy': 'true',
         'TranscodingMaxAudioChannels': '$channels',
         'MaxStreamingBitrate': '${maxBitrate ?? 120000000}',
-        if (maxBitrate != null) 'VideoBitrate': '${math.max(maxBitrate - 384000, 500000)}',
+        // What to convert the picture at (left out, the server picks a very low one): the
+        // file's own rate, within the limit, less room for the sound.
+        'VideoBitrate': '${transcodeVideoBitrate(item, limit: maxBitrate ?? 60000000, audio: 384000)}',
         'SegmentContainer': 'ts',
         'BreakOnNonKeyFrames': 'true',
         if (audioIndex != null) 'AudioStreamIndex': '$audioIndex',

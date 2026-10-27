@@ -15,6 +15,17 @@ import '../format/format.dart';
 import 'together.dart';
 
 
+/// The picture's bit rate to ask the server for when it converts [item] (bits per second):
+/// the file's own (no point making more than there is), within [limit], less [audio]'s share.
+/// Asked for every time: left out, Jellyfin converts at a very low rate (about 0.5 Mbps).
+int transcodeVideoBitrate(JellyfinItem item, {required int limit, int audio = 192000}) {
+  final source = ((item.raw['MediaSources'] as List?)?.firstOrNull as Map?)?['Bitrate'] as int? ??
+      item.raw['Bitrate'] as int?;
+  final total = source == null || source <= 0 ? limit : (source < limit ? source : limit);
+  final video = total - audio;
+  return video < 500000 ? 500000 : video;
+}
+
 /// The sign-in [token] for an address that carries it (a stream or subtitles fetched by a
 /// player, or a Chromecast, which can't send headers). Under both names: newer Jellyfin servers
 /// only take `ApiKey` (refusing `api_key` with 401), older ones only `api_key`.
