@@ -77,8 +77,9 @@ String? _externalSubtitleUrl(JellyfinItem? item, Map<String, dynamic> stream) {
   };
   final source = (item.raw['MediaSources'] as List?)?.firstOrNull as Map?;
   final sourceId = (source?['Id'] as String?) ?? item.id;
-  return '${client.baseUrl}/Videos/${item.id}/$sourceId/Subtitles/${stream['Index']}/0/Stream.$ext'
-      '?api_key=${client.token}';
+  return Uri.parse('${client.baseUrl}/Videos/${item.id}/$sourceId/Subtitles/${stream['Index']}/0/Stream.$ext')
+      .replace(queryParameters: tokenQuery(client.token ?? ''))
+      .toString();
 }
 
 List<_TrackChoice> _audioChoices(PlaybackEngine player, JellyfinItem? item) {
@@ -334,7 +335,7 @@ class _Transcode {
         'MediaSourceId': (_sourceOf(item)?['Id'] as String?) ?? item.id,
         'DeviceId': deviceId,
         'PlaySessionId': session,
-        'api_key': client.token ?? '',
+        ...tokenQuery(client.token ?? ''),
         'VideoCodec': 'h264',
         // The first one listed is what other audio is converted to: Dolby Digital Plus keeps
         // surround for passthrough. No TrueHD: it doesn't fit the stream's container, so the

@@ -380,7 +380,8 @@ class _LibraryScreenState extends State<LibraryScreen> {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             Expanded(child: _buildBody(context, view)),
-            ClearOfHiddenTopBar(child: Padding(padding: EdgeInsets.only(top: pageTopGap(context)), child: _LetterRail(
+            // (Clear of the home indicator at the bottom, which the page now runs under.)
+            ClearOfHiddenTopBar(child: Padding(padding: EdgeInsets.only(top: pageTopGap(context), bottom: MediaQuery.paddingOf(context).bottom), child: _LetterRail(
               view: view,
               letters: _letters,
               // Until the server says which letters have titles, every letter works.

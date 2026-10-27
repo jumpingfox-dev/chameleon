@@ -170,7 +170,7 @@ class _SharedPlayer {
         'MediaSourceId': itemId,
         'DeviceId': _deviceId,
         'PlaySessionId': session,
-        'api_key': client.token ?? '',
+        ...tokenQuery(client.token ?? ''),
         'VideoCodec': 'h264',
         'AudioCodec': 'aac',
         'MaxWidth': '1280',

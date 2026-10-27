@@ -17,8 +17,7 @@ EdgeInsets pageSides(BuildContext context, {double extra = 16}) {
   return EdgeInsets.only(left: insets.left + extra + wide, right: insets.right + extra + wide);
 }
 /// The room the app's top bar takes at the top of the page right now: all of it while it
-/// shows, and once it's slid away, just the status bar's on phones (the page runs up under it
-/// there) and none elsewhere. A page's fixed parts (Search's box, the A–Z column) keep clear by
+/// shows, and once it's slid away, just the status bar's (the page runs up under it). A page's fixed parts (Search's box, the A–Z column) keep clear by
 /// this much, moving up as the bar goes.
 final topBarRoom = ValueNotifier<double>(0);
 

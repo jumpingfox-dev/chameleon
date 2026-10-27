@@ -14,6 +14,12 @@ import '../storage/storage.dart';
 import '../format/format.dart';
 import 'together.dart';
 
+
+/// The sign-in [token] for an address that carries it (a stream or subtitles fetched by a
+/// player, or a Chromecast, which can't send headers). Under both names: newer Jellyfin servers
+/// only take `ApiKey` (refusing `api_key` with 401), older ones only `api_key`.
+Map<String, String> tokenQuery(String token) => {'ApiKey': token, 'api_key': token};
+
 class JellyfinLibrary {
   const JellyfinLibrary({
     required this.id,

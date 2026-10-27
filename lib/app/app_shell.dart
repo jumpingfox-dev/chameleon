@@ -182,7 +182,7 @@ class _AppShellState extends State<AppShell> {
   final _atTop = ValueNotifier(true);
 
   /// The room the top bar takes when it shows (see TopBarSpace), and the status bar's share
-  /// of it (phones), set as the page builds.
+  /// of it, set as the page builds.
   double _barRoom = 0;
   double _barRoomStatus = 0;
 
@@ -534,21 +534,29 @@ class _AppShellState extends State<AppShell> {
   }
 
   /// The top bar, floating over the page and sliding up out of sight as the page scrolls
-  /// down: see-through, its buttons on glass islands. [withStatusBar]: it covers the status
-  /// bar too (phones, and detail pages, which run up under it).
-  Widget _collapsing(BuildContext context, Widget bar, {required bool withStatusBar}) {
-    final content = withStatusBar
-        ? Column(mainAxisSize: MainAxisSize.min, children: [SizedBox(height: MediaQuery.paddingOf(context).top), bar])
-        : bar;
+  /// down: see-through, its buttons on glass islands, covering the status bar too (the page runs
+  /// up under both).
+  Widget _collapsing(BuildContext context, Widget bar) {
+    final content = Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [SizedBox(height: MediaQuery.paddingOf(context).top), bar],
+    );
     return ValueListenableBuilder(
       valueListenable: _barShown,
+      // Slid up and faded out together, so nothing of it (its islands' shadows) is left at the
+      // edge however short it is.
       builder: (context, shown, content) => IgnorePointer(
         ignoring: !shown,
-        child: AnimatedSlide(
+        child: AnimatedOpacity(
           duration: const Duration(milliseconds: 200),
           curve: Curves.easeOut,
-          offset: shown ? Offset.zero : const Offset(0, -1.2), // past its islands' shadows
-          child: content,
+          opacity: shown ? 1 : 0,
+          child: AnimatedSlide(
+            duration: const Duration(milliseconds: 200),
+            curve: Curves.easeOut,
+            offset: shown ? Offset.zero : const Offset(0, -1.2),
+            child: content,
+          ),
         ),
       ),
       child: content,
@@ -561,8 +569,8 @@ class _AppShellState extends State<AppShell> {
       empty ? 0 : (type.isTv ? 24 + 8 : 4 + 4) + 48 + 6;
 
   /// The top bar's contents for where you are ([detail]: the detail page on top, if any).
-  /// Nothing at all when it would be empty: Home beside a pinned menu (which has the logo,
-  /// Settings and your profile), with nowhere to cast to.
+  /// Nothing at all when it would be empty: Home beside a pinned menu (which has the logo, cast,
+  /// Settings and your profile).
   Widget _topBar(
     BuildContext context, {
     required ScreenType type,
@@ -570,7 +578,7 @@ class _AppShellState extends State<AppShell> {
     required ValueNotifier<String?>? detail,
   }) {
     final home = detail == null && widget.location == '/home';
-    if (pinned && home && !showCastButton) return const SizedBox(width: double.infinity);
+    if (pinned && home) return const SizedBox(width: double.infinity);
     return MediaQuery.removePadding(
       context: context,
       removeTop: true,
@@ -600,7 +608,7 @@ class _AppShellState extends State<AppShell> {
               // (A detail page's own name is big on the page itself.)
               centeredTitle: home || detail != null ? null : (_title ?? ''),
               showLogo: !pinned && home,
-              // Pinned, the menu has Settings and your profile.
+              // Pinned, the menu has cast, Settings and your profile.
               showAccount: !pinned,
               onSettings: () => _goTo('/settings'),
             ),
@@ -648,16 +656,12 @@ class _AppShellState extends State<AppShell> {
             media.size.height - (bottomBar ? _footerHeight : 0),
           ),
         ),
-        child: SafeArea(
-          top: false,
-          left: false,
-          right: false,
-          bottom: !bottomBar, // the bottom bar floats over it: pages leave room (pageBottom)
-          child: FocusScope(
-            node: _pageScope,
-            onKeyEvent: type.isPhone ? null : _onPageKey,
-            child: widget.navigationShell,
-          ),
+        // Pages run to the bottom of the screen, under the home indicator (and the bottom bar,
+        // where there is one): they leave room for those inside their scrolling (pageBottom).
+        child: FocusScope(
+          node: _pageScope,
+          onKeyEvent: type.isPhone ? null : _onPageKey,
+          child: widget.navigationShell,
         ),
       );
 
@@ -733,46 +737,30 @@ class _AppShellState extends State<AppShell> {
                             return Stack(
                               children: [
                                 Positioned.fill(child: body),
-                                Positioned(top: 0, left: 0, right: 0, child: _collapsing(context, bar, withStatusBar: true)),
+                                Positioned(top: 0, left: 0, right: 0, child: _collapsing(context, bar)),
                               ],
                             );
                           }
                           // Elsewhere the bar floats over the page too, which keeps room for it at
                           // the top of its content (TopBarSpace), so the bar going doesn't move
-                          // anything. The status bar's room stays, except on phones, where it goes
-                          // with the top bar and the page fills the screen, up past the camera.
+                          // anything. The page runs up under the status bar, which the bar covers
+                          // while it shows; scrolled, the page fills the screen.
                           final statusBar = MediaQuery.paddingOf(context).top;
-                          final empty = pinned && widget.location == '/home' && !showCastButton;
-                          _barRoomStatus = type.isPhone ? statusBar : 0;
-                          final room = _barRoomStatus + _barHeight(type, empty: empty);
+                          final empty = pinned && widget.location == '/home';
+                          _barRoomStatus = statusBar;
+                          final room = statusBar + _barHeight(type, empty: empty);
                           if (room != _barRoom) {
                             _barRoom = room;
                             WidgetsBinding.instance.addPostFrameCallback((_) => _onBarShown());
                           }
-                          return Column(
-                            children: [
-                              if (!type.isPhone) SizedBox(height: statusBar),
-                              Expanded(
-                                child: TopBarSpace(
-                                  height: room,
-                                  child: Stack(
-                                    children: [
-                                      Positioned.fill(child: MediaQuery.removePadding(context: context, removeTop: true, child: body)),
-                                      Positioned(
-                                        top: 0,
-                                        left: 0,
-                                        right: 0,
-                                        child: MediaQuery.removePadding(
-                                          context: context,
-                                          removeTop: !type.isPhone,
-                                          child: _collapsing(context, bar, withStatusBar: type.isPhone),
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              ),
-                            ],
+                          return TopBarSpace(
+                            height: room,
+                            child: Stack(
+                              children: [
+                                Positioned.fill(child: MediaQuery.removePadding(context: context, removeTop: true, child: body)),
+                                Positioned(top: 0, left: 0, right: 0, child: _collapsing(context, bar)),
+                              ],
+                            ),
                           );
                         },
                       ),

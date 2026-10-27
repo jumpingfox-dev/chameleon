@@ -25,7 +25,7 @@ class _TopBar extends StatelessWidget {
   /// button and logo make way for it.
   final String? centeredTitle;
   final bool showLogo; // when there's no title (the menu shows it while pinned)
-  /// Settings and your profile picture (false while the menu is pinned: they're in it).
+  /// Cast, Settings and your profile picture (false while the menu is pinned: they're in it).
   final bool showAccount;
   /// The logo or title shows: only while the page is at its top, so if the bar ever comes
   /// down over the middle of a page, it's just its buttons over the content.
@@ -46,7 +46,7 @@ class _TopBar extends StatelessWidget {
             : EdgeInsets.symmetric(horizontal: isPhone ? 4 : 12, vertical: 4),
         child: LayoutBuilder(
           builder: (context, constraints) {
-            final castShown = showCastButton;
+            final castShown = showCastButton && showAccount;
             const button = 52.0; // a bar button and its margin
             // The right side: cast (when there's somewhere to cast to), Settings and the avatar.
             final right = button * ((castShown ? 1 : 0) + (showAccount ? 2 : 0));
@@ -249,7 +249,7 @@ class _Menu extends StatelessWidget {
     final colors = context.colors;
     final isTv = ScreenType.of(context).isTv;
     return ListenableBuilder(
-      listenable: Listenable.merge([jellyfin, homeEditing]),
+      listenable: Listenable.merge([jellyfin, homeEditing, castController]),
       builder: (context, _) {
         final editing = homeEditing.value;
         Widget item(String id, String label, IconData icon, String path) => _MenuItem(
@@ -348,7 +348,7 @@ class _Menu extends StatelessWidget {
                     ],
                   ),
                 ),
-                // ── Pinned: Settings and who's signed in, out of the top bar ──
+                // ── Pinned: cast, Settings and who's signed in, out of the top bar ──
                 if (pinned)
                   Padding(
                     padding: const EdgeInsets.fromLTRB(12, 0, 12, 16),
@@ -356,6 +356,15 @@ class _Menu extends StatelessWidget {
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
                         Divider(height: 17, color: colors.outlineVariant.withValues(alpha: 0.5)),
+                        // Somewhere to cast to: the same cast symbol as in the top bar.
+                        if (showCastButton)
+                          _MenuItem(
+                            label: castController.isConnected ? 'Casting' : 'Cast',
+                            icon: castIcon,
+                            focusNode: nodeFor('Cast'),
+                            selected: castController.isConnected,
+                            onPress: () => showCastMenu(context),
+                          ),
                         _MenuItem(
                           label: 'Settings',
                           icon: appIcons.settings,

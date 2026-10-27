@@ -198,7 +198,7 @@ class CastController extends ChangeNotifier {
         'MediaSourceId': mediaSourceId,
         'DeviceId': 'chameleon-cast',
         'PlaySessionId': playSessionId,
-        'api_key': token,
+        ...tokenQuery(token),
         'VideoCodec': 'h264',
         'AudioCodec': 'aac,mp3',
         'AllowVideoStreamCopy': 'true',
@@ -225,7 +225,9 @@ class CastController extends ChangeNotifier {
             subtype: TextTrackType.subtitles,
             trackContentType: 'text/vtt',
             trackContentId:
-                '$base/Videos/${item.id}/$mediaSourceId/Subtitles/${s['Index']}/0/Stream.vtt?api_key=$token',
+                Uri.parse('$base/Videos/${item.id}/$mediaSourceId/Subtitles/${s['Index']}/0/Stream.vtt')
+                    .replace(queryParameters: tokenQuery(token))
+                    .toString(),
             name: (s['DisplayTitle'] as String?) ?? (s['Language'] as String?) ?? 'Subtitles',
           ),
     ];
