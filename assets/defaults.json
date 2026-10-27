@@ -6,6 +6,7 @@
     },
     "theme": "default",
     "icons": "fluent",
+    "genreCards": "icons",
     "bottomBar": ["home", "search", "downloads", "settings"],
     "menuPinned": false,
     "screensaver": {

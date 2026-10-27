@@ -26,6 +26,7 @@ import 'theme/font_controller.dart';
 import 'theme/theme.dart';
 import 'theme/theme_controller.dart';
 import 'core/storage/app_defaults.dart';
+import 'features/library/genres.dart';
 
 Future<void> main() async {
   _quietMediaKit();
@@ -55,6 +56,7 @@ Future<void> main() async {
   playbackSettings = await PlaybackSettings.load();
   screensaverSettings = await ScreensaverSettings.load();
   homeLayout = await HomeLayoutController.load();
+  genreCards = GenreCardsController();
   // Everyone has their own settings: load theirs whenever someone else signs in.
   storage.user.addListener(() {
     themeController.reload();
@@ -63,6 +65,7 @@ Future<void> main() async {
     playbackSettings.reload();
     screensaverSettings.reload();
     homeLayout.reload();
+    genreCards.reload();
   });
 
   jellyfin = JellyfinController();

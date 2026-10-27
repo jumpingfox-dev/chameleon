@@ -176,6 +176,12 @@ class JellyfinController extends ChangeNotifier {
   List<JellyfinLibrary> libraries = const [];
   List<String> genres = const [];
 
+  /// The genres as the server has them, with their pictures (see [genreItem]).
+  Map<String, JellyfinItem> _genreItems = const {};
+
+  /// [genre]'s item, for its picture; null if the server didn't list it.
+  JellyfinItem? genreItem(String genre) => _genreItems[genre];
+
   /// The last server used, to pre-fill the login screen.
   String? lastServer;
 
@@ -598,7 +604,10 @@ class JellyfinController extends ChangeNotifier {
     final c = client!;
     final meLoad = c.user.currentUser();
     final viewsLoad = c.library.userViews();
-    final genresLoad = c.genres.list(includeItemTypes: const ['Movie', 'Series']); // drop to include music genres
+    final genresLoad = c.genres.list(
+      includeItemTypes: const ['Movie', 'Series'], // drop to include music genres
+      fields: const ['PrimaryImageAspectRatio'], // for sizing genre cards to their pictures
+    );
     // A failure comes through as itself (see together3), so load() can tell a revoked token
     // from an offline server; wrapped, it got past both and startup stopped on the splash screen.
     final (me, views, genreResult) = await together3(meLoad, viewsLoad, genresLoad);
@@ -645,6 +654,7 @@ class JellyfinController extends ChangeNotifier {
         ),
     ];
     genres = [for (final g in genreResult.items) g.name];
+    _genreItems = {for (final g in genreResult.items) g.name: g};
     notifyListeners();
   }
 
@@ -679,6 +689,7 @@ class JellyfinController extends ChangeNotifier {
     userImage = null;
     libraries = const [];
     genres = const [];
+    _genreItems = const {};
     notifyListeners();
     _clearCaches();
   }

@@ -54,8 +54,17 @@ class AspectIcon extends StatelessWidget {
 }
 
 const _gridSpacing = 4.0;
+/// A library card's widest, before the grid shares out the row.
+double libraryCardMaxWidth(LibraryView view) => _tileWidth(view);
 double _tileWidth(LibraryView view) => view == LibraryView.poster ? 170 : 320;
 double _aspect(LibraryView view) => view == LibraryView.poster ? 2 / 3 : 16 / 9;
+
+/// How wide a [view] card is in a library grid [width] wide (as many columns as fit, sharing the
+/// width), with [spacing] between them. For other grids sized like a library's (genres).
+double libraryCardWidth(double width, LibraryView view, {double spacing = _gridSpacing}) {
+  final columns = (width / (_tileWidth(view) + spacing)).ceil().clamp(1, 1000);
+  return (width - (columns - 1) * spacing) / columns;
+}
 
 /// Grid sizing for each view: narrow tall posters, or wider 16:9 thumbnails.
 SliverGridDelegate libraryGridDelegate(LibraryView view) =>

@@ -35,6 +35,7 @@ import '../../theme/theme.dart';
 import '../../widgets/tappable.dart';
 import '../../core/platform/page_insets.dart';
 import '../../widgets/remote_text_field.dart';
+import '../library/genres.dart';
 
 part 'screensaver_tab.dart';
 part 'server_tab.dart';
@@ -442,6 +443,19 @@ class _AppearanceCard extends StatelessWidget {
                 Icon(style.iconSet.favorite, size: 18, fill: 1),
                 Text(style.label),
               ],
+            ),
+          ),
+
+          // ── Genre cards ──
+          const _SectionTitle('Genre cards', description: 'How genres look on the Genres page and on Home.'),
+          ValueListenableBuilder(
+            valueListenable: genreCards,
+            builder: (context, style, _) => _PickerSetting<GenreCardStyle>(
+              title: 'Genre cards',
+              value: style,
+              options: GenreCardStyle.values,
+              format: (s) => s.label,
+              onChange: genreCards.select,
             ),
           ),
 

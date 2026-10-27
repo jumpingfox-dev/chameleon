@@ -24,6 +24,7 @@ import '../library/poster_card.dart';
 import '../../core/focus/scroll_into_view.dart';
 import '../../theme/theme.dart';
 import '../../widgets/remote_text_field.dart';
+import '../../widgets/title_logo.dart';
 
 // ─── Definitions ─────────────────────────────────────────────────────────────
 
@@ -568,7 +569,7 @@ class _HomeModuleViewState extends State<HomeModuleView>
             else if (isMyMedia)
               _MyMediaRow(sides: _rowSides(context), editing: widget.editing)
             else if (isGenres)
-              _GenresRow(sides: _rowSides(context))
+              _GenresRow(sides: _rowSides(context), editing: widget.editing)
             else
               _row(context, _viewFor(context), captions: captions),
           ],
@@ -1260,27 +1261,12 @@ class _CarouselSlideState extends State<_CarouselSlide> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       spacing: 8,
                       children: [
-                        ConstrainedBox(
-                          constraints: BoxConstraints(
-                            maxWidth: isPhone ? 180 : 360,
-                            maxHeight: isPhone ? 48 : 96,
-                          ),
-                          child: logoTag != null
-                              ? Image.network(
-                            client.images.url(
-                              itemId: item.id,
-                              type: JellyfinImagesApi.typeLogo,
-                              tag: logoTag,
-                              fillWidth: 720,
-                            ),
-                            fit: BoxFit.contain,
-                            alignment: Alignment.bottomLeft,
-                            // The name instead, if the logo won't load (a saved page can ask for
-                            // one the server has since replaced).
-                            errorBuilder: (_, _, _) => title,
-                          )
-                              : title,
-                        ),
+                        // (The name instead, if the logo won't load: a saved page can ask for one the
+                        // server has since replaced.)
+                        if (logoTag != null)
+                          TitleLogo(itemId: item.id, tag: logoTag, size: TitleLogo.banner(isPhone), fallback: title)
+                        else
+                          ConstrainedBox(constraints: BoxConstraints(maxWidth: isPhone ? 180 : 360), child: title),
                         if (facts.isNotEmpty)
                           Text(
                             facts,
@@ -1542,9 +1528,12 @@ class _PlaceholderBanner extends StatelessWidget {
 /// Ten of the server's genres, picked at random (once per launch, so they don't shuffle as you
 /// scroll), as tiles like the Genres page's.
 class _GenresRow extends StatefulWidget {
-  const _GenresRow({required this.sides});
+  const _GenresRow({required this.sides, this.editing = false});
 
   final EdgeInsets sides; // the row's padding at its ends
+
+  /// Editing Home: just the tiles' shapes, as other sections show.
+  final bool editing;
 
   @override
   State<_GenresRow> createState() => _GenresRowState();
@@ -1553,7 +1542,7 @@ class _GenresRow extends StatefulWidget {
 class _GenresRowState extends State<_GenresRow> {
   final _scroll = ScrollController();
 
-  static const _gap = 12.0;
+  static const _gap = genreCardGap;
 
   static List<String>? _picked;
   static List<String>? _pickedFrom;
@@ -1586,16 +1575,39 @@ class _GenresRowState extends State<_GenresRow> {
   }
 
   @override
-  Widget build(BuildContext context) {
-    final width = genreTileWidth(context);
-    final height = width * 9 / 16;
+  Widget build(BuildContext context) => ValueListenableBuilder(
+    valueListenable: genreCards, // icons or pictures: sized to match
+    builder: (context, _, _) => _build(context),
+  );
+
+  Widget _build(BuildContext context) {
+    // The same size as on the Genres page.
+    final width = genreCardWidth(context);
+    final height = width / genreCardAspect();
     final genres = _pick(jellyfin.genres);
+    // Editing (just the layout): the tiles' shapes, pulsing, as the other sections show them.
+    if (widget.editing) {
+      return SizedBox(
+        height: height,
+        child: _Pulsing(
+          child: ListView.separated(
+            scrollDirection: Axis.horizontal,
+            physics: const NeverScrollableScrollPhysics(),
+            padding: widget.sides,
+            itemCount: 10,
+            separatorBuilder: (_, _) => const SizedBox(width: _gap),
+            itemBuilder: (_, _) => _PlaceholderBlock(width: width, height: height, radius: 12),
+          ),
+        ),
+      );
+    }
     return SizedBox(
       height: height,
       child: FocusRow(
         child: ListView.separated(
           controller: _scroll,
           scrollDirection: Axis.horizontal,
+          clipBehavior: Clip.none, // a focused card grows past the row's ends
           padding: widget.sides, // the first in line with the sections' titles
           itemCount: genres.length,
           separatorBuilder: (_, _) => const SizedBox(width: _gap),
@@ -1637,8 +1649,8 @@ class _MyMediaRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // The size, spacing and look of the thumbnails in the rows below.
-    final width = _HomeModuleViewState._tileWidth(context, LibraryView.thumbnail);
+    // Between a genre tile and a thumbnail in size, with a thumbnail's spacing and look.
+    final width = (genreCardWidth(context) * 0.6 + _HomeModuleViewState._tileWidth(context, LibraryView.thumbnail) * 0.4);
     final height = width * 9 / 16;
     final libraries = jellyfin.libraries;
     // Editing (just the layout), or the libraries not in yet: the tiles' shapes, as the other
