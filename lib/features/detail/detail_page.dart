@@ -418,7 +418,8 @@ class SeriesLayout extends DetailLayout {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             Padding(padding: pageSides(context, extra: 12), child: const _CardDivider()),
-            _ItemRow(title: 'Seasons', items: data.children, view: LibraryView.poster, top: 8),
+            // Named underneath: a season's poster doesn't always say which it is.
+            _ItemRow(title: 'Seasons', items: data.children, view: LibraryView.poster, top: 8, captioned: true),
           ],
         ),
       ),
@@ -545,14 +546,15 @@ class _DetailPageState extends State<DetailPage> {
   }
 
   /// Where a page starts with a remote or keyboard: its Play button, or a person's first title
-  /// ([_StartsHere]). Not on phones, which are touched.
+  /// ([_StartsHere]). Not while a touch screen is in use (a tablet too), which has nothing to show
+  /// focus for.
   final _start = FocusNode(canRequestFocus: false, skipTraversal: true);
 
   /// Once the content is in, focus goes to where the page starts ([_start]), or else the first
   /// thing on it, unless the remote already moved it somewhere on the page.
   void _focusFirst() {
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted || ScreenType.of(context).isPhone) return;
+      if (!mounted || FocusManager.instance.highlightMode != FocusHighlightMode.traditional) return;
       final scope = FocusScope.of(context);
       final focused = FocusManager.instance.primaryFocus;
       if (focused != null && focused != scope && focused.ancestors.contains(scope)) return;
@@ -597,8 +599,8 @@ class _DetailPageState extends State<DetailPage> {
         slivers: [
           SliverToBoxAdapter(child: SizedBox(height: topPadding)),
           ...widget.layout.buildSlivers(context, _data!),
-          // The same room under the last section as on Home.
-          SliverToBoxAdapter(child: SizedBox(height: pageBottom(context, 32))),
+          // Room under the last section, so its last row can come up off the bottom edge.
+          SliverToBoxAdapter(child: SizedBox(height: pageBottom(context, 64))),
         ],
       );
     }

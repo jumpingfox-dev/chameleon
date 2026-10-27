@@ -123,14 +123,21 @@ class _HeroTitle extends StatelessWidget {
 
   final JellyfinItem item;
 
+  /// The tallest a logo gets (a season's poster and a person's photo start where its top would be).
+  static double logoBox(BuildContext context) => ScreenType.of(context).isPhone ? 64 : 120;
+
   @override
   Widget build(BuildContext context) {
     final isPhone = ScreenType.of(context).isPhone;
     final logoTag = item.imageTags['Logo'];
     final size = MediaQuery.sizeOf(context);
     final hasBackdrop = ((item.raw['BackdropImageTags'] as List?)?.isNotEmpty ?? false);
-    // Most of the artwork shows above the details.
-    final height = hasBackdrop ? _PageBackdrop.heightIn(size) * (isPhone ? 0.7 : 0.55) : 0.0;
+    // Most of the artwork shows above the details; and the logo, at the bottom of that room,
+    // never reaches up to the top bar's buttons.
+    final height = math.max(
+      hasBackdrop ? _PageBackdrop.heightIn(size) * (isPhone ? 0.7 : 0.55) : 0.0,
+      _clearOfTopBar(context) + logoBox(context),
+    );
     final name = Text(
       item.name,
       maxLines: 2,
@@ -147,7 +154,7 @@ class _HeroTitle extends StatelessWidget {
         child: Align(
           alignment: Alignment.bottomLeft,
           child: ConstrainedBox(
-            constraints: BoxConstraints(maxWidth: isPhone ? 220 : 400, maxHeight: isPhone ? 64 : 120),
+            constraints: BoxConstraints(maxWidth: isPhone ? 220 : 400, maxHeight: logoBox(context)),
             child: logoTag == null
                 ? name
                 : Image.network(
@@ -206,12 +213,15 @@ class _SeasonHero extends StatelessWidget {
 /// starts as low and runs on down past it, clear of the top bar; and its height.
 ({double above, double posterHeight}) _heroPoster(BuildContext context, double room) {
   final isPhone = ScreenType.of(context).isPhone;
-  final logoBox = isPhone ? 64.0 : 120.0;
   return (
-    above: math.max(room - logoBox, isPhone ? 96.0 : 84.0),
+    above: math.max(room - _HeroTitle.logoBox(context), _clearOfTopBar(context)),
     posterHeight: isPhone ? 180.0 : (room * 0.85).clamp(180.0, 300.0),
   );
 }
+
+/// How far down a page's own artwork (a logo, a poster) starts at the least: below the app's top
+/// bar and the status bar, however tall those are on this device, with a little room.
+double _clearOfTopBar(BuildContext context) => TopBarSpace.of(context) + 16;
 
 // ─── A person ────────────────────────────────────────────────────────────────
 
@@ -563,7 +573,14 @@ class _RelatedRowsState extends State<_RelatedRows> {
 /// starting in line with the page, and with the remote the focused card keeps its place
 /// while the row moves under it. [onTitle] makes the title a link (a collection's page).
 class _ItemRow extends StatefulWidget {
-  const _ItemRow({required this.title, required this.items, this.onTitle, this.view, this.top = 24});
+  const _ItemRow({
+    required this.title,
+    required this.items,
+    this.onTitle,
+    this.view,
+    this.top = 24,
+    this.captioned = false,
+  });
 
   final String title;
   final List<JellyfinItem> items;
@@ -573,6 +590,9 @@ class _ItemRow extends StatefulWidget {
   final LibraryView? view;
 
   final double top; // room above it
+
+  /// Each card's name under it (a show's seasons, whose posters don't always say which).
+  final bool captioned;
 
   @override
   State<_ItemRow> createState() => _ItemRowState();
@@ -612,6 +632,12 @@ class _ItemRowState extends State<_ItemRow> {
     // The same size as Home's cards.
     final width = CardRows.tileWidth(context, view);
     final height = CardRows.imageHeight(context, view);
+    // Bold, as a show's name under Home's cards is.
+    final captionStyle = context.text.bodyMedium?.copyWith(fontWeight: FontWeight.w600);
+    // A line of text and the room above it.
+    final captionHeight = widget.captioned
+        ? 6 + MediaQuery.textScalerOf(context).scale((captionStyle?.fontSize ?? 14) * (captionStyle?.height ?? 1.43))
+        : 0.0;
     final heading = Text(widget.title, style: context.text.titleLarge);
     Widget row = FocusRow(
       child: ListView.separated(
@@ -631,16 +657,30 @@ class _ItemRowState extends State<_ItemRow> {
             onFocusChange: (focused) {
               if (focused) _keepInSlot(context, i, width);
             },
-            child: PosterCard(
-              item: items[i],
-              view: view,
-              // The first card grows away from the screen's left edge, the last away from its right.
-              anchor: i == 0
-                  ? Alignment.centerLeft
-                  : i == items.length - 1
-                  ? Alignment.centerRight
-                  : Alignment.center,
-              onPress: () => openItem(context, items[i]),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                SizedBox(
+                  height: height,
+                  child: PosterCard(
+                    item: items[i],
+                    view: view,
+                    // The first card grows away from the screen's left edge, the last away from its right.
+                    anchor: i == 0
+                        ? Alignment.centerLeft
+                        : i == items.length - 1
+                        ? Alignment.centerRight
+                        : Alignment.center,
+                    onPress: () => openItem(context, items[i]),
+                  ),
+                ),
+                if (widget.captioned)
+                  Padding(
+                    // In line with the card's picture, which rests in from its edges.
+                    padding: const EdgeInsets.only(top: 6, left: 8, right: 8),
+                    child: Text(items[i].name, maxLines: 1, overflow: TextOverflow.ellipsis, style: captionStyle),
+                  ),
+              ],
             ),
           ),
         ),
@@ -672,7 +712,7 @@ class _ItemRowState extends State<_ItemRow> {
                     ),
                   ),
           ),
-          ScrollIntoViewOnFocus(child: SizedBox(height: height, child: row)),
+          ScrollIntoViewOnFocus(child: SizedBox(height: height + captionHeight, child: row)),
         ],
       ),
     );

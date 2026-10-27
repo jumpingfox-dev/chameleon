@@ -1,6 +1,5 @@
 import 'dart:math' as math;
 
-import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:material_ui/material_ui.dart';
 
@@ -78,18 +77,32 @@ class KeepClearOfEdges extends StatelessWidget {
   );
 
   void _reveal(BuildContext context) {
-    final object = context.findRenderObject();
-    final position = Scrollable.maybeOf(context)?.position;
-    final viewport = object == null ? null : RenderAbstractViewport.maybeOf(object);
-    if (object == null || position == null || viewport == null) return;
+    final item = context.findRenderObject();
+    if (item is! RenderBox || !item.attached) return;
+    // The page's own scrolling: the nearest area that scrolls up and down (a grid laid out whole
+    // inside a page, like a collection's titles, doesn't scroll itself).
+    var scrollable = Scrollable.maybeOf(context);
+    while (scrollable != null &&
+        (scrollable.position.axis != Axis.vertical || scrollable.position.maxScrollExtent <= 0)) {
+      scrollable = Scrollable.maybeOf(scrollable.context);
+    }
+    final box = scrollable?.context.findRenderObject();
+    if (scrollable == null || box is! RenderBox) return;
+    final position = scrollable.position;
     final room = position.viewportDimension * margin;
-    // Where the page would be with this at its top edge, and at its bottom edge.
-    final atTop = viewport.getOffsetToReveal(object, 0).offset;
-    final atBottom = viewport.getOffsetToReveal(object, 1).offset;
-    // Anywhere in between (with the room above and below) leaves it clear of both edges.
-    final low = atBottom + room, high = atTop - room;
-    final target = (low > high ? high : position.pixels.clamp(low, high))
-        .clamp(position.minScrollExtent, position.maxScrollExtent);
+    // Where it is on the page's visible part, and how far to scroll to give it the room.
+    final top = item.localToGlobal(Offset.zero, ancestor: box).dy;
+    final bottom = top + item.size.height;
+    final double by;
+    if (top < room) {
+      by = top - room; // up
+    } else if (bottom > position.viewportDimension - room) {
+      // Down, but never so far that its top goes past the room above (a tall item).
+      by = math.min(bottom - (position.viewportDimension - room), top - room);
+    } else {
+      return; // comfortably in view
+    }
+    final target = (position.pixels + by).clamp(position.minScrollExtent, position.maxScrollExtent);
     if ((target - position.pixels).abs() < 0.5) return;
     position.animateTo(target, duration: const Duration(milliseconds: 200), curve: Curves.easeOutCubic);
   }

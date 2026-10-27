@@ -175,7 +175,7 @@ class _MovieInfoCard extends StatelessWidget {
     return ticks is int && ticks > 0 && userData?['Played'] != true;
   }
 
-  List<Map<String, dynamic>> get _cast => _actorsOf(movie);
+  List<Map<String, dynamic>> get _cast => _peopleOf(movie);
 
   @override
   Widget build(BuildContext context) {
@@ -435,8 +435,8 @@ class _SeasonInfoCardState extends State<_SeasonInfoCard> {
     final description = ((season.raw['Overview'] as String?)?.trim().isNotEmpty ?? false)
         ? (season.raw['Overview'] as String).trim()
         : (widget.series.raw['Overview'] as String?)?.trim();
-    // The season's own cast, or the show's.
-    final cast = _actorsOf(season).isNotEmpty ? _actorsOf(season) : _actorsOf(widget.series);
+    // The season's own cast and crew, or the show's.
+    final cast = _peopleOf(season).isNotEmpty ? _peopleOf(season) : _peopleOf(widget.series);
     final next = _next;
     final allWatched = _allWatched;
     final started = !allWatched && _episodes.any((e) => isWatched(e) || watchProgress(e) != null);
@@ -495,18 +495,34 @@ class _SeasonInfoCardState extends State<_SeasonInfoCard> {
   }
 }
 
-/// A title's actors, in billing order, as Jellyfin lists them.
-List<Map<String, dynamic>> _actorsOf(JellyfinItem item) => [
-  for (final p in (item.raw['People'] as List?) ?? const [])
-    if (p is Map<String, dynamic> && p['Type'] == 'Actor') p,
-];
+/// Everyone Jellyfin lists for a title: the cast in billing order, then the crew (directors,
+/// writers, producers, ...), as it lists them. Anyone listed twice (an actor who also directed)
+/// appears once per job.
+List<Map<String, dynamic>> _peopleOf(JellyfinItem item) {
+  final people = [for (final p in (item.raw['People'] as List?) ?? const []) if (p is Map<String, dynamic>) p];
+  bool acting(Map<String, dynamic> p) => p['Type'] == 'Actor' || p['Type'] == 'GuestStar';
+  return [...people.where(acting), ...people.where((p) => !acting(p))];
+}
 
-/// The cast, under a divider: a heading, and a row of actors that scrolls sideways to the
-/// card's edges. Nothing when there's no one.
+/// What someone did on a title, for under their name: an actor's character, or a crew member's
+/// job ("Director", "Writer", ...).
+String? _jobOf(Map<String, dynamic> person) {
+  final role = (person['Role'] as String?)?.trim();
+  if (role != null && role.isNotEmpty) return role;
+  return switch (person['Type']) {
+    'Actor' || null => null,
+    'GuestStar' => 'Guest star',
+    final String type => type.replaceAllMapped(RegExp(r'(?<=[a-z])([A-Z])'), (m) => ' ${m[1]!.toLowerCase()}'),
+    _ => null,
+  };
+}
+
+/// The cast and crew, under a divider: a heading, and a row of people that scrolls sideways to
+/// the card's edges. Nothing when there's no one.
 List<Widget> _castSection(BuildContext context, List<Map<String, dynamic>> cast) => [
   if (cast.isNotEmpty) ...[
     const _CardDivider(),
-    Text('Cast', style: context.text.titleLarge),
+    Text('Cast & Crew', style: context.text.titleLarge),
     _EdgeToEdge(
       // Runs to the card's edges, so the cast scrolls all the way across.
       builder: (padding) => ScrollIntoViewOnFocus(
@@ -695,7 +711,7 @@ class _CastTile extends StatelessWidget {
     final colors = context.colors;
     final id = person['Id'] as String;
     final name = (person['Name'] as String?) ?? '';
-    final role = person['Role'] as String?;
+    final role = _jobOf(person); // their character, or their job on it
     final tag = person['PrimaryImageTag'] as String?;
     final initials = initialsOf(name);
 

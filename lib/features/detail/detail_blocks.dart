@@ -162,7 +162,9 @@ class _GenreButtons extends StatelessWidget {
               router.push('/home/genre/${Uri.encodeComponent(genre)}');
             },
             style: genreButtonStyle(context.colors, compact: true),
-            child: Text(genre),
+            // Raised a point: the font keeps room below its letters for descenders (the y in
+            // Comedy), which otherwise sits them a touch low in the button.
+            child: Padding(padding: const EdgeInsets.only(bottom: 2), child: Text(genre)),
           ),
       ],
     ),
@@ -193,7 +195,9 @@ class _InlineItemGrid extends StatelessWidget {
       padding: EdgeInsets.zero,
       gridDelegate: libraryGridDelegate(view),
       itemCount: items.length,
-      itemBuilder: (context, i) => ScrollIntoViewOnFocus(
+      // With the remote, the focused card keeps some room from the screen's edges, as in a
+      // library.
+      itemBuilder: (context, i) => KeepClearOfEdges(
         child: PosterCard(
           item: items[i],
           view: view,
