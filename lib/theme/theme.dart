@@ -12,9 +12,12 @@ ThemeData buildTheme(Palette palette, {required String displayFont, required Str
   final text = _textTheme(colors, displayFont: displayFont, bodyFont: bodyFont);
 
   // A remote has no pointer, so whatever has focus must be easy to spot from the couch:
-  // a ring as well as Material's usual focus overlay.
+  // a ring as well as Material's usual focus overlay. Only while a remote or keyboard is in use:
+  // a button keeps focus after it's tapped, and a touch screen shouldn't ring it.
   BorderSide? ring(Set<WidgetState> states, Color color) =>
-      states.contains(WidgetState.focused) ? BorderSide(color: color, width: 2) : null;
+      states.contains(WidgetState.focused) && FocusManager.instance.highlightMode == FocusHighlightMode.traditional
+      ? BorderSide(color: color, width: 2)
+      : null;
 
   return ThemeData(
     useMaterial3: true,
