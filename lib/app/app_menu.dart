@@ -13,6 +13,7 @@ class _TopBar extends StatelessWidget {
     this.centeredTitle,
     required this.showLogo,
     this.showAccount = true,
+    this.showCast = true,
     this.textShown = true,
     required this.onSettings,
   });
@@ -25,8 +26,13 @@ class _TopBar extends StatelessWidget {
   /// button and logo make way for it.
   final String? centeredTitle;
   final bool showLogo; // when there's no title (the menu shows it while pinned)
-  /// Cast, Settings and your profile picture (false while the menu is pinned: they're in it).
+  /// Settings and your profile picture (false while the menu is pinned, and on phones: they're
+  /// in the menu).
   final bool showAccount;
+
+  /// The cast button, when there's somewhere to cast to (false while the menu is pinned: it's
+  /// in the menu).
+  final bool showCast;
   /// The logo or title shows: only while the page is at its top, so if the bar ever comes
   /// down over the middle of a page, it's just its buttons over the content.
   final bool textShown;
@@ -43,10 +49,13 @@ class _TopBar extends StatelessWidget {
       child: Padding(
         padding: type.isTv
             ? const EdgeInsets.fromLTRB(24, 24, 24, 8)
-            : EdgeInsets.symmetric(horizontal: isPhone ? 4 : 12, vertical: 4),
+            // (Phones: a little in from the screen's rounded corners, both sides alike.)
+            : EdgeInsets.symmetric(horizontal: isPhone ? 10 : 12, vertical: 4),
         child: LayoutBuilder(
           builder: (context, constraints) {
-            final castShown = showCastButton && showAccount;
+            final castShown = showCastButton && showCast;
+            // Phones: the logo in the middle, like a title (the bar's narrow there).
+            final centerLogo = isPhone && showLogo && centeredTitle == null;
             const button = 52.0; // a bar button and its margin
             // The right side: cast (when there's somewhere to cast to), Settings and the avatar.
             final right = button * ((castShown ? 1 : 0) + (showAccount ? 2 : 0));
@@ -66,7 +75,7 @@ class _TopBar extends StatelessWidget {
                   Expanded(
                     child: Align(
                       alignment: Alignment.centerLeft,
-                      child: centeredTitle != null
+                      child: centeredTitle != null || centerLogo
                           ? const SizedBox.shrink() // centered over the row, below
                           : showLogo
                           ? _FadeText(
@@ -105,9 +114,10 @@ class _TopBar extends StatelessWidget {
                 ],
               ),
             );
-            if (centeredTitle == null) return row;
-            // The title in the middle of the bar, as wide as the room both sides leave it (the
-            // wider side, mirrored), so it's centered and never runs into a button.
+            if (centeredTitle == null && !centerLogo) return row;
+            // The title (or a phone's logo) in the middle of the bar, as wide as the room both
+            // sides leave it (the wider side, mirrored), so it's centered and never runs into a
+            // button.
             final width = (constraints.maxWidth - 2 * math.max(left, right) - 16).clamp(0.0, 720.0);
             return Stack(
               alignment: Alignment.center,
@@ -118,13 +128,21 @@ class _TopBar extends StatelessWidget {
                     width: width,
                     child: _FadeText(
                       shown: textShown,
-                      child: Text(
-                        centeredTitle!,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        textAlign: TextAlign.center,
-                        style: context.text.titleLarge,
-                      ),
+                      child: centerLogo
+                          ? const Center(
+                              child: AppLogo(
+                                asset: 'assets/images/text_logo.svg',
+                                colorAsset: 'assets/images/text_logo_color.svg',
+                                height: 26,
+                              ),
+                            )
+                          : Text(
+                              centeredTitle!,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              textAlign: TextAlign.center,
+                              style: context.text.titleLarge,
+                            ),
                     ),
                   ),
                 ),
@@ -248,6 +266,7 @@ class _Menu extends StatelessWidget {
   Widget build(BuildContext context) {
     final colors = context.colors;
     final isTv = ScreenType.of(context).isTv;
+    final isPhone = ScreenType.of(context).isPhone;
     return ListenableBuilder(
       listenable: Listenable.merge([jellyfin, homeEditing, castController]),
       builder: (context, _) {
@@ -348,8 +367,9 @@ class _Menu extends StatelessWidget {
                     ],
                   ),
                 ),
-                // ── Pinned: cast, Settings and who's signed in, out of the top bar ──
-                if (pinned)
+                // ── Out of the top bar: Settings and who's signed in (pinned, or on phones, where
+                // the bar is narrow), and cast (pinned) ──
+                if (pinned || isPhone)
                   Padding(
                     padding: const EdgeInsets.fromLTRB(12, 0, 12, 16),
                     child: Column(
@@ -357,7 +377,7 @@ class _Menu extends StatelessWidget {
                       children: [
                         Divider(height: 17, color: colors.outlineVariant.withValues(alpha: 0.5)),
                         // Somewhere to cast to: the same cast symbol as in the top bar.
-                        if (showCastButton)
+                        if (pinned && showCastButton)
                           _MenuItem(
                             label: castController.isConnected ? 'Casting' : 'Cast',
                             icon: castIcon,
@@ -376,7 +396,10 @@ class _Menu extends StatelessWidget {
                           label: jellyfin.userName ?? 'Switch user',
                           leading: const UserAvatar(size: 26),
                           focusNode: nodeFor('Profile'),
-                          onPress: () => showProfilePicker(context), // "Who's watching?"
+                          onPress: () {
+                            if (!pinned) onClose(); // slid out (phones): it closes first
+                            showProfilePicker(context); // "Who's watching?"
+                          },
                         ),
                       ],
                     ),

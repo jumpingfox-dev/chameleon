@@ -608,8 +608,10 @@ class _AppShellState extends State<AppShell> {
               // (A detail page's own name is big on the page itself.)
               centeredTitle: home || detail != null ? null : (_title ?? ''),
               showLogo: !pinned && home,
-              // Pinned, the menu has cast, Settings and your profile.
-              showAccount: !pinned,
+              // Pinned, the menu has cast, Settings and your profile; on phones, Settings and your
+              // profile (the bar's narrow).
+              showAccount: !pinned && !type.isPhone,
+              showCast: !pinned,
               onSettings: () => _goTo('/settings'),
             ),
           ),
