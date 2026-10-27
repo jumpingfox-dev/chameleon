@@ -1,11 +1,14 @@
-# Checks every push to main, and releases when the version changes.
+# Checks every push to main, and releases whatever the commits since the last release call for.
 #
-# Every push: analyze and test.
-# When pubspec.yaml's version has no v<version> tag yet:
+# Every push: analyze and test, then .github/scripts/next_release.py reads the commit messages
+# since the last v* tag (Conventional Commits): a feat makes a minor release, a fix or perf a
+# patch one, a "!" or a BREAKING CHANGE line a major one; anything else (docs, chore, ci, ...)
+# releases nothing. The build number is the last release's plus one. When there's a release:
 #   1. build the signed Android bundle (.aab, for Google Play) and APK (to install directly), and the
-#      signed iOS app (.ipa), side by side;
-#   2. once both have built, tag the commit and publish a GitHub release with
-#      docs/release-notes/<version>.md as its notes and the three files attached;
+#      signed iOS app (.ipa), side by side, with that version and build number;
+#   2. once both have built, commit the version (pubspec.yaml) and the notes made from the commits
+#      (docs/release-notes/<version>.md) as "chore(release): <version>" on the released commit, tag
+#      it, merge it into main, and publish a GitHub release with the three files attached;
 #   3. upload the iOS build to TestFlight, and the Android bundle to Google Play's closed testing
 #      track (alpha) with the notes' "What's new" text. promote.yml moves it on to open testing
 #      (beta) a week later, and to production a week after that.
@@ -71,29 +74,20 @@ jobs:
       - run: flutter analyze
       - run: flutter test
 
-      - name: Is this a new version?
+      # (A dry run builds the next version even with nothing to release.)
+      - name: What's the next release?
         id: version
         run: |
-          full=$(grep -m1 '^version:' pubspec.yaml | awk '{print $2}')
-          version=${full%%+*}
-          build=${full#*+}
-          echo "version=$version" >> "$GITHUB_OUTPUT"
-          echo "build=$build" >> "$GITHUB_OUTPUT"
-          if [ "$DRY_RUN" = true ]; then
-            echo "Dry run: building $version (build $build) without releasing it."
-            echo "release=true" >> "$GITHUB_OUTPUT"
-          elif git rev-parse -q --verify "refs/tags/v$version" >/dev/null; then
-            echo "v$version is already released; nothing to release."
-            echo "release=false" >> "$GITHUB_OUTPUT"
-          else
-            notes="docs/release-notes/$version.md"
-            if [ ! -s "$notes" ]; then
-              echo "::error::$notes is missing. Write the release notes for $version, then push again."
-              exit 1
-            fi
-            echo "v$version (build $build) is new: releasing."
-            echo "release=true" >> "$GITHUB_OUTPUT"
-          fi
+          mkdir -p notes
+          python3 .github/scripts/next_release.py $([ "$DRY_RUN" = true ] && echo --dry-run) \
+            --notes notes/release-notes.md >> "$GITHUB_OUTPUT"
+
+      - uses: actions/upload-artifact@v4
+        if: steps.version.outputs.release == 'true'
+        with:
+          name: notes
+          path: notes/
+          retention-days: 7
 
   android:
     name: Android build
@@ -138,8 +132,8 @@ jobs:
           } > android/key.properties
 
       - run: flutter pub get
-      - run: flutter build appbundle --release
-      - run: flutter build apk --release
+      - run: flutter build appbundle --release --build-name=${{ needs.check.outputs.version }} --build-number=${{ needs.check.outputs.build }}
+      - run: flutter build apk --release --build-name=${{ needs.check.outputs.version }} --build-number=${{ needs.check.outputs.build }}
 
       - name: Make sure they're signed with the upload key
         run: |
@@ -217,7 +211,9 @@ jobs:
           done
 
       - run: flutter pub get
-      - run: flutter build ipa --release --export-options-plist=ios/ExportOptions.plist
+      - run: >-
+          flutter build ipa --release --export-options-plist=ios/ExportOptions.plist
+          --build-name=${{ needs.check.outputs.version }} --build-number=${{ needs.check.outputs.build }}
 
       - name: Name the file
         env:
@@ -243,23 +239,58 @@ jobs:
     if: needs.check.outputs.release == 'true' && !(github.event_name == 'workflow_dispatch' && inputs.dry_run)
     runs-on: ubuntu-latest
     permissions:
-      contents: write # to tag the commit and publish the release
+      contents: write # to commit the version, tag it and publish the release
     env:
       VERSION: ${{ needs.check.outputs.version }}
+      BUILD: ${{ needs.check.outputs.build }}
     steps:
       - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
 
       - uses: actions/download-artifact@v4
         with:
           path: dist
+          pattern: '{android,ios}'
           merge-multiple: true
 
-      - name: Tag and release
+      - uses: actions/download-artifact@v4
+        with:
+          name: notes
+          path: notes
+
+      # On the commit that was built (main may have moved on since), so the tag covers exactly
+      # what's in this release. (Pushes made here don't start this workflow again.)
+      - name: Commit the version and notes, and tag it
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git checkout --detach "$GITHUB_SHA"
+          sed -i "s/^version: .*/version: $VERSION+$BUILD/" pubspec.yaml
+          cp notes/release-notes.md "docs/release-notes/$VERSION.md"
+          git add pubspec.yaml "docs/release-notes/$VERSION.md"
+          git commit -m "chore(release): $VERSION" -m "Build $BUILD. [skip ci]"
+          git tag "v$VERSION"
+          git push origin "v$VERSION"
+
+      # Usually main is still where it was and simply moves up to it; if something was pushed in
+      # the meantime, the release commit is merged in.
+      - name: Bring main up to date
+        run: |
+          release=$(git rev-parse HEAD)
+          if ! git push origin "$release:main"; then
+            git fetch origin main
+            git checkout -B main origin/main
+            git merge --no-edit -m "chore(release): merge $VERSION into main [skip ci]" "$release"
+            git push origin main
+          fi
+
+      - name: Release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           gh release create "v$VERSION" dist/* \
-            --target "$GITHUB_SHA" \
+            --verify-tag \
             --title "Chameleon $VERSION" \
             --notes-file "docs/release-notes/$VERSION.md"
 
@@ -311,21 +342,24 @@ jobs:
             echo "set=true" >> "$GITHUB_OUTPUT"
           fi
 
-      - uses: actions/checkout@v5
-        if: steps.key.outputs.set == 'true'
-
       - uses: actions/download-artifact@v4
         if: steps.key.outputs.set == 'true'
         with:
           name: android
           path: dist
 
+      - uses: actions/download-artifact@v4
+        if: steps.key.outputs.set == 'true'
+        with:
+          name: notes
+          path: notes
+
       # The first fenced block under the notes' "Google Play" heading.
       - name: What's new
         if: steps.key.outputs.set == 'true'
         run: |
           mkdir -p whatsnew
-          python3 - "docs/release-notes/$VERSION.md" > whatsnew/whatsnew-en-US <<'PY'
+          python3 - notes/release-notes.md > whatsnew/whatsnew-en-US <<'PY'
           import re, sys
           notes = open(sys.argv[1]).read()
           section = notes[notes.index("Google Play"):]
