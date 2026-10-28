@@ -54,11 +54,16 @@ class Storage {
 
   // ─── Settings ──────────────────────────────────────────────────────────────
 
-  String? getString(String key) => _settings[_scoped(key)] ?? _settings[key];
+  /// [key]'s value for the current person. Nobody signed in: none (everyone's defaults), but
+  /// for the device's own settings.
+  String? getString(String key) {
+    if (user.value == null && !_deviceKeys.contains(key)) return null;
+    return _settings[_scoped(key)] ?? _settings[key];
+  }
 
   /// [key] as the current person set it, without the value from before settings were kept per
   /// person.
-  String? getOwnString(String key) => _settings[_scoped(key)];
+  String? getOwnString(String key) => user.value == null ? null : _settings[_scoped(key)];
 
   bool? getBool(String key) => switch (getString(key)) {
     'true' => true,

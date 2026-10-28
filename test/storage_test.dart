@@ -25,6 +25,17 @@ void main() {
     expect(s.getString('selected_theme'), 'emerald');
   });
 
+  test("signed out: nobody's settings, only the device's", () async {
+    final s = await open();
+    await s.setString('selected_theme', 'default'); // the shared value, from before
+    await s.setString('jf_server', 'http://server');
+    s.useUser('http://server', 'alice');
+    await s.setString('selected_theme', 'emerald');
+    s.useUser(null, null);
+    expect(s.getString('selected_theme'), isNull, reason: 'the defaults, not anyone\'s');
+    expect(s.getString('jf_server'), 'http://server');
+  });
+
   test('device-wide keys are shared by everyone', () async {
     final s = await open();
     s.useUser('http://server', 'alice');

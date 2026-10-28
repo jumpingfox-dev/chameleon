@@ -409,18 +409,27 @@ class _LoginScreenState extends State<LoginScreen> {
   );
 
   /// The server's login disclaimer, under everything, as Jellyfin's own sign-in page shows it.
+  /// (Read from inside the page, below where ServerBranding hands it down.)
   List<Widget> _disclaimerText(BuildContext context) => [
-    if (SignInBrandingScope.maybeOf(context)?.disclaimer case final text? when _step != _Step.server) ...[
-      const SizedBox(height: 24),
-      ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 560),
-        child: Text(
-          text,
-          textAlign: TextAlign.center,
-          style: context.text.bodyMedium?.copyWith(color: context.colors.onSurfaceVariant),
-        ),
+    if (_step != _Step.server)
+      Builder(
+        builder: (context) {
+          final text = SignInBrandingScope.maybeOf(context)?.disclaimer;
+          if (text == null) return const SizedBox.shrink();
+          return Padding(
+            padding: const EdgeInsets.only(top: 24),
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 560),
+              child: Text(
+                text,
+                textAlign: TextAlign.center,
+                // The same color as the page's title ("jflores · Jittery Frog").
+                style: context.text.bodyMedium?.copyWith(color: context.colors.onSurface),
+              ),
+            ),
+          );
+        },
       ),
-    ],
   ];
 
   /// The account saved on this device for [user], if they've signed in here before.
