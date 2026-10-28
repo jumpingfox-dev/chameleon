@@ -35,7 +35,29 @@ There are two kinds of block:
 | `--logo` | Shown in place of the "chameleon" wordmark: in the top bar, the menu and on the sign-in pages. |
 | `--genre-<name>` | A genre's picture, for genre cards set to **Theme pictures** (Settings › Appearance › Genre cards). |
 
-Defaults have no colors: put your house colors in a theme, and name it in `--theme`.
+| `--<setting>` | Any setting in [assets/defaults.json](defaults.md), by its name there in kebab-case: `headingFont` is `--heading-font`, `autoplayNext` is `--autoplay-next`. These take precedence over the app's own defaults; anyone who changes the setting in Settings keeps their choice. |
+
+Defaults have no colors: put your house colors in a theme, and name it in `--theme` (which can
+also name one of Chameleon's own, such as `"Ruby"`).
+
+Settings, as an example:
+
+```css
+.chameleon-defaults {
+  --heading-font: "Outfit";
+  --body-font: "Plus Jakarta Sans";
+  --icons: fluent;
+  --genre-cards: theme;
+  --bottom-bar: home, search, downloads, settings;
+  --home: carousel, myMedia, continueWatching, nextUp, genres;
+  --autoplay-next: false;
+  --skip-intro: auto;           /* skip-intro, skip-recap, skip-credits, skip-preview */
+  --subtitle-background: outline;
+}
+```
+
+Values are written as in defaults.json, without its quotes and brackets: `true` / `false`,
+numbers, a name, or a list separated by commas.
 
 ## Themes
 

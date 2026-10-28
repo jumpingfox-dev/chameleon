@@ -9,6 +9,7 @@ import 'package:http/http.dart' as http;
 import 'package:path_provider/path_provider.dart';
 
 import '../jellyfin/jellyfin_controller.dart';
+import '../storage/app_defaults.dart';
 import '../storage/storage.dart';
 import '../../widgets/svg_raster.dart';
 import '../../theme/palette.dart';
@@ -47,8 +48,12 @@ class ServerThemes extends ChangeNotifier {
   /// What the signed-in server's CSS holds (as saved, until it's fetched again).
   ServerThemeSheet sheet = const ServerThemeSheet();
 
-  /// Bumped when [sheet] changes (not on link checks), for the theme controller.
+  /// Bumped when [sheet] changes (not on link checks), for the theme controller and the rest
+  /// of the settings (the defaults' settings).
   final sheetChanged = ValueNotifier(0);
+
+  /// The defaults' settings, over assets/defaults.json's.
+  void _applyDefaults() => appDefaults.server = sheet.defaults.settings;
 
   /// The server's login disclaimer (shown under signing in), if it has one.
   String? loginDisclaimer;
@@ -87,7 +92,12 @@ class ServerThemes extends ChangeNotifier {
 
   void _onUser() {
     final user = storage.user.value;
-    if (user == null) return;
+    // Signed out: no server's branding, so everything's Chameleon's own defaults again. (A
+    // server's sign-in pages still show its branding: see ServerBranding.)
+    if (user == null) {
+      if (_server != null) _open(null);
+      return;
+    }
     final server = user.substring(0, user.lastIndexOf('|'));
     if (server != _server) {
       _open(server);
@@ -123,6 +133,7 @@ class ServerThemes extends ChangeNotifier {
     loginDisclaimer = null;
     if (server == null) {
       _dir = null;
+      _applyDefaults();
       sheetChanged.value++;
       notifyListeners();
       return;
@@ -143,7 +154,8 @@ class ServerThemes extends ChangeNotifier {
     } catch (e) {
       debugPrint('Saved server themes: $e');
     }
-    sheetChanged.value++;
+    _applyDefaults();
+      sheetChanged.value++;
     notifyListeners();
   }
 
@@ -168,6 +180,7 @@ class ServerThemes extends ChangeNotifier {
       sheet = parseServerThemes(css);
       loginDisclaimer = _disclaimerIn(branding);
       splashOn = branding['SplashscreenEnabled'] == true;
+      _applyDefaults();
       sheetChanged.value++;
       notifyListeners();
     } catch (e) {

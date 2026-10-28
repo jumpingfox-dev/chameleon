@@ -9,7 +9,7 @@ import '../../theme/theme_presets.dart';
 /// The server's defaults: its logo, its genre pictures, and the theme people start on.
 @immutable
 class ServerDefaults {
-  const ServerDefaults({this.theme, this.logo, this.genres = const {}});
+  const ServerDefaults({this.theme, this.logo, this.genres = const {}, this.settings = const {}});
 
   /// The starting theme's name.
   final String? theme;
@@ -18,7 +18,11 @@ class ServerDefaults {
   final String? logo;
   final Map<String, String> genres; // by genre key (see genreKey)
 
-  bool get isEmpty => theme == null && logo == null && genres.isEmpty;
+  /// Settings' defaults (as in assets/defaults.json), by their name there (camelCase, from
+  /// `--heading-font` and so on), values as written. See AppDefaults.server.
+  final Map<String, String> settings;
+
+  bool get isEmpty => theme == null && logo == null && genres.isEmpty && settings.isEmpty;
 }
 
 /// One theme: its colors, and maybe its own logo and genre pictures.
@@ -99,6 +103,11 @@ ServerThemeSheet parseServerThemes(String css) {
         theme: _string(props['theme']),
         logo: _link(props['logo']),
         genres: _genres(props),
+        settings: {
+          for (final MapEntry(:key, :value) in props.entries)
+            if (key != 'theme' && key != 'logo' && !key.startsWith('genre-'))
+              key.replaceAllMapped(RegExp('-([a-z0-9])'), (m) => m[1]!.toUpperCase()): value,
+        },
       );
     } else if (_themeSelector.firstMatch(selector) case final match?) {
       final name = match.group(2)!.trim();

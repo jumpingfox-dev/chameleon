@@ -79,6 +79,9 @@ class BottomBarTabs extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// The defaults changed (a server's own, see AppDefaults.server).
+  void defaultsChanged() => notifyListeners();
+
   /// Back to Home, Search, Downloads and Movies.
   Future<void> reset() async {
     await storage.remove(_key);

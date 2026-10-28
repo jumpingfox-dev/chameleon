@@ -28,6 +28,7 @@ import 'theme/theme_controller.dart';
 import 'core/storage/app_defaults.dart';
 import 'features/library/genres.dart';
 import 'core/theming/server_themes.dart';
+import 'app/bottom_bar_tabs.dart';
 
 Future<void> main() async {
   _quietMediaKit();
@@ -55,15 +56,15 @@ Future<void> main() async {
   // first frame (see docs/themes.md). Fetched again once signed in.
   serverThemes = await ServerThemes.load(storage.getString('jf_token') == null ? null : storage.getString('jf_server'));
   themeController = await ThemeController.load();
-  serverThemes.sheetChanged.addListener(themeController.serverThemesChanged);
   fontController = await FontController.load();
   iconController = await IconController.load();
   playbackSettings = await PlaybackSettings.load();
   screensaverSettings = await ScreensaverSettings.load();
   homeLayout = await HomeLayoutController.load();
   genreCards = GenreCardsController();
-  // Everyone has their own settings: load theirs whenever someone else signs in.
-  storage.user.addListener(() {
+  // Everyone has their own settings: load theirs whenever someone else signs in, and again when
+  // the server's defaults change (its own, from its Custom CSS: see docs/themes.md).
+  void reloadSettings() {
     themeController.reload();
     fontController.reload();
     iconController.reload();
@@ -71,7 +72,11 @@ Future<void> main() async {
     screensaverSettings.reload();
     homeLayout.reload();
     genreCards.reload();
-  });
+    bottomBarTabs.defaultsChanged();
+  }
+
+  storage.user.addListener(reloadSettings);
+  serverThemes.sheetChanged.addListener(reloadSettings);
 
   jellyfin = JellyfinController();
   await jellyfin.load();

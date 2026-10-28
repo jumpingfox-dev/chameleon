@@ -67,7 +67,11 @@ class ThemeController extends ValueNotifier<ThemePreset> {
     // Someone who hasn't picked one themselves starts on the server's default theme, if it names
     // one that's there (ahead of a choice made on this device before themes were per person);
     // else assets/defaults.json's.
-    final serverDefault = serverThemes.sheet.themeNamed(serverThemes.sheet.defaults.theme)?.id;
+    // (It can also name one of Chameleon's: "Ruby", say.)
+    final named = serverThemes.sheet.defaults.theme;
+    final serverDefault =
+        serverThemes.sheet.themeNamed(named)?.id ??
+        themePresets.where((p) => p.id == named?.toLowerCase() || p.label.toLowerCase() == named?.toLowerCase()).firstOrNull?.id;
     final savedId =
         storage.getOwnString(_key) ?? serverDefault ?? storage.getString(_key) ?? appDefaults.appearance('theme');
     var selected = [...themePresets, custom, ..._serverPresets()].where((p) => p.id == savedId).firstOrNull;
@@ -104,10 +108,6 @@ class ThemeController extends ValueNotifier<ThemePreset> {
       unawaited(serverThemes.saveTheme(preset.label)); // its pictures, for offline
     }
   }
-
-  /// The server's themes changed (read, or fetched again): the current one with its new colors,
-  /// or someone new on the server's default.
-  void serverThemesChanged() => reload();
 
   /// Simple mode: build the whole theme from a seed.
   Future<void> applySeed(ThemeSeed seed) async {

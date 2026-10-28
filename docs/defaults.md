@@ -2,7 +2,8 @@
 
 `assets/defaults.json` holds what every setting starts as, for anyone who hasn't changed it in
 Settings. Edit it and rebuild; a setting someone has already changed on a device keeps their
-choice. Anything left out of the file falls back to the app's built-in value, and if the file
+choice. A server can set its own defaults in its Custom CSS, which take
+precedence over this file's (see [themes.md](themes.md#defaults)). Anything left out of the file falls back to the app's built-in value, and if the file
 can't be read the app uses its built-in values for everything.
 
 The file is laid out like Settings: a section for each part of it, and inside, a group for each

@@ -62,6 +62,24 @@ void main() {
     expect(parseServerThemes('.chameleon-theme[data-name="A"] { --seed: 400-20-8-2; }').themes.single.problems, hasLength(1));
   });
 
+  test("the defaults' settings, by their names in defaults.json", () {
+    final d = parseServerThemes('''
+      .chameleon-defaults {
+        --theme: "House";
+        --heading-font: "Outfit";
+        --bottom-bar: home, search, settings;
+        --autoplay-next: false;
+        --skip-intro: auto;
+      }
+    ''').defaults;
+    expect(d.settings, {
+      'headingFont': '"Outfit"',
+      'bottomBar': 'home, search, settings',
+      'autoplayNext': 'false',
+      'skipIntro': 'auto',
+    });
+  });
+
   test('genre names become keys', () {
     expect(genreKey('Science Fiction'), 'science-fiction');
     expect(genreKey('Talk-Show'), 'talk-show');
