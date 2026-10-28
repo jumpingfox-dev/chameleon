@@ -99,12 +99,11 @@ class _FavoritesScreenState extends State<FavoritesScreen> {
 
   @override
   Widget build(BuildContext context) => Scaffold(
-    body: Padding(
-      padding: pageSides(context, extra: 12),
-      child: ListenableBuilder(
-        listenable: libraryViewOverride, // follow the poster/thumbnail choice
-        builder: (context, _) => _buildBody(context),
-      ),
+    // No side padding around the page: the grids put it inside their scrolling, so a card at the
+    // edge has room to grow when it's focused.
+    body: ListenableBuilder(
+      listenable: libraryViewOverride, // follow the poster/thumbnail choice
+      builder: (context, _) => _buildBody(context),
     ),
   );
 
@@ -152,38 +151,45 @@ class _FavoritesScreenState extends State<FavoritesScreen> {
     return CustomScrollView(
       slivers: [
         SliverToBoxAdapter(child: SizedBox(height: pageTop(context))),
-        if (_movies.isNotEmpty) ...[
-          const SliverSectionTitle('Movies'),
-          SliverItemGrid(items: _movies),
-        ],
-        if (_series.isNotEmpty) ...[
-          const SliverSectionTitle('Shows'),
-          SliverItemGrid(items: _series),
-        ],
-        if (_collections.isNotEmpty) ...[
-          const SliverSectionTitle('Collections'),
-          SliverItemGrid(items: _collections),
-        ],
-        // Named underneath, as their pictures alone don't say which show they're from.
-        if (_seasons.isNotEmpty) ...[
-          const SliverSectionTitle('Seasons'),
-          _CaptionedGrid(
-            items: _seasons,
-            view: LibraryView.poster, // seasons have posters
-            caption: (season) => ((season.raw['SeriesName'] as String?) ?? '', season.name),
+        SliverPadding(
+          padding: pageSides(context, extra: 12),
+          sliver: SliverMainAxisGroup(
+            slivers: [
+              if (_movies.isNotEmpty) ...[
+                const SliverSectionTitle('Movies'),
+                SliverItemGrid(items: _movies),
+              ],
+              if (_series.isNotEmpty) ...[
+                const SliverSectionTitle('Shows'),
+                SliverItemGrid(items: _series),
+              ],
+              if (_collections.isNotEmpty) ...[
+                const SliverSectionTitle('Collections'),
+                SliverItemGrid(items: _collections),
+              ],
+              // Named underneath, as their pictures alone don't say which show they're from.
+              if (_seasons.isNotEmpty) ...[
+                const SliverSectionTitle('Seasons'),
+                _CaptionedGrid(
+                  items: _seasons,
+                  view: LibraryView.poster, // seasons have posters
+                  caption: (season) => ((season.raw['SeriesName'] as String?) ?? '', season.name),
+                ),
+              ],
+              if (_episodes.isNotEmpty) ...[
+                const SliverSectionTitle('Episodes'),
+                _CaptionedGrid(
+                  items: _episodes,
+                  view: LibraryView.thumbnail, // an episode's picture is a still from it
+                  caption: (episode) => (
+                    (episode.raw['SeriesName'] as String?) ?? '',
+                    episodeLabel(episode.raw['ParentIndexNumber'], episode.raw['IndexNumber'], episode.name),
+                  ),
+                ),
+              ],
+            ],
           ),
-        ],
-        if (_episodes.isNotEmpty) ...[
-          const SliverSectionTitle('Episodes'),
-          _CaptionedGrid(
-            items: _episodes,
-            view: LibraryView.thumbnail, // an episode's picture is a still from it
-            caption: (episode) => (
-              (episode.raw['SeriesName'] as String?) ?? '',
-              episodeLabel(episode.raw['ParentIndexNumber'], episode.raw['IndexNumber'], episode.name),
-            ),
-          ),
-        ],
+        ),
         SliverToBoxAdapter(child: SizedBox(height: pageBottom(context))),
       ],
     );

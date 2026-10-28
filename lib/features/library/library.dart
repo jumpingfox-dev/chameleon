@@ -440,10 +440,10 @@ class _LibraryScreenState extends State<LibraryScreen> {
     builder: (context, _) {
       final view = libraryViewFor(context);
       return Scaffold(
-        body: Padding(
-          // (The room at the top is inside the grid, so titles scroll up under the top bar.)
-          padding: pageSides(context, extra: 12),
-          child: Column(
+        // No side padding around the page: the grid puts it inside its scrolling (as the room at
+        // the top, so titles scroll up under the top bar), so a card at the edge has room to grow
+        // when it's focused. The A–Z column keeps the page's right side.
+        body: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
           // (Its name is in the app's top bar.)
@@ -458,7 +458,11 @@ class _LibraryScreenState extends State<LibraryScreen> {
             if (_filters.byLetter)
               ClearOfHiddenTopBar(
                 child: Padding(
-                  padding: EdgeInsets.only(top: pageTopGap(context), bottom: MediaQuery.paddingOf(context).bottom),
+                  padding: EdgeInsets.only(
+                    top: pageTopGap(context),
+                    bottom: MediaQuery.paddingOf(context).bottom,
+                    right: pageSides(context, extra: 12).right,
+                  ),
                   child: _LetterRail(
                     letters: _letters,
                     // Until the server says which letters have titles, every letter works.
@@ -472,10 +476,16 @@ class _LibraryScreenState extends State<LibraryScreen> {
         ),
           ],
         ),
-        ),
       );
     },
   );
+
+  /// The grid's sides: the page's left, and on the right the page's too, or with the A–Z column
+  /// beside it, just a little room before it.
+  EdgeInsets _gridSides(BuildContext context) {
+    final sides = pageSides(context, extra: 12);
+    return sides.copyWith(right: _filters.byLetter ? 8 : sides.right);
+  }
 
   Widget _buildBody(BuildContext context, LibraryView view) {
     final filters = _filters;
@@ -511,58 +521,66 @@ class _LibraryScreenState extends State<LibraryScreen> {
 
     return LayoutBuilder(
       builder: (context, constraints) {
-        _gridWidth =
-            constraints.maxWidth; // used by _jumpTo to calculate positions
+        // The cards' room, without the sides (used by _jumpTo to calculate positions).
+        _gridWidth = constraints.maxWidth - _gridSides(context).horizontal;
         return CustomScrollView(
           controller: _scroll,
           slivers: [
             SliverToBoxAdapter(child: SizedBox(height: pageTop(context))),
-            // The filters, above the titles: they scroll away with them.
-            SliverToBoxAdapter(
-              child: LibraryFilterBar(
-                key: _filterBarKey,
-                filters: filters,
-                onChanged: _setFilters,
-                view: view,
-                onToggleView: () => libraryViewOverride.value =
-                    view == LibraryView.poster ? LibraryView.thumbnail : LibraryView.poster,
-                // Not for a library of collections.
-                onRandom: _library?.collectionType == 'boxsets' ? null : _openRandom,
-                showGenre: widget.genre == null,
-                showInProgress: _itemTypes.contains(JellyfinItemKind.movie),
-                showRuntime: !(_itemTypes.length == 1 && _itemTypes.first == JellyfinItemKind.series),
-              ),
-            ),
-            if (message != null)
-              SliverFillRemaining(hasScrollBody: false, child: Center(child: message))
-            else if (filters.byLetter)
-              for (final (letter, items) in _groupByLetter()) ...[
+            // The page's sides (the right only up to the A–Z column, if it's there).
+            SliverPadding(
+              padding: _gridSides(context),
+              sliver: SliverMainAxisGroup(
+                slivers: [
+                // The filters, above the titles: they scroll away with them.
                 SliverToBoxAdapter(
-                  child: SizedBox(
-                    height: _sectionHeaderHeight,
-                    child: Align(
-                      alignment: Alignment.bottomLeft,
-                      child: Padding(
-                        padding: const EdgeInsets.only(bottom: 8),
-                        child: Text(
-                          letter,
-                          style: context.text.titleLarge,
+                  child: LibraryFilterBar(
+                    key: _filterBarKey,
+                    filters: filters,
+                    onChanged: _setFilters,
+                    view: view,
+                    onToggleView: () => libraryViewOverride.value =
+                        view == LibraryView.poster ? LibraryView.thumbnail : LibraryView.poster,
+                    // Not for a library of collections.
+                    onRandom: _library?.collectionType == 'boxsets' ? null : _openRandom,
+                    showGenre: widget.genre == null,
+                    showInProgress: _itemTypes.contains(JellyfinItemKind.movie),
+                    showRuntime: !(_itemTypes.length == 1 && _itemTypes.first == JellyfinItemKind.series),
+                  ),
+                ),
+                if (message != null)
+                  SliverFillRemaining(hasScrollBody: false, child: Center(child: message))
+                else if (filters.byLetter)
+                  for (final (letter, items) in _groupByLetter()) ...[
+                    SliverToBoxAdapter(
+                      child: SizedBox(
+                        height: _sectionHeaderHeight,
+                        child: Align(
+                          alignment: Alignment.bottomLeft,
+                          child: Padding(
+                            padding: const EdgeInsets.only(bottom: 8),
+                            child: Text(
+                              letter,
+                              style: context.text.titleLarge,
+                            ),
+                          ),
                         ),
                       ),
                     ),
+                    grid(items),
+                  ]
+                else
+                  grid(_items),
+                if (message == null && _hasMore)
+                  const SliverToBoxAdapter(
+                    child: Padding(
+                      padding: EdgeInsets.symmetric(vertical: 24),
+                      child: Center(child: CircularProgressIndicator()),
+                    ),
                   ),
-                ),
-                grid(items),
-              ]
-            else
-              grid(_items),
-            if (message == null && _hasMore)
-              const SliverToBoxAdapter(
-                child: Padding(
-                  padding: EdgeInsets.symmetric(vertical: 24),
-                  child: Center(child: CircularProgressIndicator()),
-                ),
+                ],
               ),
+            ),
             // Room after the last row, so it can come up off the bottom edge like the rest.
             SliverToBoxAdapter(child: SizedBox(height: pageBottom(context, 64))),
           ],

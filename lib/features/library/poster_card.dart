@@ -192,6 +192,13 @@ abstract final class CardRows {
     return sides.copyWith(right: sides.left);
   }
 
+  /// A card's width in a row showing [across] of them (4.5: the half says there's more), with
+  /// [spacing] between, across the room the page has (narrower beside a pinned menu).
+  static double acrossWidth(BuildContext context, double across, {double spacing = gap}) {
+    final row = MediaQuery.sizeOf(context).width - sides(context).horizontal;
+    return (row - (across.ceil() - 1) * spacing) / across;
+  }
+
   /// A card's width in a row.
   static double tileWidth(BuildContext context, LibraryView view) {
     if (ScreenType.of(context).isPhone) return view == LibraryView.poster ? 150.0 : 280.0;

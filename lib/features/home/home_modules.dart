@@ -1582,8 +1582,8 @@ class _GenresRowState extends State<_GenresRow> {
   );
 
   Widget _build(BuildContext context) {
-    // The same size as on the Genres page.
-    final width = genreCardWidth(context);
+    // 4.5 across, as My Media (2.3 on phones).
+    final width = _shortcutWidth(context);
     final height = width / genreCardAspect();
     final genres = _pick(jellyfin.genres);
     // Editing (just the layout): the tiles' shapes, pulsing, as the other sections show them.
@@ -1630,6 +1630,11 @@ class _GenresRowState extends State<_GenresRow> {
   }
 }
 
+/// The width of My Media's and the Genres section's cards: 4.5 across on wider screens (the half
+/// says there's more), beside a pinned menu too; 2.3 on phones.
+double _shortcutWidth(BuildContext context) =>
+    CardRows.acrossWidth(context, ScreenType.of(context).isPhone ? 2.3 : 4.5, spacing: genreCardGap);
+
 class _MyMediaRow extends StatelessWidget {
   const _MyMediaRow({required this.sides, this.editing = false});
 
@@ -1650,8 +1655,8 @@ class _MyMediaRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // Between a genre tile and a thumbnail in size, with a thumbnail's spacing and look.
-    final width = (genreCardWidth(context) * 0.6 + _HomeModuleViewState._tileWidth(context, LibraryView.thumbnail) * 0.4);
+    // The same size, spacing and look as Home's genre cards (see _shortcutWidth).
+    final width = _shortcutWidth(context);
     final height = width * 9 / 16;
     final libraries = jellyfin.libraries;
     // Editing (just the layout), or the libraries not in yet: the tiles' shapes, as the other
@@ -1670,38 +1675,29 @@ class _MyMediaRow extends StatelessWidget {
           padding: sides,
           clipBehavior: Clip.none, // a focused tile grows past the row's ends
           itemCount: libraries.length,
-          separatorBuilder: (_, _) => const SizedBox(width: _HomeModuleViewState._rowGap),
+          separatorBuilder: (_, _) => const SizedBox(width: genreCardGap),
           itemBuilder: (context, i) {
             final library = libraries[i];
-            // As a card does: the first grows away from the screen's left edge, the last from its right.
-            final anchor = i == 0
-                ? Alignment.centerLeft
-                : i == libraries.length - 1
-                ? Alignment.centerRight
-                : Alignment.center;
             return SizedBox(
               width: width,
               child: Tappable(
                 onPress: () => context.go('/home/library/${library.id}'),
                 semanticsLabel: library.name,
-                // Like a card: resting in a little from its tile's edges, filling it when focused,
-                // with the focus border over the artwork's edge.
+                // Like a genre card: the whole tile, growing a little when focused, with the focus
+                // border over the artwork's edge.
                 builder: (context, states, child) {
                   final active = isHighlighted(states);
-                  return AnimatedPadding(
-                    padding: active ? EdgeInsets.zero : PosterCard.restInset(height, anchor: anchor),
+                  return AnimatedScale(
+                    scale: active ? 1.04 : 1,
                     duration: const Duration(milliseconds: 150),
                     curve: Curves.easeOut,
                     child: AnimatedContainer(
                       duration: const Duration(milliseconds: 150),
                       clipBehavior: Clip.antiAlias,
-                      decoration: BoxDecoration(borderRadius: BorderRadius.circular(8)),
+                      decoration: BoxDecoration(borderRadius: BorderRadius.circular(12)),
                       foregroundDecoration: BoxDecoration(
-                        borderRadius: BorderRadius.circular(8),
-                        border: Border.all(
-                          color: active ? context.colors.primary : const Color(0x00000000),
-                          width: PosterCard.borderWidth,
-                        ),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: active ? context.colors.primary : const Color(0x00000000), width: 3),
                       ),
                       child: child,
                     ),

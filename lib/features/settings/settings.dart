@@ -146,14 +146,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final group = widget.group;
     return Scaffold(
       // With the remote, keeps headings and the end of the page in view (see FocusReveal).
-      body: Padding(
-        padding: pageSides(context, extra: 12),
-        child: FocusReveal(
+      // The page's sides inside its scrolling, so nothing's cut off at the screen's edges.
+      body: Builder(
+        builder: (context) => FocusReveal(
           controller: _scroll,
           // All built at once, so a section further down can be scrolled to.
           child: SingleChildScrollView(
             controller: _scroll,
-            padding: EdgeInsets.fromLTRB(4, pageTop(context), 4, pageBottom(context)),
+            padding: pageSides(context, extra: 16).copyWith(top: pageTop(context), bottom: pageBottom(context)),
             child: tab != null && group != null
                 // One group's page: its name is in the top bar.
                 ? _SettingsView(tab: tab.label, group: group, child: tab.build())

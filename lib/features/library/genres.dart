@@ -89,9 +89,9 @@ class GenresScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Scaffold(
-    body: Padding(
-      padding: pageSides(context, extra: 12),
-      child: ListenableBuilder(
+    // No side padding around the page: the grid puts it inside its scrolling, so a card at the
+    // edge has room to grow when it's focused.
+    body: ListenableBuilder(
         listenable: Listenable.merge([jellyfin, genreCards, serverThemes]),
         builder: (context, _) {
           final genres = jellyfin.genres;
@@ -101,7 +101,7 @@ class GenresScreen extends StatelessWidget {
 
           return GridView.builder(
             // Room after the last row, so it can come up off the bottom edge like the rest.
-            padding: EdgeInsets.only(top: pageTop(context), bottom: pageBottom(context, 64)),
+            padding: pageSides(context, extra: 12).copyWith(top: pageTop(context), bottom: pageBottom(context, 64)),
             // As many across as a library's thumbnails.
             gridDelegate: SliverGridDelegateWithMaxCrossAxisExtent(
               maxCrossAxisExtent: libraryCardMaxWidth(LibraryView.thumbnail),
@@ -114,7 +114,6 @@ class GenresScreen extends StatelessWidget {
             itemBuilder: (context, i) => KeepClearOfEdges(child: GenreTile(genre: genres[i])),
           );
         },
-      ),
     ),
   );
 }
