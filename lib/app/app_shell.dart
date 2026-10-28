@@ -174,72 +174,71 @@ class _AppShellState extends State<AppShell> {
   /// The menu slid out over the page (rather than pinned beside it).
   final _menuOpen = ValueNotifier(false);
 
-  /// The top bar shows. It slides away as a page scrolls down, and comes back only once the
-  /// page is back at the top (or another page opens).
-  final _barShown = ValueNotifier(true);
+  /// While the menu's slid out over the page, the page (with its top bar) is drawn from a
+  /// picture of itself, taken as it opens: the menu's frosted glass (a blur of what's behind it) then blurs a picture
+  /// rather than redrawing the whole page every frame of the slide, which a TV can't keep up
+  /// with over a big backdrop or a grid of genre cards. The page is under a scrim then anyway.
+  final _pageSnapshot = SnapshotController();
 
-  /// The page is scrolled to its top: only then does the top bar show its logo or title.
-  final _atTop = ValueNotifier(true);
+  void _onMenuOpen() => _pageSnapshot.allowSnapshotting = _menuOpen.value;
 
-  /// The room the top bar takes when it shows (see TopBarSpace), and the status bar's share
-  /// of it, set as the page builds.
+  /// How far the page under the top bar has scrolled down. The top bar (its buttons, and the
+  /// page's title or the logo) is drawn as if it were the top of the page: it moves up with it
+  /// as it scrolls, and back down as it comes back to its top. Nothing's ever drawn over it.
+  final _barScroll = ValueNotifier(0.0);
+
+  /// The room the top bar takes (see TopBarSpace), and the status bar's share of it, set as the
+  /// page builds.
   double _barRoom = 0;
   double _barRoomStatus = 0;
 
-  /// Tells pages how far to keep their fixed parts down now (see topBarRoom).
-  void _onBarShown() => topBarRoom.value = _barShown.value ? _barRoom : _barRoomStatus;
+  /// How far the bar is moved up: as far as the page has scrolled, until it's gone.
+  double get _barLift => math.min(_barScroll.value, _barRoom);
 
-  /// A page scrolled: down hides the top bar, reaching the top shows it again. Only the page's
-  /// own up-and-down scrolling, not rows scrolling sideways.
+  /// Tells pages how far to keep their fixed parts (Search's box, the A–Z column) down now: under
+  /// the bar, moving up with it (see topBarRoom).
+  void _onBarScroll() => topBarRoom.value = math.max(_barRoom - _barLift, _barRoomStatus);
+
+  /// A page scrolled: the bar moves with it. Only the page's own up-and-down scrolling, not rows
+  /// scrolling sideways.
   bool _onPageScroll(ScrollUpdateNotification n) {
-    // The page's own scrolling only: not a list inside it (depth > 0), and not something that
-    // can't scroll at all (a short side column, which always reads as "at the top").
-    if (n.depth != 0 || n.metrics.axis != Axis.vertical || n.metrics.maxScrollExtent <= 0) return false;
-    _atTop.value = n.metrics.pixels <= n.metrics.minScrollExtent + 8;
-    if (n.metrics.pixels <= n.metrics.minScrollExtent + 8) {
-      _barShown.value = true;
-    } else if ((n.scrollDelta ?? 0) > 4 && !_barScope.hasFocus) {
-      _barShown.value = false;
-      _hiddenBy = n.context;
-    }
+    // The page's own scrolling only: not a list inside it (depth > 0).
+    if (n.depth != 0 || n.metrics.axis != Axis.vertical) return false;
+    _scrolled = n.context;
+    _barScroll.value = math.max(0, n.metrics.pixels - n.metrics.minScrollExtent);
     return false;
   }
 
-  /// What scrolled the top bar away, so a change to it (below) can bring the bar back.
-  BuildContext? _hiddenBy;
+  /// The page that's scrolled, to take it back to its top when the remote moves up into the bar.
+  BuildContext? _scrolled;
 
-  /// The page that hid the bar changed size: with the bar gone it's taller, and a page only
-  /// just long enough to scroll may now fit, or sit at its top, with no scrolling left to bring
-  /// the bar back. Then it comes back now.
+  /// The page changed size (it may now fit, with nothing left to scroll): the bar follows where
+  /// it is now.
   bool _onPageMetrics(ScrollMetricsNotification n) {
-    if (_barShown.value || n.context != _hiddenBy || n.metrics.axis != Axis.vertical) return false;
-    if (n.metrics.maxScrollExtent <= 0 || n.metrics.pixels <= n.metrics.minScrollExtent + 8) {
-      _barShown.value = true;
-    }
+    if (n.context != _scrolled || n.metrics.axis != Axis.vertical) return false;
+    _barScroll.value = math.max(0, n.metrics.pixels - n.metrics.minScrollExtent);
     return false;
   }
 
   /// A page opened or closed (a title's page, say, which doesn't change the address).
   void _onPageStack() => _syncBarToPage();
 
-  /// Each page's top bar as it was left (shown, and at its top), so going back to a page finds
-  /// it as it was: hidden, if you'd scrolled down.
-  final _barStates = Expando<(bool, bool)>('top bar');
+  /// How far each page was scrolled, so going back to one puts the bar back where it was.
+  final _barStates = Expando<double>('top bar');
 
-  /// The page [_barShown] and [_atTop] are about.
+  /// The page [_barScroll] is about.
   Route<dynamic>? _barPage;
 
-  /// The page on top changed: keeps the last one's top bar, and gives the new one its own. A page
-  /// opened for the first time starts at its top, with the bar showing.
+  /// The page on top changed: keeps the last one's place, and gives the new one its own. A page
+  /// opened for the first time starts at its top, with the bar there.
   void _syncBarToPage() {
     if (!mounted) return;
     final page = pageStackObservers[widget.navigationShell.currentIndex].top;
     if (page == _barPage) return;
-    if (_barPage case final last?) _barStates[last] = (_barShown.value, _atTop.value);
+    if (_barPage case final last?) _barStates[last] = _barScroll.value;
     _barPage = page;
-    final (shown, atTop) = (page == null ? null : _barStates[page]) ?? (true, true);
-    _barShown.value = shown;
-    _atTop.value = atTop;
+    _scrolled = null;
+    _barScroll.value = (page == null ? null : _barStates[page]) ?? 0;
   }
 
   late bool _pinned = storage.getBool(_kMenuPinned) ?? appDefaults.settings('appearance')['menuPinned'] == true;
@@ -279,9 +278,12 @@ class _AppShellState extends State<AppShell> {
     _menuScope.dispose();
     _pageScope.dispose();
     _barScope.dispose();
-    _menuOpen.dispose();
+    _menuOpen
+      ..removeListener(_onMenuOpen)
+      ..dispose();
+    _pageSnapshot.dispose();
     pageStackChanged.removeListener(_onPageStack);
-    _barShown.dispose();
+    _barScroll.dispose();
     for (final node in _menuNodes.values) {
       node.dispose();
     }
@@ -350,12 +352,16 @@ class _AppShellState extends State<AppShell> {
   @override
   void initState() {
     super.initState();
-    // The remote moving up into the top bar brings it back.
+    _menuOpen.addListener(_onMenuOpen);
+    // The remote moving up into the top bar: the page back at its top, with the bar.
     _barScope.addListener(() {
-      if (_barScope.hasFocus) _barShown.value = true;
+      if (!_barScope.hasFocus || _barScroll.value <= 0) return;
+      final scrolled = _scrolled;
+      final position = scrolled == null || !scrolled.mounted ? null : Scrollable.maybeOf(scrolled)?.position;
+      position?.animateTo(position.minScrollExtent, duration: const Duration(milliseconds: 250), curve: Curves.easeOutCubic);
     });
     pageStackChanged.addListener(_onPageStack);
-    _barShown.addListener(_onBarShown);
+    _barScroll.addListener(_onBarScroll);
   }
 
   @override
@@ -540,32 +546,24 @@ class _AppShellState extends State<AppShell> {
     return null;
   }
 
-  /// The top bar, floating over the page and sliding up out of sight as the page scrolls
-  /// down: see-through, its buttons on glass islands, covering the status bar too (the page runs
-  /// up under both).
+  /// The top bar, over the page and moving up with it as it scrolls (see [_barScroll]): its
+  /// buttons on glass islands and the page's title (or the logo), covering the status bar too
+  /// (the page runs up under both).
   Widget _collapsing(BuildContext context, Widget bar) {
     final content = Column(
       mainAxisSize: MainAxisSize.min,
       children: [SizedBox(height: MediaQuery.paddingOf(context).top), bar],
     );
     return ValueListenableBuilder(
-      valueListenable: _barShown,
-      // Slid up and faded out together, so nothing of it (its islands' shadows) is left at the
-      // edge however short it is.
-      builder: (context, shown, content) => IgnorePointer(
-        ignoring: !shown,
-        child: AnimatedOpacity(
-          duration: const Duration(milliseconds: 200),
-          curve: Curves.easeOut,
-          opacity: shown ? 1 : 0,
-          child: AnimatedSlide(
-            duration: const Duration(milliseconds: 200),
-            curve: Curves.easeOut,
-            offset: shown ? Offset.zero : const Offset(0, -1.2),
-            child: content,
-          ),
-        ),
-      ),
+      valueListenable: _barScroll,
+      // A little further than the bar, so nothing of it (its islands' shadows) is left at the edge.
+      builder: (context, _, content) {
+        final lift = math.min(_barScroll.value, _barRoom + 24);
+        return IgnorePointer(
+          ignoring: lift >= _barRoom,
+          child: Transform.translate(offset: Offset(0, -lift), child: content),
+        );
+      },
       child: content,
     );
   }
@@ -596,31 +594,27 @@ class _AppShellState extends State<AppShell> {
           valueListenable: detail ?? ValueNotifier<String?>(null),
           // Home has the menu button and the logo. Every other page has Back (to the page
           // before, or Home) and its name, centered.
-          builder: (context, detailTitle, _) => ValueListenableBuilder(
-            valueListenable: _atTop,
-            builder: (context, atTop, _) => _TopBar(
-              textShown: atTop,
-              // Every page but Home, TVs too (alongside the remote's Back).
-              canGoBack: !home,
-              onBack: () {
-                final router = GoRouter.of(context);
-                if (router.canPop()) {
-                  router.pop();
-                } else {
-                  _goTo('/home');
-                }
-              },
-              showMenuButton: !pinned && home,
-              onMenu: _openMenu,
-              // (A detail page's own name is big on the page itself.)
-              centeredTitle: home || detail != null ? null : (_title ?? ''),
-              showLogo: !pinned && home,
-              // Pinned, and on phones (the bar's narrow there), the menu has cast, Settings and
-              // your profile; elsewhere they're here, in that order.
-              showAccount: !pinned && !type.isPhone,
-              showCast: !pinned && !type.isPhone,
-              onSettings: () => _goTo('/settings'),
-            ),
+          builder: (context, detailTitle, _) => _TopBar(
+            // Every page but Home, TVs too (alongside the remote's Back).
+            canGoBack: !home,
+            onBack: () {
+              final router = GoRouter.of(context);
+              if (router.canPop()) {
+                router.pop();
+              } else {
+                _goTo('/home');
+              }
+            },
+            showMenuButton: !pinned && home,
+            onMenu: _openMenu,
+            // (A detail page's own name is big on the page itself.)
+            centeredTitle: home || detail != null ? null : (_title ?? ''),
+            showLogo: !pinned && home,
+            // Pinned, and on phones (the bar's narrow there), the menu has cast, Settings and
+            // your profile; elsewhere they're here, in that order.
+            showAccount: !pinned && !type.isPhone,
+            showCast: !pinned && !type.isPhone,
+            onSettings: () => _goTo('/settings'),
           ),
         ),
       ),
@@ -716,7 +710,13 @@ class _AppShellState extends State<AppShell> {
                       removeLeft: pinned, // the menu clears any camera cutout
                       // A detail page (a movie's, a person's, ...) runs up under a glass top bar;
                       // other pages sit below a solid one.
-                      child: ListenableBuilder(
+                      // The page and the top bar over it frozen together while the menu's out (see
+                      // _pageSnapshot), so the bar can never be drawn where the page isn't. (A
+                      // video, which can't be pictured, is just drawn: permissive.)
+                      child: SnapshotWidget(
+                        controller: _pageSnapshot,
+                        mode: SnapshotMode.permissive,
+                        child: ListenableBuilder(
                         listenable: pageStackChanged,
                         builder: (context, _) {
                           final detail = detailTitleOf(pageStackObservers[widget.navigationShell.currentIndex].top);
@@ -765,7 +765,7 @@ class _AppShellState extends State<AppShell> {
                           final room = statusBar + _barHeight(type, empty: empty);
                           if (room != _barRoom) {
                             _barRoom = room;
-                            WidgetsBinding.instance.addPostFrameCallback((_) => _onBarShown());
+                            WidgetsBinding.instance.addPostFrameCallback((_) => _onBarScroll());
                           }
                           return TopBarSpace(
                             height: room,
@@ -777,6 +777,7 @@ class _AppShellState extends State<AppShell> {
                             ),
                           );
                         },
+                      ),
                       ),
                     ),
                   ),

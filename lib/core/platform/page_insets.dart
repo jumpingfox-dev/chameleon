@@ -16,12 +16,13 @@ EdgeInsets pageSides(BuildContext context, {double extra = 16}) {
   final wide = ScreenType.of(context).isPhone ? 0.0 : _wideInset;
   return EdgeInsets.only(left: insets.left + extra + wide, right: insets.right + extra + wide);
 }
-/// The room the app's top bar takes at the top of the page right now: all of it while it
-/// shows, and once it's slid away, just the status bar's (the page runs up under it). A page's fixed parts (Search's box, the A–Z column) keep clear by
+/// The room the app's top bar takes at the top of the page right now: all of it at the page's
+/// top, less as it moves up with the page, down to just the status bar's (the page runs up
+/// under it). A page's fixed parts (Search's box, the A–Z column) keep clear by
 /// this much, moving up as the bar goes.
 final topBarRoom = ValueNotifier<double>(0);
 
-/// [child], kept clear of the app's top bar, moving up when it slides away ([topBarRoom]).
+/// [child], kept clear of the app's top bar, moving up with it as the page scrolls ([topBarRoom]).
 class ClearOfHiddenTopBar extends StatelessWidget {
   const ClearOfHiddenTopBar({super.key, required this.child});
 
@@ -30,12 +31,8 @@ class ClearOfHiddenTopBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) => ValueListenableBuilder(
     valueListenable: topBarRoom,
-    builder: (context, room, child) => AnimatedPadding(
-      duration: const Duration(milliseconds: 200),
-      curve: Curves.easeOut,
-      padding: EdgeInsets.only(top: room),
-      child: child,
-    ),
+    // Moving with the bar as the page scrolls (see AppShell), so not animated.
+    builder: (context, room, child) => Padding(padding: EdgeInsets.only(top: room), child: child),
     child: child,
   );
 }

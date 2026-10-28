@@ -163,16 +163,17 @@ class _SearchScreenState extends State<SearchScreen> {
 
   @override
   Widget build(BuildContext context) => Scaffold(
-    body: Padding(
-      padding: pageSides(context, extra: 12),
-      child: Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        SizedBox(height: pageTopGap(context)),
-        // (Fixed above the results: kept clear of the top bar, moving up when it slides away.)
+    // No side padding around the page: the results put it inside their scrolling, so a card at
+    // the edge has room to grow when it's focused.
+    // The box at the top of the page, under its title, scrolling away with the results as other
+    // pages' tops do.
+    body: CustomScrollView(
+      slivers: [
         // Arriving from the menu, top bar or bottom bar: ready to type (on a TV, the remote is on
         // the box, and Select opens the keyboard).
-        ClearOfHiddenTopBar(
+        SliverPadding(
+          padding: pageSides(context, extra: 12).copyWith(top: pageTop(context), bottom: 16),
+          sliver: SliverToBoxAdapter(
           child: RemoteTextField(
             autofocus: _routeQuery == null,
             builder: (context, focusNode, highlighted) => TextField(
@@ -207,12 +208,20 @@ class _SearchScreenState extends State<SearchScreen> {
             ),
           ),
         ),
-        const SizedBox(height: 16),
-        Expanded(child: _buildResults(context)),
+        ),
+        ..._resultSlivers(context),
       ],
     ),
-    ),
   );
+
+  /// What's under the box: suggestions, the results, or a message in the room that's left.
+  List<Widget> _resultSlivers(BuildContext context) {
+    final results = _buildResults(context);
+    return switch (results) {
+      CustomScrollView(:final slivers) => slivers,
+      final message => [SliverFillRemaining(hasScrollBody: false, child: message)],
+    };
+  }
 
   Widget _buildResults(BuildContext context) {
     final muted = context.text.bodyLarge?.copyWith(
@@ -229,22 +238,26 @@ class _SearchScreenState extends State<SearchScreen> {
       final view = libraryViewFor(context);
       return CustomScrollView(
         slivers: [
-          SliverToBoxAdapter(
-            child: Padding(
-              padding: const EdgeInsets.only(bottom: 12),
-              child: Text(
-                'Suggested For You',
-                style: context.text.titleLarge,
-              ),
-            ),
-          ),
-          SliverGrid.builder(
-            gridDelegate: libraryGridDelegate(view),
-            itemCount: _suggestions.length,
-            itemBuilder: (context, i) => PosterCard(
-              item: _suggestions[i],
-              view: view,
-              onPress: () => openItem(context, _suggestions[i]),
+          SliverPadding(
+            padding: pageSides(context, extra: 12),
+            sliver: SliverMainAxisGroup(
+              slivers: [
+                SliverToBoxAdapter(
+                  child: Padding(
+                    padding: const EdgeInsets.only(bottom: 12),
+                    child: Text('Suggested For You', style: context.text.titleLarge),
+                  ),
+                ),
+                SliverGrid.builder(
+                  gridDelegate: libraryGridDelegate(view),
+                  itemCount: _suggestions.length,
+                  itemBuilder: (context, i) => PosterCard(
+                    item: _suggestions[i],
+                    view: view,
+                    onPress: () => openItem(context, _suggestions[i]),
+                  ),
+                ),
+              ],
             ),
           ),
           SliverToBoxAdapter(child: SizedBox(height: pageBottom(context))),
@@ -259,15 +272,17 @@ class _SearchScreenState extends State<SearchScreen> {
     }
 
     final view = libraryViewFor(context);
+    final sides = pageSides(context, extra: 12);
     return CustomScrollView(
       slivers: [
         if (_people.isNotEmpty) ...[
-          SliverToBoxAdapter(child: _sectionTitle(context, 'People')),
+          SliverPadding(padding: sides, sliver: SliverToBoxAdapter(child: _sectionTitle(context, 'People'))),
           SliverToBoxAdapter(
             child: SizedBox(
               height: 130,
               child: ListView.separated(
                 scrollDirection: Axis.horizontal,
+                padding: sides, // runs to the screen's edges, starting in line with the page
                 itemCount: _people.length,
                 separatorBuilder: (_, _) => const SizedBox(width: 12),
                 itemBuilder: (context, i) => PersonTile(
@@ -278,18 +293,24 @@ class _SearchScreenState extends State<SearchScreen> {
             ),
           ),
         ],
-        if (_results.isNotEmpty) ...[
-          SliverToBoxAdapter(child: _sectionTitle(context, 'Movies & Shows')),
-          SliverGrid.builder(
-            gridDelegate: libraryGridDelegate(view),
-            itemCount: _results.length,
-            itemBuilder: (context, i) => PosterCard(
-              item: _results[i],
-              view: view,
-              onPress: () => openItem(context, _results[i]),
+        if (_results.isNotEmpty)
+          SliverPadding(
+            padding: sides,
+            sliver: SliverMainAxisGroup(
+              slivers: [
+                SliverToBoxAdapter(child: _sectionTitle(context, 'Movies & Shows')),
+                SliverGrid.builder(
+                  gridDelegate: libraryGridDelegate(view),
+                  itemCount: _results.length,
+                  itemBuilder: (context, i) => PosterCard(
+                    item: _results[i],
+                    view: view,
+                    onPress: () => openItem(context, _results[i]),
+                  ),
+                ),
+              ],
             ),
           ),
-        ],
         SliverToBoxAdapter(child: SizedBox(height: pageBottom(context))),
       ],
     );

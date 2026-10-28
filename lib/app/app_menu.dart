@@ -14,7 +14,6 @@ class _TopBar extends StatelessWidget {
     required this.showLogo,
     this.showAccount = true,
     this.showCast = true,
-    this.textShown = true,
     required this.onSettings,
   });
 
@@ -33,9 +32,6 @@ class _TopBar extends StatelessWidget {
   /// The cast button, when there's somewhere to cast to (false while the menu is pinned: it's
   /// in the menu).
   final bool showCast;
-  /// The logo or title shows: only while the page is at its top, so if the bar ever comes
-  /// down over the middle of a page, it's just its buttons over the content.
-  final bool textShown;
   final VoidCallback onSettings;
 
   @override
@@ -78,14 +74,11 @@ class _TopBar extends StatelessWidget {
                       child: centeredTitle != null || centerLogo
                           ? const SizedBox.shrink() // centered over the row, below
                           : showLogo
-                          ? _FadeText(
-                              shown: textShown,
-                              child: AppLogo(
+                          ? AppLogo(
                                 asset: 'assets/images/text_logo.svg',
                                 colorAsset: 'assets/images/text_logo_color.svg',
                                 height: isPhone ? 26 : 30,
-                              ),
-                            )
+                              )
                           : const SizedBox.shrink(),
                     ),
                   ),
@@ -126,9 +119,7 @@ class _TopBar extends StatelessWidget {
                 IgnorePointer(
                   child: SizedBox(
                     width: width,
-                    child: _FadeText(
-                      shown: textShown,
-                      child: centerLogo
+                    child: centerLogo
                           ? const Center(
                               child: AppLogo(
                                 asset: 'assets/images/text_logo.svg',
@@ -143,7 +134,6 @@ class _TopBar extends StatelessWidget {
                               textAlign: TextAlign.center,
                               style: context.text.titleLarge,
                             ),
-                    ),
                   ),
                 ),
               ],
@@ -153,21 +143,6 @@ class _TopBar extends StatelessWidget {
       ),
     );
   }
-}
-
-/// The top bar's logo or title, faded out while [shown] is false.
-class _FadeText extends StatelessWidget {
-  const _FadeText({required this.shown, required this.child});
-
-  final bool shown;
-  final Widget child;
-
-  @override
-  Widget build(BuildContext context) => AnimatedOpacity(
-    duration: const Duration(milliseconds: 150),
-    opacity: shown ? 1 : 0,
-    child: child,
-  );
 }
 
 /// Some of the top bar's buttons side by side, on a pill of frosted glass like the bottom
