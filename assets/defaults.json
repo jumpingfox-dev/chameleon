@@ -42,10 +42,10 @@
       }
     }
   },
-  "home": ["carousel", "genres", "myMedia", "continueWatching", "nextUp", "recentlyAdded", "suggested"],
+  "home": ["carousel", "myMedia", "continueWatching", "nextUp", "recentlyAdded", "suggested"],
   "sections": {
     "carousel": { "showTitle": false, "limit": 8, "kinds": "all", "seconds": 8 },
-    "myMedia": { "showTitle": true, "look": "pictures", "cardNames": false },
+    "myMedia": { "showTitle": true, "look": "icons", "cardNames": false },
     "genres": { "showTitle": false, "cardNames": false, "genreCount": "all", "pick": "random", "chosen": [] },
     "continueWatching": {
       "showTitle": true,
@@ -75,7 +75,7 @@
     "recentlyAddedSeries": { "showTitle": true, "limit": 30 },
     "suggested": { "showTitle": true, "limit": 30 },
     "becauseYouWatched": { "showTitle": true, "limit": 20, "basis": "last" },
-    "collection": { "showTitle": true, "limit": 50 },
+    "collection": { "showTitle": true, "limit": 30 },
     "genre": { "showTitle": true, "limit": 30 }
   },
   "playback": {
