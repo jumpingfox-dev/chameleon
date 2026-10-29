@@ -1,3 +1,5 @@
+import 'dart:ui' as ui;
+
 import 'package:dart_jellyfin/dart_jellyfin.dart';
 import 'package:go_router/go_router.dart';
 import 'package:material_ui/material_ui.dart';
@@ -13,6 +15,7 @@ import '../../theme/theme.dart';
 import '../../core/platform/page_insets.dart';
 import '../../widgets/tappable.dart';
 import 'poster_card.dart';
+import 'icon_card_art.dart';
 
 IconData _iconFor(String genre) {
   final name = genre.toLowerCase();
@@ -201,7 +204,8 @@ class _GenreName extends StatelessWidget {
 }
 
 /// Icons: a deep color of its own (the same every time, from its [name]), its [icon] large and
-/// faint at the right, and its name. A genre's card, and a library's in My Media.
+/// faint at the right, and its name. A genre's card, and a library's in My Media. The color and
+/// icon are a picture, made once (see IconCardArt).
 class IconCard extends StatelessWidget {
   const IconCard({super.key, required this.name, required this.icon, this.showName = true});
 
@@ -211,46 +215,74 @@ class IconCard extends StatelessWidget {
   /// Its name on it (not when it's named under it instead).
   final bool showName;
 
-  /// A hue picked from the name, so each genre keeps its color.
-  static double _hue(String genre) {
-    var h = 0;
-    for (final c in genre.codeUnits) {
-      h = (h * 31 + c) & 0x7fffffff;
-    }
-    return (h % 360).toDouble();
+  @override
+  Widget build(BuildContext context) => Stack(
+    fit: StackFit.expand,
+    children: [
+      LayoutBuilder(
+        builder: (context, constraints) {
+          final ratio = MediaQuery.devicePixelRatioOf(context);
+          final width = (constraints.maxWidth * ratio).round(), height = (constraints.maxHeight * ratio).round();
+          return _IconCardPicture(
+            name: name,
+            icon: icon,
+            width: width,
+            height: height,
+          );
+        },
+      ),
+      if (showName) _GenreName(name),
+    ],
+  );
+}
+
+class _IconCardPicture extends StatefulWidget {
+  const _IconCardPicture({required this.name, required this.icon, required this.width, required this.height});
+
+  final String name;
+  final IconData icon;
+  final int width;
+  final int height;
+
+  @override
+  State<_IconCardPicture> createState() => _IconCardPictureState();
+}
+
+class _IconCardPictureState extends State<_IconCardPicture> {
+  ui.Image? _image;
+  Object? _for;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  @override
+  void didUpdateWidget(_IconCardPicture old) {
+    super.didUpdateWidget(old);
+    _load();
+  }
+
+  void _load() {
+    final w = widget;
+    if (w.width <= 0 || w.height <= 0 || !w.width.isFinite) return;
+    final key = (w.name, w.icon, w.width, w.height);
+    if (key == _for) return;
+    _for = key;
+    IconCardArt.of(w.name, w.icon, w.width, w.height).then((image) {
+      if (mounted && key == _for) setState(() => _image = image);
+    });
   }
 
   @override
   Widget build(BuildContext context) {
-    final hue = _hue(name);
-    final light = HSLColor.fromAHSL(1, hue, 0.45, 0.36).toColor();
-    final dark = HSLColor.fromAHSL(1, (hue + 25) % 360, 0.5, 0.16).toColor();
-    return LayoutBuilder(
-      builder: (context, constraints) => DecoratedBox(
-        decoration: BoxDecoration(
-          gradient: LinearGradient(begin: Alignment.topLeft, end: Alignment.bottomRight, colors: [light, dark]),
-        ),
-        child: Stack(
-          fit: StackFit.expand,
-          children: [
-            Positioned(
-              right: -constraints.maxHeight * 0.12,
-              bottom: -constraints.maxHeight * 0.12,
-              child: Transform.rotate(
-                angle: -0.2,
-                child: Icon(
-                  icon,
-                  size: constraints.maxHeight * 0.85,
-                  color: const Color(0x33FFFFFF),
-                  fill: 1,
-                ),
-              ),
-            ),
-            if (showName) _GenreName(name),
-          ],
-        ),
-      ),
-    );
+    final image = _image;
+    // Just its color until the picture's ready (a moment, the first time).
+    if (image == null) {
+      return DecoratedBox(decoration: BoxDecoration(gradient: IconCardArt.gradientOf(widget.name)));
+    }
+    return RawImage(image: image, fit: BoxFit.fill, filterQuality: FilterQuality.medium);
   }
 }
 
