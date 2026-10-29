@@ -50,16 +50,25 @@ class _ServerThemes extends StatelessWidget {
       label: 'Server Themes',
       value: selected?.label ?? 'None',
       onPress: () async {
-        // Each in a one-item record, so "None" (null) can be told apart from closing the list.
-        final picked = await showChoicePicker<(ThemePreset?,)>(
+        // Each theme by its id, in a one-item record, so "None" (null) can be told apart from
+        // closing the list (and the one in use matched, though the server's themes are read
+        // afresh as it opens).
+        final picked = await showChoicePicker<(String?,)>(
           context: context,
           title: 'Server Themes',
-          selected: (selected,),
-          search: (_) async => [(null,), for (final t in themes) (t,)],
-          itemBuilder: (context, t) => _ServerThemeItem(theme: t.$1),
+          selected: (selected?.id,),
+          // The server asked first (a few seconds at most), so themes added or changed since it
+          // was last read are listed as they are now.
+          search: (_) async {
+            await serverThemes.refresh().timeout(const Duration(seconds: 4), onTimeout: () {});
+            return [(null,), for (final t in themeController.serverPresets) (t.id,)];
+          },
+          itemBuilder: (context, t) =>
+              _ServerThemeItem(theme: themeController.serverPresets.where((p) => p.id == t.$1).firstOrNull),
         );
         if (picked == null) return;
-        await themeController.select(picked.$1 ?? themeController.custom);
+        final theme = themeController.serverPresets.where((p) => p.id == picked.$1).firstOrNull;
+        await themeController.select(theme ?? themeController.custom);
       },
     );
   }

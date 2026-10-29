@@ -91,7 +91,9 @@ class ThemeController extends ValueNotifier<ThemePreset> {
     await storage.setString(_key, preset.id);
     if (server) {
       await storage.setString(_serverColorsKey, colorsToIni(preset.colors));
-      unawaited(serverThemes.saveTheme(preset.label)); // its pictures, for offline
+      // The server's CSS read again, in case the theme's changed since: its latest colors (applied
+      // as it's read: see main.dart's reloadSettings), and its pictures saved for offline.
+      unawaited(serverThemes.refresh());
     }
   }
 

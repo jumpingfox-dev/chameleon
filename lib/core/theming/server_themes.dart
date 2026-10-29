@@ -37,8 +37,8 @@ typedef BrokenLink = ({String what, String url, String problem});
 /// saved on the device so they work offline.
 ///
 /// On connecting to a server it reads what was saved for it, then fetches the CSS again and
-/// saves the pictures the defaults and the current theme use. Picking a theme saves its
-/// pictures; opening the theme picker checks every link ([checkLinks]).
+/// saves the pictures the defaults and the current theme use. Picking a theme reads the CSS
+/// again (it may have changed) and saves its pictures; opening the theme picker checks every link ([checkLinks]).
 ///
 /// Pictures are looked up theme first, then defaults, then the app's own (see [logo] and
 /// [genrePicture]); a saved copy is used even if its link has stopped working.
@@ -227,13 +227,6 @@ class ServerThemes extends ChangeNotifier {
       ...?t?.urls,
       for (final folder in [?sheet.defaults.genreFolder, ?t?.genreFolder]) ...?_found[folder]?.values.nonNulls,
     ];
-  }
-
-  /// Saves [theme]'s pictures (and the defaults'), when it's picked: looking in its genre folder
-  /// first, if it has one.
-  Future<void> saveTheme(String name) async {
-    await _lookInFolders(save: false, theme: name);
-    await _saveAll(_inUse(name));
   }
 
   // ─── Genre folders ─────────────────────────────────────────────────────────
