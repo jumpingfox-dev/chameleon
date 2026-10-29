@@ -1,8 +1,11 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="600" height="200" viewBox="0 0 600 200">
+<svg xmlns="http://www.w3.org/2000/svg" width="803" height="107" viewBox="3 14 803 107">
+  <text x="0" y="90" font-family="sans-serif" font-size="96" font-weight="300" fill="#EAF6F4" letter-spacing="2">drift</text>
   <!-- Sun over waves -->
-  <circle cx="100" cy="86" r="40" fill="#F2C38B"/>
-  <path d="M30 120 Q55 100 80 120 T130 120 T180 120 L180 140 Q155 120 130 140 T80 140 T30 140 Z" fill="#2BB3A6"/>
-  <path d="M30 148 Q55 128 80 148 T130 148 T180 148 L180 166 Q155 146 130 166 T80 166 T30 166 Z" fill="#1D7F78"/>
-  <text x="204" y="106" font-family="sans-serif" font-size="58" font-weight="300" fill="#EAF6F4" letter-spacing="4">driftwood</text>
-  <text x="208" y="150" font-family="sans-serif" font-size="28" font-weight="700" fill="#2BB3A6" letter-spacing="12">MEDIA</text>
+  <g transform="translate(212 6)">
+    <circle cx="54" cy="44" r="32" fill="#F2C38B"/>
+    <path d="M0 70 Q18 56 36 70 T72 70 T108 70 L108 84 Q90 70 72 84 T36 84 T0 84 Z" fill="#2BB3A6"/>
+    <path d="M0 92 Q18 78 36 92 T72 92 T108 92 L108 106 Q90 92 72 106 T36 106 T0 106 Z" fill="#1D7F78"/>
+  </g>
+  <text x="338" y="90" font-family="sans-serif" font-size="96" font-weight="300" fill="#EAF6F4" letter-spacing="2">wood</text>
+  <text x="592" y="90" font-family="sans-serif" font-size="54" font-weight="700" fill="#2BB3A6" letter-spacing="8">MEDIA</text>
 </svg>

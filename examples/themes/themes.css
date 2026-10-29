@@ -21,6 +21,10 @@
   --primary-foreground: #1A1305;
   --muted-foreground: #A7B0C8;
   --border: #26304F;
+  --heading-font: "Bebas Neue";
+  --body-font: "Inter";
+  --icons: fluent;
+  --section-carousel-seconds: 10;
 }
 
 /* chameleon-theme: Popcorn Palace
@@ -36,6 +40,11 @@
   --primary-foreground: #FFF4D6;
   --muted-foreground: #C9B48F;
   --border: #3A2020;
+  --heading-font: "Playfair Display";
+  --body-font: "Lato";
+  --icons: phosphor;
+  --subtitle-color: yellow;
+  --section-carousel-kinds: movies;
 }
 
 /* chameleon-theme: Driftwood Media
@@ -51,6 +60,11 @@
   --primary-foreground: #06201E;
   --muted-foreground: #8FB3AE;
   --border: #1D3B40;
+  --heading-font: "Quicksand";
+  --body-font: "Nunito";
+  --icons: lucide;
+  --genre-cards: pictures;
+  --section-carousel-seconds: 15;
 }
 
 /* chameleon-theme: Neon Arcade
@@ -68,6 +82,11 @@
   --secondary-foreground: #06282A;
   --muted-foreground: #A99BC6;
   --border: #33215A;
+  --heading-font: "Orbitron";
+  --body-font: "Exo 2";
+  --icons: materialSymbols;
+  --subtitle-color: cyan;
+  --section-carousel-seconds: 5;
 }
 
 /* chameleon-theme: Paper Lantern
@@ -86,4 +105,8 @@
   --muted: #EFE3D3;
   --muted-foreground: #7A6355;
   --border: #E4D5C2;
+  --heading-font: "Merriweather";
+  --body-font: "Source Sans 3";
+  --icons: cupertino;
+  --subtitle-background: box;
 }

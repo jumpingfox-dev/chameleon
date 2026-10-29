@@ -1,10 +1,11 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="600" height="200" viewBox="0 0 600 200">
-  <!-- Paper lantern -->
-  <rect x="90" y="22" width="20" height="14" rx="3" fill="#3B2A22"/>
-  <ellipse cx="100" cy="100" rx="58" ry="66" fill="#D9472B"/>
-  <path d="M100 34 Q60 100 100 166 M100 34 Q140 100 100 166 M100 34 L100 166" stroke="#F7E9D7" stroke-width="3" fill="none" opacity="0.7"/>
-  <rect x="84" y="164" width="32" height="12" rx="3" fill="#3B2A22"/>
-  <path d="M100 176 L100 192" stroke="#D9472B" stroke-width="4"/>
-  <text x="186" y="104" font-family="serif" font-size="50" font-weight="700" fill="#3B2A22">Paper Lantern</text>
-  <text x="190" y="148" font-family="sans-serif" font-size="24" font-weight="600" fill="#D9472B" letter-spacing="8">HOME THEATER</text>
+<svg xmlns="http://www.w3.org/2000/svg" width="784" height="122" viewBox="0 -2 784 122">
+  <text x="0" y="92" font-family="serif" font-size="96" font-weight="700" fill="#3B2A22">Paper</text>
+  <!-- Lantern -->
+  <g transform="translate(292 0)">
+    <rect x="30" y="0" width="16" height="10" rx="2" fill="#3B2A22"/>
+    <ellipse cx="38" cy="60" rx="38" ry="50" fill="#D9472B"/>
+    <path d="M38 10 Q10 60 38 110 M38 10 Q66 60 38 110 M38 10 L38 110" stroke="#F7E9D7" stroke-width="3" fill="none" opacity="0.7"/>
+    <rect x="28" y="108" width="20" height="10" rx="2" fill="#3B2A22"/>
+  </g>
+  <text x="392" y="92" font-family="serif" font-size="96" font-weight="700" fill="#D9472B">Lantern</text>
 </svg>
