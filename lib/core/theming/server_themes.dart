@@ -52,8 +52,15 @@ class ServerThemes extends ChangeNotifier {
   /// of the settings (the defaults' settings).
   final sheetChanged = ValueNotifier(0);
 
-  /// The defaults' settings, over assets/defaults.json's.
-  void _applyDefaults() => appDefaults.server = sheet.defaults.settings;
+  /// The defaults' settings, and the theme in use's over those, over assets/defaults.json's.
+  void _applyDefaults() => appDefaults.server = {
+    ...sheet.defaults.settings,
+    ...?sheet.themeNamed(_activeTheme)?.settings,
+  };
+
+  /// Bumped when the theme in use changes to one with settings of its own (or from one), so
+  /// settings that follow them load again (see main.dart).
+  final themeSettingsChanged = ValueNotifier(0);
 
   /// The server's login disclaimer (shown under signing in), if it has one.
   String? loginDisclaimer;
@@ -71,8 +78,20 @@ class ServerThemes extends ChangeNotifier {
   Directory? _dir; // this server's saved CSS and pictures
   final _links = <String, LinkCheck>{};
 
-  /// The theme in use's name, if it's one of the server's (set by the theme controller).
-  String? activeTheme;
+  /// The theme in use's name, if it's one of the server's (set by the theme controller). Its
+  /// settings apply while it is (see [_applyDefaults]).
+  String? get activeTheme => _activeTheme;
+  String? _activeTheme;
+  set activeTheme(String? name) {
+    if (name == _activeTheme) return;
+    final had = sheet.themeNamed(_activeTheme)?.settings.isNotEmpty ?? false;
+    _activeTheme = name;
+    final has = sheet.themeNamed(name)?.settings.isNotEmpty ?? false;
+    if (had || has) {
+      _applyDefaults();
+      themeSettingsChanged.value++;
+    }
+  }
 
   /// Opens what's saved for [server] (the one signed in last), before the app's first frame, so
   /// a server theme's colors are there from the start.

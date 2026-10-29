@@ -85,6 +85,7 @@ The name is in `data-name="..."`. The comment above it is optional; Chameleon sh
 | `--background`, `--foreground`, `--primary`, `--primary-foreground`, `--secondary`, `--secondary-foreground`, `--muted`, `--muted-foreground`, `--card`, `--border`, `--barrier`, `--destructive`, `--destructive-foreground`, `--error`, `--error-foreground` | Colors, as `#RRGGBB`, `#AARRGGBB` or `hsl(...)`. Anything you leave out comes from the seed. `--accent` is another name for `--primary`. |
 | `--logo` | This theme's logo, in place of the defaults' one. |
 | `--genre-<name>` | This theme's picture for a genre, in place of the defaults' one. |
+| `--<setting>`, `--section-…` | Settings, as in the defaults (fonts, icons, ...): this theme's, while it's the one in use, over the defaults'. Anyone who's changed the setting keeps their choice. |
 | `--genre-folder` | This theme's folder of genre pictures. A genre's picture comes from, in order: the theme's `--genre-<name>`, the theme's folder, the defaults' `--genre-<name>`, the defaults' folder. |
 
 A quick way to get the colors: build a theme in the app (Settings › Appearance › Theme ›

@@ -67,6 +67,18 @@ Future<void> main() async {
   sectionSettings = SectionSettings();
   // Everyone has their own settings: load theirs whenever someone else signs in, and again when
   // the server's defaults change (its own, from its Custom CSS: see docs/themes.md).
+  // (A server theme's own settings: all but the theme itself, which changed them.)
+  void reloadThemeSettings() {
+    fontController.reload();
+    iconController.reload();
+    playbackSettings.reload();
+    screensaverSettings.reload();
+    homeLayout.reload();
+    genreCards.reload();
+    sectionSettings.reload();
+    bottomBarTabs.defaultsChanged();
+  }
+
   void reloadSettings() {
     themeController.reload();
     fontController.reload();
@@ -81,6 +93,7 @@ Future<void> main() async {
 
   storage.user.addListener(reloadSettings);
   serverThemes.sheetChanged.addListener(reloadSettings);
+  serverThemes.themeSettingsChanged.addListener(reloadThemeSettings);
 
   jellyfin = JellyfinController();
   await ProfilePictures.init(); // everyone's, for "Who's watching?" (saved when it connects)

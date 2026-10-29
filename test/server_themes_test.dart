@@ -117,4 +117,26 @@ void main() {
       expect(sheet.defaults.genres.keys, ['action']);
     });
   });
+
+  test("a theme's own settings, apart from its colors and pictures", () {
+    final sheet = parseServerThemes('''
+.chameleon-theme[data-name="Retro"] {
+  --seed: 270-325-9-1;
+  --primary: #FF3EA5;
+  --brightness: dark;
+  --logo: url("https://example.com/logo.svg");
+  --genre-action: url("https://example.com/action.png");
+  --heading-font: "Press Start 2P";
+  --icons: phosphor;
+  --genre-cards: icons;
+  --section-carousel-seconds: 5;
+}
+''');
+    expect(sheet.themes.single.settings, {
+      'headingFont': '"Press Start 2P"',
+      'icons': 'phosphor',
+      'genreCards': 'icons',
+      'sectionCarouselSeconds': '5',
+    });
+  });
 }

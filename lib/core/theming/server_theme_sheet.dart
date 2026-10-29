@@ -28,7 +28,7 @@ class ServerDefaults {
   bool get isEmpty => theme == null && logo == null && genres.isEmpty && genreFolder == null && settings.isEmpty;
 }
 
-/// One theme: its colors, and maybe its own logo and genre pictures.
+/// One theme: its colors, and maybe its own logo, genre pictures and settings.
 @immutable
 class ServerTheme {
   const ServerTheme({
@@ -38,6 +38,7 @@ class ServerTheme {
     this.logo,
     this.genres = const {},
     this.genreFolder,
+    this.settings = const {},
     this.problems = const [],
   });
 
@@ -49,6 +50,10 @@ class ServerTheme {
 
   /// A folder of genre pictures, named after the genres (see [genreFolderFiles]).
   final String? genreFolder;
+
+  /// Settings' defaults while it's the theme in use (fonts, icons...), as [ServerDefaults.settings]
+  /// has them, over those.
+  final Map<String, String> settings;
 
   /// What in it couldn't be read (a color that isn't one, say), for the theme picker.
   final List<String> problems;
@@ -122,11 +127,7 @@ ServerThemeSheet parseServerThemes(String css) {
         logo: _link(props['logo']),
         genres: _genres(props),
         genreFolder: _link(props['genre-folder']),
-        settings: {
-          for (final MapEntry(:key, :value) in props.entries)
-            if (key != 'theme' && key != 'logo' && (!key.startsWith('genre-') || key == 'genre-cards'))
-              key.replaceAllMapped(RegExp('-([a-z0-9])'), (m) => m[1]!.toUpperCase()): value,
-        },
+        settings: _settings(props, const {'theme'}),
       );
     } else if (_themeSelector.firstMatch(selector) case final match?) {
       final name = match.group(2)!.trim();
@@ -140,6 +141,7 @@ ServerThemeSheet parseServerThemes(String css) {
           logo: _link(props['logo']),
           genres: _genres(props),
           genreFolder: _link(props['genre-folder']),
+          settings: _settings(props, {'seed', 'brightness', ..._colorNames}),
           problems: problems,
         ),
       );
@@ -147,6 +149,21 @@ ServerThemeSheet parseServerThemes(String css) {
   }
   return ServerThemeSheet(defaults: defaults, themes: themes);
 }
+
+/// The settings in [props], by their names in assets/defaults.json (camelCase, from
+/// `--heading-font` and so on): everything but pictures and [skip].
+Map<String, String> _settings(Map<String, String> props, Set<String> skip) => {
+  for (final MapEntry(:key, :value) in props.entries)
+    if (key != 'logo' && !skip.contains(key) && (!key.startsWith('genre-') || key == 'genre-cards'))
+      key.replaceAllMapped(RegExp('-([a-z0-9])'), (m) => m[1]!.toUpperCase()): value,
+};
+
+/// The color tokens' names in CSS (primary-foreground for primaryForeground), and what they set.
+final _colorTokens = {
+  for (final key in colorTokens.keys) key.replaceAllMapped(RegExp('[A-Z]'), (m) => '-${m[0]!.toLowerCase()}'): key,
+  'accent': 'primary',
+};
+Iterable<String> get _colorNames => _colorTokens.keys;
 
 /// `"text"`, `'text'` or `text`.
 String? _string(String? value) {
@@ -189,13 +206,8 @@ Map<String, String> _genres(Map<String, String> props) => {
     case final other:
       problems.add('--brightness "$other" should be light or dark');
   }
-  // CSS's kebab-case names for the color tokens (primary-foreground for primaryForeground).
-  final tokens = {
-    for (final key in colorTokens.keys) key.replaceAllMapped(RegExp('[A-Z]'), (m) => '-${m[0]!.toLowerCase()}'): key,
-    'accent': 'primary',
-  };
   for (final MapEntry(:key, :value) in props.entries) {
-    final token = tokens[key];
+    final token = _colorTokens[key];
     if (token == null) continue;
     final color = parseColor(_string(value) ?? '');
     if (color == null) {
