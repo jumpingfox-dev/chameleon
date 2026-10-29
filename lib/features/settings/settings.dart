@@ -390,7 +390,9 @@ class _AppearanceCard extends StatelessWidget {
     listenable: Listenable.merge([themeController, fontController, iconController, playbackSettings]),
     builder: (context, _) {
       final preset = themeController.value;
-      final presets = themeController.allPresets; // listed once, so the one in use is among them
+      // Default, Custom, then the rest of Chameleon's. (The server's are under Custom.)
+      final themes = [themePresets.first, themeController.custom, ...themePresets.skip(1)];
+      final onCustom = preset.id == customThemeId || ThemeController.isServerTheme(preset);
 
       return _SettingsCard(
         children: [
@@ -415,41 +417,21 @@ class _AppearanceCard extends StatelessWidget {
           ),
 
           // ── Theme ──
-          const _SectionTitle('Theme', description: 'Pick a preset, or "Custom" to build your own.'),
+          const _SectionTitle(
+            'Theme',
+            description: 'Pick a preset, or "Custom" for one of your server\'s or to build your own.',
+          ),
           _PickerSetting<ThemePreset>(
             title: 'Theme',
-            // The listed one that's in use (the server's themes are listed afresh each time, so
-            // matched by id rather than as the same object).
-            value: presets.where((p) => p.id == preset.id).firstOrNull ?? preset,
-            options: presets,
+            // A server theme is picked under Custom, so it shows as Custom here.
+            value: onCustom ? themeController.custom : themes.where((p) => p.id == preset.id).firstOrNull ?? preset,
+            options: themes,
             format: (p) => p.label,
             onChange: themeController.select,
-            // The server's themes say who made them, and if their pictures don't load.
-            itemBuilder: (context, p) {
-              final theme = ThemeController.isServerTheme(p) ? serverThemes.sheet.themeNamed(p.label) : null;
-              if (theme == null) return Text(p.label);
-              final broken = serverThemes.brokenLinks(theme).length;
-              return Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(p.label),
-                  Text(
-                    [
-                      'From your server${theme.author == null ? '' : ' · by ${theme.author}'}',
-                      if (broken > 0) '$broken ${broken == 1 ? "picture doesn't" : "pictures don't"} load',
-                    ].join(' · '),
-                    style: context.text.bodySmall?.copyWith(
-                      color: broken > 0 ? context.colors.error : context.colors.onSurfaceVariant,
-                    ),
-                  ),
-                ],
-              );
-            },
           ),
           // Checks the server's links while this is open, and says what's wrong.
           const _ServerThemeNotes(),
-          if (preset.id == customThemeId) ...[
+          if (onCustom) ...[
             const SizedBox(height: 16),
             const CustomThemeEditor(),
           ],

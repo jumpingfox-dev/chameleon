@@ -51,22 +51,21 @@ from before a preset list change, say).
 ## The custom theme editor
 
 Custom isn't a preset in the list — it's synthesized on the fly by `ThemeController` itself
-(`customThemeId = 'custom'`) and always appears as the last option. Two editing modes, both in
+(`customThemeId = 'custom'`, `themeController.custom`) and is listed second, after Default. The
+server's themes (`themeController.serverPresets`) aren't in the list: they're picked under
+Custom, which shows while either is in use. Both parts are in
 `features/settings/custom_theme_editor.dart`:
 
-- **Simple**: four steppers (`_SeedEditor`) over a `ThemeSeed(baseHue, accentHue, vibrance,
+- **Server Themes** (`_ServerThemes`), when the server has any: one of them, or none (your own).
+- **Your own**: four steppers (`_SeedEditor`) over a `ThemeSeed(baseHue, accentHue, vibrance,
   depth)`, each 0–359 or 0–9. `generateColors(seed)` in `theme_presets.dart` turns that into a
   full `Palette` by HSL math — tweak the hue/lightness formulas there if the generated palette
   needs adjusting. The seed also has a shareable 8-digit code (`ThemeSeed.code` /
   `ThemeSeed.parse`), shown and editable as text.
-- **Advanced**: a text box of `name = color` lines (`_AdvancedEditor`), parsed by
-  `parseColorIni` in `theme/custom_colors.dart` into a `Palette`, starting from the current
-  seed's colors as a base. `colorsToIni` does the reverse, for prefilling the box.
 
-`themeController.applySeed(seed)` and `applyCustomIni(text)` both save and immediately call
-`_activate()`, which rebuilds `_custom` and reassigns `value` to a **new** `ThemePreset`
-instance (not just mutates the old one) — needed so `ListenableBuilder`/`ValueListenableBuilder`
-actually notice the change.
+`themeController.applySeed(seed)` saves and immediately calls `_activate()`, which rebuilds
+`_custom` and reassigns `value` to a **new** `ThemePreset` instance (not just mutates the old
+one) — needed so `ListenableBuilder`/`ValueListenableBuilder` actually notice the change.
 
 ## Fonts
 

@@ -4,74 +4,99 @@ import '../../core/platform/screen_type.dart';
 import '../../theme/theme_controller.dart';
 import '../../theme/theme_presets.dart';
 import '../../theme/app_icons.dart';
-import 'switch_setting.dart';
+import '../../core/theming/server_themes.dart';
+import 'choice_picker.dart';
 import '../../theme/theme.dart';
 import '../../widgets/remote_text_field.dart';
 
 String _pad3(int n) => n.toString().padLeft(3, '0');
 
-class CustomThemeEditor extends StatefulWidget {
+/// Custom, in Settings › Appearance › Theme: one of the server's themes, if it has any, or
+/// your own, from a base hue, an accent hue, vibrance and depth (or a theme code).
+class CustomThemeEditor extends StatelessWidget {
   const CustomThemeEditor({super.key});
 
   @override
-  State<CustomThemeEditor> createState() => _CustomThemeEditorState();
-}
-
-class _CustomThemeEditorState extends State<CustomThemeEditor> {
-  late final _ini = TextEditingController(text: themeController.customIni);
-  List<String> _errors = const [];
-
-  @override
-  void dispose() {
-    _ini.dispose();
-    super.dispose();
-  }
-
-  void _setAdvanced(bool on) {
-    if (on) {
-      // Refresh the box so it reflects the latest seed or saved INI.
-      _ini.text = themeController.customIni;
-      _errors = const [];
-    }
-    themeController.setAdvanced(on);
-  }
-
-  Future<void> _apply() async {
-    final errors = await themeController.applyCustomIni(_ini.text);
-    if (mounted) setState(() => _errors = errors);
-  }
-
-  @override
   Widget build(BuildContext context) => ListenableBuilder(
-    listenable: themeController,
+    listenable: Listenable.merge([themeController, serverThemes]),
     builder: (context, _) {
-      final advanced = themeController.advanced;
+      final servers = themeController.serverPresets;
       return Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          if (advanced) ...[
-            _AdvancedEditor(controller: _ini, errors: _errors),
-            const SizedBox(height: 12),
-            FilledButton(
-              onPressed: _apply,
-              child: const Text('Apply'),
-            ),
-          ] else
+          if (servers.isNotEmpty) _ServerThemes(themes: servers),
+          // Your own colors: only while no server theme is picked.
+          if (!ThemeController.isServerTheme(themeController.value)) ...[
+            if (servers.isNotEmpty) const SizedBox(height: 12),
             _SeedEditor(seed: themeController.seed),
-          const SizedBox(height: 12),
-          SwitchSetting(
-            label: 'Advanced',
-            description: 'Edit every color directly instead of picking hues.',
-            value: advanced,
-            onChange: _setAdvanced,
-          ),
+          ],
         ],
       );
     },
   );
 }
 
-// ─── Simple mode ─────────────────────────────────────────────────────────────
+/// The server's themes (see docs/themes.md), or none: your own colors, set below.
+class _ServerThemes extends StatelessWidget {
+  const _ServerThemes({required this.themes});
+
+  final List<ThemePreset> themes;
+
+  @override
+  Widget build(BuildContext context) {
+    final current = themeController.value;
+    final selected = ThemeController.isServerTheme(current) ? themes.where((t) => t.id == current.id).firstOrNull : null;
+    return ChoiceField(
+      label: 'Server Themes',
+      value: selected?.label ?? 'None',
+      onPress: () async {
+        // Each in a one-item record, so "None" (null) can be told apart from closing the list.
+        final picked = await showChoicePicker<(ThemePreset?,)>(
+          context: context,
+          title: 'Server Themes',
+          selected: (selected,),
+          search: (_) async => [(null,), for (final t in themes) (t,)],
+          itemBuilder: (context, t) => _ServerThemeItem(theme: t.$1),
+        );
+        if (picked == null) return;
+        await themeController.select(picked.$1 ?? themeController.custom);
+      },
+    );
+  }
+}
+
+/// A server theme in the list: its name, who made it, and whether its pictures load.
+class _ServerThemeItem extends StatelessWidget {
+  const _ServerThemeItem({required this.theme});
+
+  final ThemePreset? theme;
+
+  @override
+  Widget build(BuildContext context) {
+    final preset = theme;
+    if (preset == null) return const Text('None');
+    final server = serverThemes.sheet.themeNamed(preset.label);
+    final broken = server == null ? 0 : serverThemes.brokenLinks(server).length;
+    final notes = [
+      if (server?.author case final author?) 'by $author',
+      if (broken > 0) '$broken ${broken == 1 ? "picture doesn't" : "pictures don't"} load',
+    ];
+    if (notes.isEmpty) return Text(preset.label);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(preset.label),
+        Text(
+          notes.join(' · '),
+          style: context.text.bodySmall?.copyWith(color: broken > 0 ? context.colors.error : context.colors.onSurfaceVariant),
+        ),
+      ],
+    );
+  }
+}
+
+// ─── Your own ────────────────────────────────────────────────────────────────
 
 class _SeedEditor extends StatefulWidget {
   const _SeedEditor({required this.seed});
@@ -240,30 +265,4 @@ class _Stepper extends StatelessWidget {
       ),
     );
   }
-}
-
-// ─── Advanced mode ───────────────────────────────────────────────────────────
-
-class _AdvancedEditor extends StatelessWidget {
-  const _AdvancedEditor({required this.controller, required this.errors});
-
-  final TextEditingController controller;
-  final List<String> errors;
-
-  @override
-  Widget build(BuildContext context) => RemoteTextField(
-    builder: (context, focusNode, highlighted) => TextField(
-      controller: controller,
-      focusNode: focusNode,
-      minLines: 5,
-      keyboardType: TextInputType.multiline,
-      maxLines: null,
-      decoration: InputDecoration(
-        label: const Text('Custom Colors'),
-        hintText: 'One "name = color" per line: #RRGGBB, #AARRGGBB, or hsl(h, s%, l%).',
-        error: errors.isEmpty ? null : Text(errors.join('\n')),
-        enabledBorder: highlighted ? remoteFieldBorder(context) : null,
-      ),
-    ),
-  );
 }
