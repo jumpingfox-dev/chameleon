@@ -370,6 +370,11 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
       // ES only plays stereo PCM, so surround was mixed down to stereo and passthrough never
       // reached the receiver. AudioTrack passes Dolby and DTS through, and plays multichannel.
       if (Platform.isAndroid) await mpv.setProperty('ao', 'audiotrack,opensles');
+      // Seeking: media_kit has mpv decode every frame between the keyframe before the target and
+      // the target itself, even though none of them are shown. Seeking back, that can be seconds
+      // of video, so the sound starts first and the picture plays fast to catch up. Letting mpv
+      // skip those frames gets the picture to the target in step with the sound.
+      await mpv.setProperty('hr-seek-framedrop', 'yes');
       await mpv.setProperty('audio-spdif', formats.join(','));
       await mpv.setProperty('audio-channels', s.passthrough ? 'auto' : (s.downmix ? 'stereo' : 'auto-safe'));
       // Night mode: a gentle compressor that lowers loud peaks and lifts quiet parts.
