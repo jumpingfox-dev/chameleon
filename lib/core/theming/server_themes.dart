@@ -119,6 +119,8 @@ class ServerThemes extends ChangeNotifier {
       unawaited(refresh());
     } else if (!_fetched) {
       unawaited(refresh());
+    } else if (!identical(jellyfin.genres, _genresLookedFor)) {
+      unawaited(_lookInFolders()); // the genres are in (or changed): their pictures in the folders
     }
   }
 
@@ -129,6 +131,8 @@ class ServerThemes extends ChangeNotifier {
     _server = server;
     _fetched = false;
     _links.clear();
+    _found = {};
+    _genresLookedFor = null;
     sheet = const ServerThemeSheet();
     loginDisclaimer = null;
     if (server == null) {
@@ -144,6 +148,8 @@ class ServerThemes extends ChangeNotifier {
     try {
       if (saved.existsSync()) {
         sheet = parseServerThemes(saved.readAsStringSync());
+        final found = File('${dir.path}/folders.json');
+        if (found.existsSync()) _found = _readFound(found.readAsStringSync());
         final branding = File('${dir.path}/branding.json');
         if (branding.existsSync()) loginDisclaimer = _disclaimerIn(jsonDecode(branding.readAsStringSync()));
       } else if (_brandingsNow[server] case final branding?) {
@@ -188,12 +194,114 @@ class ServerThemes extends ChangeNotifier {
       return;
     }
     await _saveSplash(on: splashOn);
-    await _saveAll([...sheet.defaults.urls, ...?sheet.themeNamed(activeTheme)?.urls]);
+    await _lookInFolders(save: false);
+    await _saveAll(_inUse(activeTheme));
     await _tidy(keepAlso: previous);
   }
 
-  /// Saves [theme]'s pictures (and the defaults'), when it's picked.
-  Future<void> saveTheme(String name) => _saveAll([...sheet.defaults.urls, ...?sheet.themeNamed(name)?.urls]);
+  /// Every picture the defaults and [theme] use: their own, and what was found in their genre
+  /// folders.
+  List<String> _inUse(String? theme) {
+    final t = sheet.themeNamed(theme);
+    return [
+      ...sheet.defaults.urls,
+      ...?t?.urls,
+      for (final folder in [?sheet.defaults.genreFolder, ?t?.genreFolder]) ...?_found[folder]?.values.nonNulls,
+    ];
+  }
+
+  /// Saves [theme]'s pictures (and the defaults'), when it's picked: looking in its genre folder
+  /// first, if it has one.
+  Future<void> saveTheme(String name) async {
+    await _lookInFolders(save: false, theme: name);
+    await _saveAll(_inUse(name));
+  }
+
+  // ─── Genre folders ─────────────────────────────────────────────────────────
+
+  /// What's been found in each genre folder (see [genreFolderFiles]): by folder, each genre's
+  /// picture address, or null for none there. Saved with the server's branding.
+  Map<String, Map<String, String?>> _found = {};
+
+  /// When each folder was last looked through.
+  final _lookedAt = <String, DateTime>{};
+
+  /// The genres the folders were last looked through for.
+  List<String>? _genresLookedFor;
+
+  /// How long what's found in a folder is trusted before it's looked through again.
+  static const _lookAgainAfter = Duration(days: 1);
+
+  static Map<String, Map<String, String?>> _readFound(String json) {
+    try {
+      return {
+        for (final MapEntry(:key, :value) in (jsonDecode(json) as Map<String, dynamic>).entries)
+          key: Map<String, String?>.from(value as Map),
+      };
+    } catch (_) {
+      return {};
+    }
+  }
+
+  /// Looks through the defaults' genre folder and [theme]'s (the current one's) for each of the
+  /// server's genres, unless that was done lately for these genres. With [save], saves what it
+  /// finds for offline (otherwise the caller does).
+  Future<void> _lookInFolders({bool save = true, String? theme}) async {
+    final server = _server, dir = _dir;
+    final genres = jellyfin.genres;
+    if (server == null || dir == null || genres.isEmpty) return;
+    _genresLookedFor = genres;
+    final folders = {?sheet.defaults.genreFolder, ?sheet.themeNamed(theme ?? activeTheme)?.genreFolder};
+    var changed = false;
+    for (final folder in folders) {
+      final known = _found[folder] ?? {};
+      final fresh = _lookedAt[folder] != null && DateTime.now().difference(_lookedAt[folder]!) < _lookAgainAfter;
+      final missing = [for (final g in genres) if (!known.containsKey(genreKey(g))) g];
+      if (fresh && missing.isEmpty) continue;
+      final lookFor = fresh ? missing : genres;
+      // A few genres at a time, each trying its names and kinds in order.
+      final results = <String, String?>{};
+      for (var i = 0; i < lookFor.length; i += 6) {
+        final batch = lookFor.skip(i).take(6).toList();
+        final hits = await Future.wait([for (final g in batch) _firstThere(genreFolderFiles(folder, g))]);
+        for (final (j, g) in batch.indexed) {
+          results[genreKey(g)] = hits[j];
+        }
+        if (server != _server) return;
+      }
+      _found[folder] = {...known, ...results};
+      _lookedAt[folder] = DateTime.now();
+      changed = true;
+    }
+    if (!changed || server != _server) return;
+    try {
+      await dir.create(recursive: true);
+      await File('${dir.path}/folders.json').writeAsString(jsonEncode(_found));
+    } catch (e) {
+      debugPrint('Genre folders: $e');
+    }
+    notifyListeners();
+    if (save) await _saveAll(_inUse(activeTheme));
+  }
+
+  /// The first of [urls] there is a file at, or null.
+  static Future<String?> _firstThere(List<String> urls) async {
+    for (final url in urls) {
+      if (await _isThere(url)) return url;
+    }
+    return null;
+  }
+
+  static Future<bool> _isThere(String url) async {
+    try {
+      final uri = Uri.parse(url);
+      if (uri.scheme == 'file') return File(uri.toFilePath()).existsSync();
+      final res = await http.head(uri).timeout(const Duration(seconds: 8));
+      return res.statusCode == 200;
+    } catch (_) {
+      return false;
+    }
+  }
 
   /// Tries every link in the CSS, for the theme picker's warnings.
   Future<void> checkLinks() async {
@@ -329,7 +437,14 @@ class ServerThemes extends ChangeNotifier {
   /// The pictures to try for [genre], in order (as [logo]).
   List<ImageProvider> genrePicture(String genre) {
     final key = genreKey(genre);
-    return _candidates([sheet.themeNamed(activeTheme)?.genres[key], sheet.defaults.genres[key]]);
+    final theme = sheet.themeNamed(activeTheme);
+    // The theme's own, then what's in its folder; then the defaults' own, then their folder's.
+    return _candidates([
+      theme?.genres[key],
+      if (theme?.genreFolder case final folder?) _found[folder]?[key],
+      sheet.defaults.genres[key],
+      if (sheet.defaults.genreFolder case final folder?) _found[folder]?[key],
+    ]);
   }
 
   /// Each address's saved copy if there is one; else the address itself, unless it's known not to
@@ -356,8 +471,17 @@ class ServerThemes extends ChangeNotifier {
 
   // ─── Warnings ──────────────────────────────────────────────────────────────
 
+  /// A genre folder with none of the server's genres' pictures in it (looked through, at least
+  /// once), as a broken link.
+  List<BrokenLink> _emptyFolder(String? folder) {
+    final found = folder == null ? null : _found[folder];
+    if (folder == null || found == null || found.isEmpty || found.values.any((u) => u != null)) return const [];
+    return [(what: 'Genre folder', url: folder, problem: 'none of your genres has a picture in it')];
+  }
+
   /// [theme]'s links that don't work (its own and the defaults' it relies on).
   List<BrokenLink> brokenLinks(ServerTheme theme) => [
+    ..._emptyFolder(theme.genreFolder),
     if (theme.logo case final url? when _links[url]?.broken ?? false) (what: 'Logo', url: url, problem: _links[url]!.problem!),
     for (final MapEntry(key: genre, value: url) in theme.genres.entries)
       if (_links[url]?.broken ?? false) (what: 'Genre: $genre', url: url, problem: _links[url]!.problem!),
@@ -367,6 +491,7 @@ class ServerThemes extends ChangeNotifier {
   List<BrokenLink> get brokenDefaults {
     final d = sheet.defaults;
     return [
+      ..._emptyFolder(d.genreFolder),
       if (d.logo case final url? when _links[url]?.broken ?? false) (what: 'Logo', url: url, problem: _links[url]!.problem!),
       for (final MapEntry(key: genre, value: url) in d.genres.entries)
         if (_links[url]?.broken ?? false) (what: 'Genre: $genre', url: url, problem: _links[url]!.problem!),
@@ -482,7 +607,13 @@ class ServerThemes extends ChangeNotifier {
     final dir = _dir;
     if (dir == null) return;
     final keep = {
-      for (final url in [...sheet.defaults.urls, for (final t in sheet.themes) ...t.urls, ...keepAlso]) _hash(url),
+      for (final url in [
+        ...sheet.defaults.urls,
+        for (final t in sheet.themes) ...t.urls,
+        for (final found in _found.values) ...found.values.nonNulls,
+        ...keepAlso,
+      ])
+        _hash(url),
     };
     final pictures = Directory('${dir.path}/pictures');
     if (!pictures.existsSync()) return;

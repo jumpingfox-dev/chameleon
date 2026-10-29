@@ -9,7 +9,7 @@ import '../../theme/theme_presets.dart';
 /// The server's defaults: its logo, its genre pictures, and the theme people start on.
 @immutable
 class ServerDefaults {
-  const ServerDefaults({this.theme, this.logo, this.genres = const {}, this.settings = const {}});
+  const ServerDefaults({this.theme, this.logo, this.genres = const {}, this.genreFolder, this.settings = const {}});
 
   /// The starting theme's name.
   final String? theme;
@@ -18,11 +18,14 @@ class ServerDefaults {
   final String? logo;
   final Map<String, String> genres; // by genre key (see genreKey)
 
+  /// A folder of genre pictures, named after the genres (see [genreFolderFiles]).
+  final String? genreFolder;
+
   /// Settings' defaults (as in assets/defaults.json), by their name there (camelCase, from
   /// `--heading-font` and so on), values as written. See AppDefaults.server.
   final Map<String, String> settings;
 
-  bool get isEmpty => theme == null && logo == null && genres.isEmpty && settings.isEmpty;
+  bool get isEmpty => theme == null && logo == null && genres.isEmpty && genreFolder == null && settings.isEmpty;
 }
 
 /// One theme: its colors, and maybe its own logo and genre pictures.
@@ -34,6 +37,7 @@ class ServerTheme {
     this.author,
     this.logo,
     this.genres = const {},
+    this.genreFolder,
     this.problems = const [],
   });
 
@@ -42,6 +46,9 @@ class ServerTheme {
   final Palette colors;
   final String? logo;
   final Map<String, String> genres;
+
+  /// A folder of genre pictures, named after the genres (see [genreFolderFiles]).
+  final String? genreFolder;
 
   /// What in it couldn't be read (a color that isn't one, say), for the theme picker.
   final List<String> problems;
@@ -67,6 +74,17 @@ class ServerThemeSheet {
 
   /// The defaults name a starting theme that isn't here.
   bool get missingDefaultTheme => defaults.theme != null && themeNamed(defaults.theme) == null;
+}
+
+/// The addresses to look for [genre]'s picture at in [folder], in order: named by its key
+/// (`science-fiction.png`), then by its name as it is (`Science Fiction.png`), as each kind of
+/// picture.
+List<String> genreFolderFiles(String folder, String genre) {
+  final base = folder.endsWith('/') ? folder : '$folder/';
+  return [
+    for (final name in {genreKey(genre), genre})
+      for (final ext in const ['png', 'jpg', 'jpeg', 'webp', 'gif', 'svg']) '$base${Uri.encodeComponent(name)}.$ext',
+  ];
 }
 
 /// How a genre's name is written in `--genre-<key>`: lower case, anything but letters and
@@ -103,6 +121,7 @@ ServerThemeSheet parseServerThemes(String css) {
         theme: _string(props['theme']),
         logo: _link(props['logo']),
         genres: _genres(props),
+        genreFolder: _link(props['genre-folder']),
         settings: {
           for (final MapEntry(:key, :value) in props.entries)
             if (key != 'theme' && key != 'logo' && !key.startsWith('genre-'))
@@ -120,6 +139,7 @@ ServerThemeSheet parseServerThemes(String css) {
           colors: colors,
           logo: _link(props['logo']),
           genres: _genres(props),
+          genreFolder: _link(props['genre-folder']),
           problems: problems,
         ),
       );
@@ -144,7 +164,7 @@ String? _link(String? value) {
 
 Map<String, String> _genres(Map<String, String> props) => {
   for (final MapEntry(:key, :value) in props.entries)
-    if (key.startsWith('genre-')) genreKey(key.substring(6)): ?_link(value),
+    if (key.startsWith('genre-') && key != 'genre-folder') genreKey(key.substring(6)): ?_link(value),
 };
 
 /// The theme's colors: its seed's (or the Default theme's), with its own on top.

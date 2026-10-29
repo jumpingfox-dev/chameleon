@@ -90,4 +90,31 @@ void main() {
     expect(parseServerThemes('.skinHeader { color: red; }').isEmpty, isTrue);
     expect(parseServerThemes('.chameleon-defaults { --theme: "Gone"; }').missingDefaultTheme, isTrue);
   });
+
+  group('genre folders', () {
+    test('tries the key, then the name, in each kind of picture', () {
+      final files = genreFolderFiles('https://example.com/genres', 'Science Fiction');
+      expect(files.first, 'https://example.com/genres/science-fiction.png');
+      expect(files, contains('https://example.com/genres/science-fiction.svg'));
+      expect(files, contains('https://example.com/genres/Science%20Fiction.jpg'));
+      expect(files.indexOf('https://example.com/genres/science-fiction.webp'),
+          lessThan(files.indexOf('https://example.com/genres/Science%20Fiction.png')));
+    });
+
+    test('a one-word genre is tried once per kind', () {
+      expect(genreFolderFiles('https://example.com/g/', 'action'), hasLength(6));
+    });
+
+    test('is read from the CSS, apart from the genres', () {
+      final sheet = parseServerThemes('''
+/* chameleon-defaults */
+.chameleon-defaults {
+  --genre-folder: url("https://example.com/genres/");
+  --genre-action: url("https://example.com/action.png");
+}
+''');
+      expect(sheet.defaults.genreFolder, 'https://example.com/genres/');
+      expect(sheet.defaults.genres.keys, ['action']);
+    });
+  });
 }

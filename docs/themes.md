@@ -26,6 +26,7 @@ There are two kinds of block:
   --logo: url("https://raw.githubusercontent.com/you/themes/main/logo.png");
   --genre-action: url("https://raw.githubusercontent.com/you/themes/main/action.jpg");
   --genre-science-fiction: url("https://raw.githubusercontent.com/you/themes/main/sci-fi.jpg");
+  --genre-folder: url("https://raw.githubusercontent.com/you/themes/main/genres/");
 }
 ```
 
@@ -34,6 +35,7 @@ There are two kinds of block:
 | `--theme` | The theme people start on, by name. Anyone can pick another (each person keeps their own). If it isn't the name of a theme below, people start on Chameleon's own look, and the theme picker says so. |
 | `--logo` | Shown in place of the "chameleon" wordmark: in the top bar, the menu and on the sign-in pages. |
 | `--genre-<name>` | A genre's picture, for genre cards set to **Theme pictures** (Settings › Appearance › Genre cards). |
+| `--genre-folder` | A folder of genre pictures, each named after its genre (see [Genre folders](#genre-folders)). A `--genre-<name>` takes precedence over the folder's picture for that genre. |
 
 | `--<setting>` | Any setting in [assets/defaults.json](defaults.md), by its name there in kebab-case: `headingFont` is `--heading-font`, `autoplayNext` is `--autoplay-next`. These take precedence over the app's own defaults; anyone who changes the setting in Settings keeps their choice. |
 
@@ -83,6 +85,7 @@ The name is in `data-name="..."`. The comment above it is optional; Chameleon sh
 | `--background`, `--foreground`, `--primary`, `--primary-foreground`, `--secondary`, `--secondary-foreground`, `--muted`, `--muted-foreground`, `--card`, `--border`, `--barrier`, `--destructive`, `--destructive-foreground`, `--error`, `--error-foreground` | Colors, as `#RRGGBB`, `#AARRGGBB` or `hsl(...)`. Anything you leave out comes from the seed. `--accent` is another name for `--primary`. |
 | `--logo` | This theme's logo, in place of the defaults' one. |
 | `--genre-<name>` | This theme's picture for a genre, in place of the defaults' one. |
+| `--genre-folder` | This theme's folder of genre pictures. A genre's picture comes from, in order: the theme's `--genre-<name>`, the theme's folder, the defaults' `--genre-<name>`, the defaults' folder. |
 
 A quick way to get the colors: build a theme in the app (Settings › Appearance › Theme ›
 Custom), and copy its seed code or colors.
@@ -92,6 +95,26 @@ Custom), and copy its seed code or colors.
 `--genre-` followed by the genre's name in lower case, with anything that isn't a letter or a
 digit as `-`: Action is `--genre-action`, Science Fiction is `--genre-science-fiction`,
 Talk-Show is `--genre-talk-show`.
+
+## Genre folders
+
+Rather than a `--genre-<name>` line for every genre, point `--genre-folder` at a folder and name
+each picture after its genre. For each of your server's genres, Chameleon tries, in order:
+
+1. Its name as in `--genre-<name>`: `science-fiction.png`, `science-fiction.jpg`, `.jpeg`, `.webp`, `.gif`, `.svg`
+2. Its name as Jellyfin has it: `Science Fiction.png`, and so on
+
+and uses the first one there. Genres with no picture in the folder get their icon card, as usual.
+
+A folder can't be listed over the web, so Chameleon asks for each name in turn: it looks through the
+folder when it connects (and again a day later), and saves what it found, so the pictures also work
+offline. With many genres and few pictures, the first look can take a few seconds; the cards show
+their icons until it's done.
+
+For a GitHub repository, use the `raw.githubusercontent.com` address of the folder, ending in `/`:
+`https://raw.githubusercontent.com/you/themes/main/genres/`. Anything served over the web works the
+same way, such as a folder on your own web server. The theme picker warns if none of your genres
+has a picture in the folder (a misspelled address, usually).
 
 ## Pictures
 
