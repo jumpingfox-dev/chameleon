@@ -117,6 +117,17 @@ class VideoSurface {
     }
   }
 
+  /// Another video is about to open in the same player (the next episode): mpv lets go of the
+  /// surface until it's open, then connects again, in the same order as for the first one (see
+  /// [_connect]). Staying connected while it opened could leave the decoder stuck, and with it
+  /// every play, pause and seek after it, which wait their turn behind it.
+  Future<void> beforeNext() async {
+    if (_released || _player == null) return;
+    _sized = false;
+    _update();
+    await _steps;
+  }
+
   /// Moves the surface to [rect], in physical pixels of the Flutter view.
   void _place(Rect rect) {
     if (_released || rect == _placed) return;

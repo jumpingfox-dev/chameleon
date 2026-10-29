@@ -1015,6 +1015,7 @@ builder: (context) => Dialog(child: Padding(
     _scrubCommit?.cancel();
     try {
       await _finishItem();
+      await _surface?.beforeNext(); // (mpv drawing on its own surface: see VideoSurface)
       await _player.stop();
     } catch (e) {
       debugPrint('Switching episodes: $e');
