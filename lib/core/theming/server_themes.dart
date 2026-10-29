@@ -470,10 +470,12 @@ class ServerThemes extends ChangeNotifier {
   /// work.
   List<ImageProvider> _candidates(List<String?> urls) => [
     for (final url in urls.nonNulls)
-      if (_savedFile(url) case final file?)
-        FileImage(file)
-      else if (_loaded[url] case final picture?)
+      // Fetched this run first: the saved copy can be an older picture at the same address (and
+      // Flutter keeps showing what it decoded from that file, even once it's saved over).
+      if (_loaded[url] case final picture?)
         picture
+      else if (_savedFile(url) case final file?)
+        FileImage(file)
       // (Not an SVG straight from its address: it has to be turned into a picture first.)
       else if (!(_links[url]?.broken ?? false) && !_isSvgLink(url))
         ?_provider(url),
