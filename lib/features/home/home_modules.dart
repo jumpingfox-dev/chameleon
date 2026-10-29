@@ -562,7 +562,7 @@ class _HomeModuleViewState extends State<HomeModuleView>
   @override
   void initState() {
     super.initState();
-    favoritesChanged.addListener(_load);
+    favoritesChanged.addListener(_onFavorites);
     homeVisible.addListener(_refreshIfStale);
     watchProgressChanged.addListener(_onWatched);
     sectionSettings.addListener(_onSettings);
@@ -571,12 +571,12 @@ class _HomeModuleViewState extends State<HomeModuleView>
     final cached = appCache.peek(_cacheKey(widget.module.id), fromJson: HomeModuleContent.fromJson);
     // Loaded with other settings: not shown, loaded again.
     _content = cached?.signature == _signature ? cached : null;
-    if (_content == null || !appCache.isFresh(_cacheKey(widget.module.id))) _load();
+    if (_content == null || !_fresh) _load();
   }
 
   @override
   void dispose() {
-    favoritesChanged.removeListener(_load);
+    favoritesChanged.removeListener(_onFavorites);
     homeVisible.removeListener(_refreshIfStale);
     watchProgressChanged.removeListener(_onWatched);
     sectionSettings.removeListener(_onSettings);
@@ -589,8 +589,20 @@ class _HomeModuleViewState extends State<HomeModuleView>
     if (widget.module.type.followsProgress) _load();
   }
 
+  /// A favorite added or removed: just Favorites shows it now. The rest keep what they have
+  /// until they're due (see [_fresh]).
+  void _onFavorites() {
+    if (widget.module.type == HomeModuleType.favorites) _load();
+  }
+
+  /// How long Home keeps what it's showing before asking again: so it stays put while you
+  /// come and go, rather than changing under you.
+  static const _keepFor = Duration(minutes: 20);
+
+  bool get _fresh => appCache.isFresh(_cacheKey(widget.module.id), within: _keepFor);
+
   void _refreshIfStale() {
-    if (!appCache.isFresh(_cacheKey(widget.module.id))) _load();
+    if (!_fresh) _load();
   }
 
   /// Its settings changed: loaded again with them (just redrawn, for those that only change how

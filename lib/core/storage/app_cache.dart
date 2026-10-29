@@ -55,9 +55,10 @@ class AppCache {
     return value is T ? value : null;
   }
 
-  bool isFresh(String key) {
+  /// Whether [key] was cached less than [ttl] ago ([within], if given).
+  bool isFresh(String key, {Duration? within}) {
     final entry = _entries[key];
-    return entry != null && DateTime.now().difference(entry.storedAt) < ttl;
+    return entry != null && DateTime.now().difference(entry.storedAt) < (within ?? ttl);
   }
 
   /// Caches [value]. With [toJson], it's also saved for next time.
