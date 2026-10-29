@@ -380,7 +380,9 @@ class ServerThemes extends ChangeNotifier {
     final sheet = branding == null
         ? (signedIn ? serverThemes.sheet : const ServerThemeSheet())
         : parseServerThemes((branding['CustomCss'] as String?) ?? '');
-    final (logo, splash) = await (logoOf(url), splashOf(url)).wait;
+    // Signed in: the logo your own look has, as in the app's top bar (none, for a theme without
+    // one: the wordmark); not the starting theme's, which is for whoever's not signed in yet.
+    final (logo, splash) = await (signedIn ? Future.value(serverThemes.logo) : logoOf(url), splashOf(url)).wait;
     return SignInBranding(
       logo: logo,
       splash: splash,
