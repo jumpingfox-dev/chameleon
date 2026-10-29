@@ -70,13 +70,16 @@ class KeepClearOfEdges extends StatelessWidget {
       if (!hasFocus || FocusManager.instance.highlightMode != FocusHighlightMode.traditional) return;
       // After the frame: Flutter's own scroll (just far enough to show it) goes first, then this.
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (context.mounted) _reveal(context);
+        if (context.mounted) reveal(context, margin: margin);
       });
     },
     child: child,
   );
 
-  void _reveal(BuildContext context) {
+  /// Scrolls the page just enough to bring [context]'s widget clear of its top and bottom edges
+  /// (by [margin], a share of the page's height), if it isn't already; a widget too tall for
+  /// that gets its top in view instead.
+  static void reveal(BuildContext context, {double margin = 0.12}) {
     final item = context.findRenderObject();
     if (item is! RenderBox || !item.attached) return;
     // The page's own scrolling: the nearest area that scrolls up and down (a grid laid out whole
@@ -214,38 +217,35 @@ class _KeyboardReadableState extends State<KeyboardReadable> {
     onFocusChange: (_) {
       final reading = _node.hasPrimaryFocus;
       if (reading != _reading) setState(() => _reading = reading);
-      // Arriving by keyboard: bring the start of the content near the top.
-      if (reading && _keyboard) {
-        Scrollable.ensureVisible(
-          context,
-          alignment: 0.1,
-          duration: const Duration(milliseconds: 300),
-          curve: Curves.easeOutCubic,
-        );
-      }
+      // Arriving by keyboard: the page grows by as much as it needs to show all of it, from
+      // where it is (or, too long for that, its start at the top), rather than jumping it up.
+      if (reading && _keyboard) KeepClearOfEdges.reveal(context, margin: 0.06);
     },
-    // The reading bar sits in the margin just left of the content, so the content itself
-    // never moves, whether it's expanded, being read, or neither.
+    // While reading: the content on a box in the theme's color, reaching into the margin
+    // around it, so the content itself never moves, whether it's expanded, being read, or neither.
     child: Stack(
-      clipBehavior: Clip.none, // the bar sits outside the content's edge
+      clipBehavior: Clip.none, // the box reaches past the content's edges
       children: [
-        widget.child,
         Positioned(
           left: -12,
-          top: 0,
-          bottom: 0,
-          child: AnimatedOpacity(
-            opacity: widget.enabled && _reading && _keyboard ? 1 : 0,
-            duration: const Duration(milliseconds: 150),
-            child: Container(
-              width: 3,
-              decoration: BoxDecoration(
-                color: context.colors.primary,
-                borderRadius: BorderRadius.circular(2),
+          right: -12,
+          top: -8,
+          bottom: -8,
+          child: IgnorePointer(
+            child: AnimatedOpacity(
+              opacity: widget.enabled && _reading && _keyboard ? 1 : 0,
+              duration: const Duration(milliseconds: 150),
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  // Solid (it can be over a bright backdrop): the card color, tinted the theme's.
+                  color: Color.alphaBlend(context.colors.primary.withValues(alpha: 0.16), context.colors.surfaceContainer),
+                  borderRadius: BorderRadius.circular(10),
+                ),
               ),
             ),
           ),
         ),
+        widget.child, // over the box
       ],
     ),
   );

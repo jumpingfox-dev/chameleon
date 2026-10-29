@@ -71,38 +71,40 @@ class _ExpandableTextState extends State<ExpandableText> {
               WidgetSpan(
                 alignment: PlaceholderAlignment.baseline,
                 baseline: TextBaseline.alphabetic,
-                child: Tappable(
-                  focusNode: _linkFocus,
-                  onPress: _toggle,
-                  builder: (context, states, _) {
-                    final active = isHighlighted(states);
-                    final color = context.colors.primary;
-                    return Row(
-                      mainAxisSize: MainAxisSize.min,
-                      spacing: 4,
-                      children: [
-                        Text(
-                          _expanded ? 'Show less' : 'Read more',
-                          style: context.text.bodyMedium?.copyWith(
-                            color: color,
-                            fontWeight: FontWeight.w600,
-                            decoration: active
-                                ? TextDecoration.underline
-                                : TextDecoration.none,
-                            decorationColor: color,
+                // Landing on it, kept clear of the screen's top and bottom edges.
+                child: KeepClearOfEdges(
+                  child: Tappable(
+                    focusNode: _linkFocus,
+                    onPress: _toggle,
+                    builder: (context, states, _) {
+                      final active = isHighlighted(states);
+                      final color = context.colors.primary;
+                      return Row(
+                        mainAxisSize: MainAxisSize.min,
+                        spacing: 4,
+                        children: [
+                          Text(
+                            _expanded ? 'Show less' : 'Read more',
+                            // The same size as the text it follows.
+                            style: style.copyWith(
+                              color: color,
+                              fontWeight: FontWeight.w600,
+                              decoration: active
+                                  ? TextDecoration.underline
+                                  : TextDecoration.none,
+                              decorationColor: color,
+                            ),
                           ),
-                        ),
-                        Icon(
-                          _expanded
-                              ? appIcons.collapse
-                              : appIcons.expand,
-                          size: 14,
-                          color: color,
-                          fill: 1
-                        ),
-                      ],
-                    );
-                  },
+                          Icon(
+                            _expanded ? appIcons.collapse : appIcons.expand,
+                            size: (style.fontSize ?? 14) * 0.9,
+                            color: color,
+                            fill: 1,
+                          ),
+                        ],
+                      );
+                    },
+                  ),
                 ),
               ),
             ],
