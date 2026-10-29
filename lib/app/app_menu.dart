@@ -419,43 +419,45 @@ class _MenuItem extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colors = context.colors;
-    final foreground = selected ? colors.onPrimary : colors.onSurface;
     return Padding(
       padding: const EdgeInsets.only(bottom: 2),
       child: Tappable(
         focusNode: focusNode,
         onPress: onPress,
-        builder: (context, states, child) {
+        builder: (context, states, _) {
           final highlighted = isHighlighted(states);
+          // Selected and focused or hovered: the fill and the text and icon on it go a shade darker,
+          // in every theme (toward the text's color made it lighter in some, darker in others).
+          Color darker(Color c) => highlighted ? Color.lerp(c, const Color(0xFF000000), 0.25)! : c;
+          final foreground = selected ? darker(colors.onPrimary) : colors.onSurface;
           return AnimatedContainer(
             duration: const Duration(milliseconds: 120),
             padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
             decoration: BoxDecoration(
-              // The page you're on is filled in; under the remote or the pointer, a little lighter.
+              // The page you're on is filled in; under the remote or the pointer, a little darker.
               color: selected
-                  ? (highlighted ? Color.lerp(colors.primary, colors.onPrimary, 0.35) : colors.primary)
+                  ? darker(colors.primary)
                   : highlighted
                   ? colors.onSurface.withValues(alpha: 0.10)
                   : const Color(0x00000000),
               borderRadius: BorderRadius.circular(12),
             ),
-            child: child,
+            child: Row(
+              spacing: 14,
+              children: [
+                leading ?? Icon(icon, size: 24, color: foreground, fill: 1),
+                Expanded(
+                  child: Text(
+                    label,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: context.text.titleMedium?.copyWith(color: foreground),
+                  ),
+                ),
+              ],
+            ),
           );
         },
-        child: Row(
-          spacing: 14,
-          children: [
-            leading ?? Icon(icon, size: 24, color: foreground, fill: 1),
-            Expanded(
-              child: Text(
-                label,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: context.text.titleMedium?.copyWith(color: foreground),
-              ),
-            ),
-          ],
-        ),
       ),
     );
   }
