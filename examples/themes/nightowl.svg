@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="600" height="200" viewBox="0 0 600 200">
+  <!-- Owl: head, ears, eyes, beak -->
+  <path d="M40 60 L62 30 L80 56 Q100 48 120 56 L138 30 L160 60 Q172 100 150 140 Q100 178 50 140 Q28 100 40 60 Z" fill="#F5A524"/>
+  <circle cx="78" cy="96" r="24" fill="#0E1426"/>
+  <circle cx="122" cy="96" r="24" fill="#0E1426"/>
+  <circle cx="78" cy="96" r="11" fill="#F5A524"/>
+  <circle cx="122" cy="96" r="11" fill="#F5A524"/>
+  <circle cx="82" cy="92" r="4" fill="#FFFFFF"/>
+  <circle cx="126" cy="92" r="4" fill="#FFFFFF"/>
+  <path d="M92 122 L100 136 L108 122 Z" fill="#0E1426"/>
+  <text x="190" y="102" font-family="sans-serif" font-size="64" font-weight="800" fill="#F5F1E6" letter-spacing="2">NIGHTOWL</text>
+  <text x="194" y="148" font-family="sans-serif" font-size="30" font-weight="600" fill="#F5A524" letter-spacing="14">CINEMA</text>
+</svg>

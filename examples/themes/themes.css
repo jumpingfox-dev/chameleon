@@ -1,0 +1,89 @@
+/* Made-up brands for trying out server themes in Chameleon: paste all of this into Jellyfin's
+   Dashboard › General › Custom CSS code. See docs/themes.md. */
+
+/* chameleon-defaults
+   version: 1 */
+.chameleon-defaults {
+  --theme: "Nightowl Cinema";
+  --logo: url("https://raw.githubusercontent.com/jumpingfox-dev/Chameleon/main/examples/themes/nightowl.svg");
+}
+
+/* chameleon-theme: Nightowl Cinema
+   author: Chameleon examples
+   version: 1 */
+.chameleon-theme[data-name="Nightowl Cinema"] {
+  --seed: 225-038-8-1;
+  --logo: url("https://raw.githubusercontent.com/jumpingfox-dev/Chameleon/main/examples/themes/nightowl.svg");
+  --background: #0E1426;
+  --foreground: #F5F1E6;
+  --card: #161E36;
+  --primary: #F5A524;
+  --primary-foreground: #1A1305;
+  --muted-foreground: #A7B0C8;
+  --border: #26304F;
+}
+
+/* chameleon-theme: Popcorn Palace
+   author: Chameleon examples
+   version: 1 */
+.chameleon-theme[data-name="Popcorn Palace"] {
+  --seed: 000-000-7-1;
+  --logo: url("https://raw.githubusercontent.com/jumpingfox-dev/Chameleon/main/examples/themes/popcorn.svg");
+  --background: #1A0E0E;
+  --foreground: #FFF4D6;
+  --card: #261515;
+  --primary: #E23D3D;
+  --primary-foreground: #FFF4D6;
+  --muted-foreground: #C9B48F;
+  --border: #3A2020;
+}
+
+/* chameleon-theme: Driftwood Media
+   author: Chameleon examples
+   version: 1 */
+.chameleon-theme[data-name="Driftwood Media"] {
+  --seed: 185-175-6-1;
+  --logo: url("https://raw.githubusercontent.com/jumpingfox-dev/Chameleon/main/examples/themes/driftwood.svg");
+  --background: #0C1C1F;
+  --foreground: #EAF6F4;
+  --card: #12282C;
+  --primary: #2BB3A6;
+  --primary-foreground: #06201E;
+  --muted-foreground: #8FB3AE;
+  --border: #1D3B40;
+}
+
+/* chameleon-theme: Neon Arcade
+   author: Chameleon examples
+   version: 1 */
+.chameleon-theme[data-name="Neon Arcade"] {
+  --seed: 270-325-9-1;
+  --logo: url("https://raw.githubusercontent.com/jumpingfox-dev/Chameleon/main/examples/themes/neon.svg");
+  --background: #140A26;
+  --foreground: #F4ECFF;
+  --card: #1E1238;
+  --primary: #FF3EA5;
+  --primary-foreground: #FFFFFF;
+  --secondary: #2DE2E6;
+  --secondary-foreground: #06282A;
+  --muted-foreground: #A99BC6;
+  --border: #33215A;
+}
+
+/* chameleon-theme: Paper Lantern
+   author: Chameleon examples
+   version: 1 */
+.chameleon-theme[data-name="Paper Lantern"] {
+  --brightness: light;
+  --logo: url("https://raw.githubusercontent.com/jumpingfox-dev/Chameleon/main/examples/themes/lantern.svg");
+  --background: #F7EFE3;
+  --foreground: #3B2A22;
+  --card: #FFF8EE;
+  --primary: #D9472B;
+  --primary-foreground: #FFFFFF;
+  --secondary: #EADBC8;
+  --secondary-foreground: #3B2A22;
+  --muted: #EFE3D3;
+  --muted-foreground: #7A6355;
+  --border: #E4D5C2;
+}

@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="600" height="200" viewBox="0 0 600 200">
+  <!-- Popcorn bucket with kernels -->
+  <circle cx="62" cy="58" r="22" fill="#FFF4D6"/>
+  <circle cx="96" cy="44" r="24" fill="#FFF4D6"/>
+  <circle cx="130" cy="58" r="22" fill="#FFF4D6"/>
+  <circle cx="80" cy="72" r="20" fill="#FFE7A3"/>
+  <circle cx="114" cy="72" r="20" fill="#FFE7A3"/>
+  <path d="M44 78 L148 78 L134 178 L58 178 Z" fill="#E23D3D"/>
+  <path d="M70 78 L78 178 L92 178 L88 78 Z" fill="#FFF4D6"/>
+  <path d="M104 78 L100 178 L114 178 L122 78 Z" fill="#FFF4D6"/>
+  <text x="176" y="104" font-family="serif" font-size="66" font-weight="700" fill="#FFF4D6">Popcorn</text>
+  <text x="180" y="154" font-family="serif" font-size="40" font-style="italic" font-weight="700" fill="#E23D3D">Palace</text>
+</svg>

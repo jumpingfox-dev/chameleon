@@ -36,7 +36,6 @@ There are two kinds of block:
 | `--logo` | Shown in place of the "chameleon" wordmark: in the top bar, the menu and on the sign-in pages. |
 | `--genre-<name>` | A genre's picture, for genre cards set to **Theme pictures** (Settings › Appearance › Genre cards). |
 | `--genre-folder` | A folder of genre pictures, each named after its genre (see [Genre folders](#genre-folders)). A `--genre-<name>` takes precedence over the folder's picture for that genre. |
-
 | `--<setting>` | Any setting in [assets/defaults.json](defaults.md), by its name there in kebab-case: `headingFont` is `--heading-font`, `autoplayNext` is `--autoplay-next`. These take precedence over the app's own defaults; anyone who changes the setting in Settings keeps their choice. |
 | `--section-<section>-<option>` | A Home section's default (see [sections](defaults.md#sections)), in kebab-case: `--section-continue-watching-limit: 30`, `--section-carousel-seconds: 10`, `--section-genres-genre-count: 6`, `--section-favorites-kinds: Movie, Series`. A favorite kind's name: `--section-favorites-names-season: false`. `--section-collection-…` and `--section-genre-…` set every Collection and Genre row's. |
 

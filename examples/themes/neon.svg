@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="600" height="200" viewBox="0 0 600 200">
+  <!-- Retro sun with stripes, and a grid -->
+  <defs>
+    <linearGradient id="sun" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#FFD84D"/>
+      <stop offset="1" stop-color="#FF3EA5"/>
+    </linearGradient>
+    <clipPath id="stripes">
+      <rect x="30" y="0" width="140" height="100"/>
+      <rect x="30" y="107" width="140" height="11"/>
+      <rect x="30" y="127" width="140" height="11"/>
+      <rect x="30" y="149" width="140" height="51"/>
+    </clipPath>
+  </defs>
+  <circle cx="100" cy="92" r="62" fill="url(#sun)" clip-path="url(#stripes)"/>
+  <path d="M20 160 L180 160 M40 172 L160 172 M60 184 L140 184" stroke="#2DE2E6" stroke-width="4"/>
+  <text x="200" y="104" font-family="sans-serif" font-size="66" font-weight="900" font-style="italic" fill="#2DE2E6">NEON</text>
+  <text x="204" y="156" font-family="sans-serif" font-size="46" font-weight="900" font-style="italic" fill="#FF3EA5" letter-spacing="6">ARCADE</text>
+</svg>

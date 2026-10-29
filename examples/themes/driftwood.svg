@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="600" height="200" viewBox="0 0 600 200">
+  <!-- Sun over waves -->
+  <circle cx="100" cy="86" r="40" fill="#F2C38B"/>
+  <path d="M30 120 Q55 100 80 120 T130 120 T180 120 L180 140 Q155 120 130 140 T80 140 T30 140 Z" fill="#2BB3A6"/>
+  <path d="M30 148 Q55 128 80 148 T130 148 T180 148 L180 166 Q155 146 130 166 T80 166 T30 166 Z" fill="#1D7F78"/>
+  <text x="204" y="106" font-family="sans-serif" font-size="58" font-weight="300" fill="#EAF6F4" letter-spacing="4">driftwood</text>
+  <text x="208" y="150" font-family="sans-serif" font-size="28" font-weight="700" fill="#2BB3A6" letter-spacing="12">MEDIA</text>
+</svg>
