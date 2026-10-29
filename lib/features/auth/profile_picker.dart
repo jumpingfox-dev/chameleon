@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:dart_jellyfin/dart_jellyfin.dart';
 import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
@@ -10,6 +12,7 @@ import '../../widgets/app_logo.dart';
 import '../../widgets/server_backdrop.dart';
 import '../../theme/theme.dart';
 import '../../core/focus/focus_rows.dart';
+import '../../core/jellyfin/profile_pictures.dart';
 
 // ─── "Who's watching?" ───────────────────────────────────────────────────────
 //
@@ -55,11 +58,21 @@ class ProfilePickerScreen extends StatelessWidget {
                       ),
                       const SizedBox(height: 32),
                       ProfilePicker(server: server),
-                      // Opened from your profile picture: back to where you were.
+                      // Opened from your profile picture: back to where you were, or sign out
+                      // (as in the profile menu: whoever's signed in now is removed from here).
                       if (jellyfin.isConnected && GoRouter.of(context).canPop()) ...[
                         const SizedBox(height: 16),
-                        // Filled, so it reads over a splash screen.
-                        FilledButton.tonal(onPressed: () => GoRouter.of(context).pop(), child: const Text('Back')),
+                        FocusRow(
+                          child: Row(
+                            mainAxisSize: .min,
+                            spacing: 12,
+                            children: [
+                              // Filled, so they read over a splash screen.
+                              FilledButton.tonal(onPressed: () => GoRouter.of(context).pop(), child: const Text('Back')),
+                              FilledButton.tonal(onPressed: jellyfin.signOut, child: const Text('Sign out')),
+                            ],
+                          ),
+                        ),
                       ],
                     ],
                   ),
@@ -105,8 +118,11 @@ class ProfilePicker extends StatefulWidget {
 }
 
 class _ProfilePickerState extends State<ProfilePicker> {
-  List<PublicUser> _public = const [];
-  bool _loadingPublic = true;
+  // The server's users as last listed, at once, while they're asked for again.
+  late List<PublicUser> _public = _savedUsers;
+  late bool _loadingPublic = _public.isEmpty;
+
+  List<PublicUser> get _savedUsers => _server == null ? const [] : ProfilePictures.usersOf(_server!) ?? const [];
   String? _busyKey; // the tile being signed in, shows a spinner
   String? _error;
 
@@ -124,8 +140,8 @@ class _ProfilePickerState extends State<ProfilePicker> {
     if (server == _server) return;
     setState(() {
       _server = server;
-      _public = const [];
-      _loadingPublic = true;
+      _public = _savedUsers;
+      _loadingPublic = _public.isEmpty;
       _error = null;
     });
     _loadPublicUsers();
@@ -292,9 +308,10 @@ class _ProfilePickerState extends State<ProfilePicker> {
   );
 }
 
-/// Profiles in one row that scrolls sideways, centered while they all fit, with room above and
-/// below for a tile to grow as it's focused. Used by "Who's watching?" and sign-in.
-class ProfileRow extends StatelessWidget {
+/// Profiles in one row that scrolls sideways under a ring fixed in its middle: the profile
+/// you're on sits in the ring, and the row slides along to bring each one there (on touch
+/// screens, it settles with the nearest one in it). Used by "Who's watching?" and sign-in.
+class ProfileRow extends StatefulWidget {
   const ProfileRow({super.key, required this.children, this.spacing = 24});
 
   final List<Widget> children;
@@ -303,41 +320,111 @@ class ProfileRow extends StatelessWidget {
   /// How far in from each side the row fades out.
   static const _fade = 28.0;
 
+  /// Room above and below for the profile in the ring to grow.
+  static const _vertical = 12.0;
+
+  @override
+  State<ProfileRow> createState() => _ProfileRowState();
+}
+
+class _ProfileRowState extends State<ProfileRow> {
+  final _scroll = ScrollController();
+  late List<GlobalKey> _keys = _keysFor(widget.children);
+
+  List<GlobalKey> _keysFor(List<Widget> children) => [for (final _ in children) GlobalKey()];
+
+  @override
+  void didUpdateWidget(ProfileRow old) {
+    super.didUpdateWidget(old);
+    if (old.children.length != widget.children.length) _keys = _keysFor(widget.children);
+  }
+
+  @override
+  void dispose() {
+    _scroll.dispose();
+    super.dispose();
+  }
+
+  /// Scrolling stopped (a swipe, say): the nearest profile slides into the ring.
+  bool _onScrollEnd(ScrollEndNotification n) {
+    final row = context.findRenderObject() as RenderBox?;
+    if (row == null) return false;
+    final middle = row.size.width / 2;
+    double? nearest;
+    for (final (i, key) in _keys.indexed) {
+      if (widget.children[i] is! ProfileTile) continue;
+      final box = key.currentContext?.findRenderObject() as RenderBox?;
+      if (box == null || !box.attached) continue;
+      final centre = box.localToGlobal(box.size.center(Offset.zero), ancestor: row).dx;
+      if (nearest == null || (centre - middle).abs() < nearest.abs()) nearest = centre - middle;
+    }
+    if (nearest == null || nearest.abs() < 0.5) return false;
+    final target = (_scroll.offset + nearest).clamp(_scroll.position.minScrollExtent, _scroll.position.maxScrollExtent);
+    // (After this frame: not from inside the scroll's own notification.)
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (_scroll.hasClients) _scroll.animateTo(target, duration: const Duration(milliseconds: 220), curve: Curves.easeOutCubic);
+    });
+    return false;
+  }
+
   @override
   Widget build(BuildContext context) => LayoutBuilder(
-    // Kept inside its space, fading out at both sides, so profiles scrolled past the edge slip
-    // away softly instead of being cut off (or drawn outside the card).
-    builder: (context, constraints) => ShaderMask(
-      blendMode: BlendMode.dstIn,
-      shaderCallback: (bounds) => LinearGradient(
-        colors: const [Color(0x00000000), Color(0xFF000000), Color(0xFF000000), Color(0x00000000)],
-        stops: [0, _fade / bounds.width, 1 - _fade / bounds.width, 1],
-      ).createShader(bounds),
-      child: FocusRow(
-      child: SingleChildScrollView(
-        scrollDirection: Axis.horizontal,
-        // Room at the ends to scroll the first and last clear of the fade, and above and below
-        // for a tile to grow as it's focused.
-        padding: const EdgeInsets.symmetric(vertical: 12, horizontal: _fade),
-        child: ConstrainedBox(
-          constraints: BoxConstraints(minWidth: constraints.maxWidth - 2 * _fade),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            spacing: spacing,
-            children: children,
+    builder: (context, constraints) {
+      // Room at the ends so the first and last profiles can sit in the ring, in the middle.
+      final side = math.max(0.0, (constraints.maxWidth - ProfileTile.width) / 2);
+      final theme = Theme.of(context);
+      return Stack(
+        children: [
+          // Kept inside its space, fading out at both sides, so profiles slide away softly.
+          ShaderMask(
+            blendMode: BlendMode.dstIn,
+            shaderCallback: (bounds) => LinearGradient(
+              colors: const [Color(0x00000000), Color(0xFF000000), Color(0xFF000000), Color(0x00000000)],
+              stops: [0, ProfileRow._fade / bounds.width, 1 - ProfileRow._fade / bounds.width, 1],
+            ).createShader(bounds),
+            child: NotificationListener<ScrollEndNotification>(
+              onNotification: _onScrollEnd,
+              child: FocusRow(
+                child: SingleChildScrollView(
+                  controller: _scroll,
+                  scrollDirection: Axis.horizontal,
+                  padding: EdgeInsets.symmetric(vertical: ProfileRow._vertical, horizontal: side),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    spacing: widget.spacing,
+                    children: [
+                      for (final (i, child) in widget.children.indexed) KeyedSubtree(key: _keys[i], child: child),
+                    ],
+                  ),
+                ),
+              ),
+            ),
           ),
-        ),
-      ),
-    ),
-    ),
+          // The ring, fixed in the middle, over the picture of whoever's in it.
+          Positioned(
+            top: ProfileRow._vertical + ProfileTile.pictureSize / 2 - ProfileTile.ringSize / 2,
+            left: constraints.maxWidth / 2 - ProfileTile.ringSize / 2,
+            child: IgnorePointer(
+              child: Container(
+                width: ProfileTile.ringSize,
+                height: ProfileTile.ringSize,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  border: Border.all(color: theme.colorScheme.primary, width: 3),
+                ),
+              ),
+            ),
+          ),
+        ],
+      );
+    },
   );
 }
 
 // ─── A tile ──────────────────────────────────────────────────────────────────
 
-/// A big round avatar with the name under it. Grows and gets a ring when focused,
-/// so it's easy to see from across the room.
+/// A big round avatar with the name under it. Grows when focused, and slides into the
+/// [ProfileRow]'s ring, so it's easy to see from across the room.
 class ProfileTile extends StatefulWidget {
   const ProfileTile({
     super.key,
@@ -356,11 +443,16 @@ class ProfileTile extends StatefulWidget {
   final IconData? icon; // instead of a picture, for Add account
   final bool current; // the user signed in now
 
-  /// Signed in on this device already: switching needs no password. Marked with a check.
+  /// Signed in on this device already: switching needs no password. Says so under the name.
   final bool signedIn;
   final bool busy;
   final bool autofocus;
   final VoidCallback onPress;
+
+  /// Its width, its picture's (with the room around it), and the ring's that it sits in.
+  static const width = _ProfileTileState._size + 24;
+  static const pictureSize = _ProfileTileState._size + 14;
+  static const ringSize = pictureSize * 1.08 + 10;
 
   @override
   State<ProfileTile> createState() => _ProfileTileState();
@@ -380,12 +472,23 @@ class _ProfileTileState extends State<ProfileTile> {
     // The initials sit under the picture, so they show while it loads or if it can't.
     final Widget picture = CircleAvatar(
       radius: _size / 2,
-      foregroundImage: widget.icon == null && widget.imageUrl != null ? NetworkImage(widget.imageUrl!) : null,
+      foregroundImage: widget.icon == null && widget.imageUrl != null ? ProfilePictures.image(widget.imageUrl!) : null,
       child: widget.icon != null ? Icon(widget.icon, size: 44, fill: 1) : initials,
     );
 
     return FocusableActionDetector(
       autofocus: widget.autofocus,
+      // Focused: slides into the row's ring.
+      onFocusChange: (focused) {
+        if (focused) {
+          Scrollable.ensureVisible(
+            context,
+            alignment: 0.5,
+            duration: const Duration(milliseconds: 220),
+            curve: Curves.easeOutCubic,
+          );
+        }
+      },
       onShowFocusHighlight: (v) => setState(() => _focused = v),
       onShowHoverHighlight: (v) => setState(() => _hovered = v),
       mouseCursor: SystemMouseCursors.click,
@@ -401,7 +504,7 @@ class _ProfileTileState extends State<ProfileTile> {
       child: GestureDetector(
         onTap: widget.onPress,
         child: SizedBox(
-          width: _size + 24,
+          width: ProfileTile.width,
           child: Column(
             mainAxisSize: .min,
             spacing: 10,
@@ -420,31 +523,13 @@ class _ProfileTileState extends State<ProfileTile> {
                         shape: BoxShape.circle,
                         border: Border.all(
                           width: 3,
-                          color: active
-                              ? theme.colorScheme.primary
-                              : widget.current
-                              ? theme.colorScheme.outlineVariant
-                              : Colors.transparent,
+                          // (The row's ring marks the one you're on.)
+                          color: widget.current && !active ? theme.colorScheme.outlineVariant : Colors.transparent,
                         ),
                       ),
                       child: Opacity(opacity: widget.busy ? 0.4 : 1, child: picture),
                     ),
                     if (widget.busy) const CircularProgressIndicator(),
-                    // Signed in here: a check on the picture's corner.
-                    if (widget.signedIn || widget.current)
-                      Positioned(
-                        right: 4,
-                        bottom: 4,
-                        child: Container(
-                          padding: const EdgeInsets.all(4),
-                          decoration: BoxDecoration(
-                            shape: BoxShape.circle,
-                            color: theme.colorScheme.primary,
-                            border: Border.all(color: theme.scaffoldBackgroundColor, width: 3),
-                          ),
-                          child: Icon(appIcons.check, size: 18, color: theme.colorScheme.onPrimary),
-                        ),
-                      ),
                   ],
                 ),
               ),

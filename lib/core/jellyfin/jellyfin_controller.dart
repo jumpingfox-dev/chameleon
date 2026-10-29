@@ -12,6 +12,7 @@ import '../storage/app_cache.dart';
 import '../storage/database.dart';
 import '../storage/storage.dart';
 import '../format/format.dart';
+import 'profile_pictures.dart';
 import 'together.dart';
 
 
@@ -336,7 +337,7 @@ class JellyfinController extends ChangeNotifier {
     try {
       final res = await http.get(Uri.parse('$url/Users/Public')).timeout(const Duration(seconds: 8));
       if (res.statusCode != 200) return const [];
-      return [
+      final users = [
         for (final u in jsonDecode(res.body) as List)
           if (u is Map && u['Id'] is String)
             PublicUser(
@@ -347,6 +348,9 @@ class JellyfinController extends ChangeNotifier {
               imageTag: u['PrimaryImageTag'] as String?,
             ),
       ];
+      // Kept, with their pictures, for "Who's watching?" to show straight away next time.
+      unawaited(ProfilePictures.rememberUsers(url, users));
+      return users;
     } catch (_) {
       return const [];
     }
@@ -416,6 +420,15 @@ class JellyfinController extends ChangeNotifier {
         }(),
     ]);
     if (changed) notifyListeners();
+    // Everyone's pictures saved, new ones replacing old.
+    await ProfilePictures.save([for (final a in accounts) ?a.imageUrl]);
+  }
+
+  /// When connected: everyone's profile pictures, and the server's users, saved for "Who's
+  /// watching?" (each fetched again if it's changed: see ProfilePictures).
+  Future<void> _saveProfiles(String server) async {
+    await publicUsers(server);
+    await checkAccounts();
   }
 
   /// Restores the last session at startup: whoever used the app last, however many accounts
@@ -614,9 +627,8 @@ class JellyfinController extends ChangeNotifier {
 
     userName = me.name;
     final tag = me.primaryImageTag;
-    userImage = tag == null
-        ? null
-        : NetworkImage('${c.baseUrl}/UserImage?userId=${me.id}&tag=$tag');
+    userImage = tag == null ? null : ProfilePictures.image('${c.baseUrl}/UserImage?userId=${me.id}&tag=$tag');
+    unawaited(_saveProfiles(c.baseUrl!));
 
     // Keep the saved account's name and picture current for the "Who's watching?" screen.
     final saved = currentAccount;

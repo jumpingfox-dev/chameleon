@@ -30,6 +30,7 @@ import 'features/library/genres.dart';
 import 'core/theming/server_themes.dart';
 import 'app/bottom_bar_tabs.dart';
 import 'features/home/section_settings.dart';
+import 'core/jellyfin/profile_pictures.dart';
 
 Future<void> main() async {
   _quietMediaKit();
@@ -82,6 +83,7 @@ Future<void> main() async {
   serverThemes.sheetChanged.addListener(reloadSettings);
 
   jellyfin = JellyfinController();
+  await ProfilePictures.init(); // everyone's, for "Who's watching?" (saved when it connects)
   await jellyfin.load();
   serverThemes.follow(); // the signed-in server's themes, fetched again
 
