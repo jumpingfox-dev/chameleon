@@ -103,7 +103,7 @@
   --secondary: #EADBC8;
   --secondary-foreground: #3B2A22;
   --muted: #EFE3D3;
-  --muted-foreground: #7A6355;
+  --muted-foreground: #4E3A2F; /* dark enough to read over the backdrop's fade */
   --border: #E4D5C2;
   --heading-font: "Merriweather";
   --body-font: "Source Sans 3";
