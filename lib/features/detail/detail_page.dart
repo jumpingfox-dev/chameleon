@@ -94,7 +94,7 @@ Future<void> playItem(BuildContext context, JellyfinItem item) async {
   final router = GoRouter.of(context); // grab it before any await
   switch (item.type) {
     case JellyfinItemKind.series:
-      final episode = await nextEpisodeFor(item.id);
+      final (:episode, started: _) = await continueEpisodeOf(item.id);
       if (episode != null) router.push('/play/${episode.id}');
     case 'BoxSet':
       try {
@@ -136,37 +136,50 @@ void playQueue(GoRouter router, List<String> ids) {
   );
 }
 
-/// The episode to play next in a series: Jellyfin's "Next Up", or else the first episode
-/// of the first regular season (skipping Specials).
-///
-/// _SeriesPlayButton below works this out again on its own, falling back to the first
-/// *listed* season rather than skipping Specials. Left as two routines for this pass: folding
-/// one into the other changes what Play does for a show whose first season is Specials,
-/// which is a behaviour call rather than a tidy-up.
-Future<JellyfinItem?> nextEpisodeFor(String seriesId) async {
-  final client = jellyfin.client!;
+/// The episode a show's Play (or Continue) plays, and whether it's been started.
+typedef ContinueEpisode = ({JellyfinItem? episode, bool started});
 
-  final nextUp = await client.tvShows.nextUp(
-    enableTotalRecordCount: false,
-    seriesId: seriesId,
-    limit: 1,
-    enableResumable: true,
-  );
-  if (nextUp.items.firstOrNull case final episode?) return episode;
+/// Where to pick a show up: from the episode played most recently (not the furthest one, which
+/// is what Jellyfin's "Next Up" goes by, so two people watching different seasons on one
+/// account each carry on from their own). See [continueEpisodeIn].
+Future<ContinueEpisode> continueEpisodeOf(String seriesId) async {
+  final episodes = await jellyfin.client!.tvShows.episodes(seriesId: seriesId);
+  return continueEpisodeIn(episodes.items);
+}
 
-  final seasons = (await client.tvShows.seasons(seriesId: seriesId)).items;
-  final firstSeason =
-      seasons
-          .where((s) => ((s.raw['IndexNumber'] as int?) ?? 0) > 0)
-          .firstOrNull ??
-          seasons.firstOrNull;
-  if (firstSeason == null) return null;
+/// From a show's [episodes]: the one played most recently, if it's partway through; else the
+/// one after it (in season and episode order, Specials aside). Not started: the first episode.
+/// Finished (the last one played was the last there is): the first episode, as new.
+@visibleForTesting
+ContinueEpisode continueEpisodeIn(List<JellyfinItem> episodes) {
+  Map? data(JellyfinItem e) => e.raw['UserData'] as Map?;
+  int number(JellyfinItem e, String key) => (e.raw[key] as int?) ?? 0;
+  final regular = [
+    for (final e in episodes)
+      if (number(e, 'ParentIndexNumber') > 0) e,
+  ]..sort((a, b) {
+      final bySeason = number(a, 'ParentIndexNumber').compareTo(number(b, 'ParentIndexNumber'));
+      return bySeason != 0 ? bySeason : number(a, 'IndexNumber').compareTo(number(b, 'IndexNumber'));
+    });
+  final first = regular.firstOrNull ?? episodes.firstOrNull;
 
-  final episodes = await client.tvShows.episodes(
-    seriesId: seriesId,
-    seasonId: firstSeason.id,
-  );
-  return episodes.items.firstOrNull;
+  JellyfinItem? last;
+  DateTime? lastAt;
+  for (final e in episodes) {
+    final at = DateTime.tryParse((data(e)?['LastPlayedDate'] as String?) ?? '');
+    if (at != null && (lastAt == null || at.isAfter(lastAt))) (last, lastAt) = (e, at);
+  }
+  if (last == null) return (episode: first, started: false);
+
+  final position = (data(last)?['PlaybackPositionTicks'] as num?) ?? 0;
+  if (position > 0 && data(last)?['Played'] != true) return (episode: last, started: true);
+
+  final at = regular.indexWhere((e) => e.id == last!.id);
+  // After a Special: the first regular episode not watched yet.
+  final next = at == -1
+      ? regular.where((e) => data(e)?['Played'] != true).firstOrNull
+      : (at + 1 < regular.length ? regular[at + 1] : null);
+  return next == null ? (episode: first, started: false) : (episode: next, started: true);
 }
 
 /// A title's (or person's) page, opened over the page it was opened from, inside the tab: the

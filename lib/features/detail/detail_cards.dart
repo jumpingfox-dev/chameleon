@@ -610,6 +610,10 @@ class _EpisodeTile extends StatelessWidget {
                 // ── Thumbnail ──
                 AnimatedContainer(
                   duration: const Duration(milliseconds: 150),
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(8),
+                    boxShadow: active ? cardHoverShadow : const [], // lifted off the page
+                  ),
                   foregroundDecoration: BoxDecoration(
                     border: Border.all(
                       color: active ? colors.primary : const Color(0x00000000),
@@ -946,45 +950,18 @@ class _TrailerButton extends StatelessWidget {
   );
 }
 
-/// Plays the series from where you left off: the next unwatched episode,
-/// or the very first episode for a show you haven't started.
-/// The episode a show's Play button plays, and whether you've started the show.
-typedef _NextEpisode = ({JellyfinItem? episode, bool started});
+/// The episode a show's Play button plays (see continueEpisodeOf).
+typedef _NextEpisode = ContinueEpisode;
 
-/// Each show page's next episode, looked up once and shared by its Play button and its season
-/// picker (which opens on that episode's season). Kept with the page's own copy of the show,
-/// so opening the page again asks again.
+/// Each show page's next episode, looked up once and shared by its Play button. Kept with the
+/// page's own copy of the show, so opening the page again asks again.
 final _nextEpisodes = Expando<Future<_NextEpisode>>('next episode');
 
 Future<_NextEpisode> _nextEpisodeOf(JellyfinItem series, List<JellyfinItem> seasons) =>
-    _nextEpisodes[series] ??= _findNextEpisode(series, seasons);
-
-Future<_NextEpisode> _findNextEpisode(JellyfinItem series, List<JellyfinItem> seasons) async {
-  final client = jellyfin.client!;
-  // Started: some of it watched. (Next Up suggests the first episode of a show you haven't
-  // started too, so that alone doesn't say.)
-  final watched = ((series.raw['UserData'] as Map?)?['PlayedPercentage'] as num? ?? 0) > 0;
-  try {
-    // Jellyfin's "Next Up": the next episode after the last one you watched.
-    final nextUp = await client.tvShows.nextUp(
-      enableTotalRecordCount: false,
-      seriesId: series.id,
-      limit: 1,
-      enableResumable: true,
+    _nextEpisodes[series] ??= continueEpisodeOf(series.id).catchError(
+      (Object _) => (episode: null, started: false), // the button stays disabled
+      test: (e) => e is JellyfinException,
     );
-    final next = nextUp.items.firstOrNull;
-    if (next != null) {
-      final partway = ((next.raw['UserData'] as Map?)?['PlaybackPositionTicks'] as num? ?? 0) > 0;
-      return (episode: next, started: watched || partway);
-    }
-    // Not started, or all watched: the first episode of the first season.
-    if (seasons.isEmpty) return (episode: null, started: false);
-    final first = await client.tvShows.episodes(seriesId: series.id, seasonId: seasons.first.id);
-    return (episode: first.items.firstOrNull, started: false);
-  } on JellyfinException {
-    return (episode: null, started: false); // the button stays disabled
-  }
-}
 
 class _SeriesPlayButton extends StatefulWidget {
   const _SeriesPlayButton({required this.series, required this.seasons});
