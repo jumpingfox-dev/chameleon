@@ -88,13 +88,15 @@ class _PageBackdrop extends StatelessWidget {
                     Positioned.fill(bottom: 4, child: image),
                   if (blurred) ColoredBox(color: background.withValues(alpha: 0.35)),
                   // Fading into the page at the bottom only: a long, gentle fade, so its end
-                  // never shows as an edge.
+                  // never shows as an edge. It starts halfway down the title's logo (where its
+                  // bottom half is the fade's lightest part), so it doesn't wash out the picture
+                  // above it: on a light theme, especially, that showed as a haze over the top.
                   DecoratedBox(
                     decoration: BoxDecoration(
                       gradient: LinearGradient(
                         begin: Alignment.topCenter,
                         end: Alignment.bottomCenter,
-                        stops: const [0.25, 0.5, 0.7, 0.85, 0.93, 0.97],
+                        stops: _fadeStops(_fadeStart(context, height)),
                         colors: [
                           background.withValues(alpha: 0),
                           background.withValues(alpha: 0.3),
@@ -116,6 +118,38 @@ class _PageBackdrop extends StatelessWidget {
   }
 }
 
+/// Where the backdrop's fade starts, as a share of its [height]: about halfway down a title's
+/// logo (its box is at the bottom of the room above the details: see [_heroRoom]; a logo is
+/// usually wider than its box is, so shorter, and sits at its bottom).
+double _fadeStart(BuildContext context, double height) {
+  final logoMiddle = _heroTop + _heroRoom(context) - _HeroTitle.logoBox(context) * 0.4;
+  return (logoMiddle / height).clamp(0.1, 0.8);
+}
+
+/// The fade's stops, from [start] to the end: the same gentle curve, wherever it starts.
+List<double> _fadeStops(double start) => [
+  for (final t in const [0.0, 0.35, 0.62, 0.83, 0.94, 1.0]) start + t * (0.97 - start),
+];
+
+/// Above the first part of a title's page (DetailLayout.topPadding), and under its logo.
+const _heroTop = 24.0;
+const _heroBottom = 8.0;
+
+/// How tall the room for the artwork above a title's details is, its logo (or name) at the
+/// bottom: down to where a season's poster or a person's photo ends on their pages (see
+/// [_heroPoster]), so the logo sits as low as those do, further over the fade, where it's
+/// easier to read; and never up by the top bar's buttons.
+double _heroRoom(BuildContext context, {bool hasBackdrop = true}) {
+  final (:above, :posterHeight) = _heroPoster(context, _artworkRoom(context, hasBackdrop: hasBackdrop));
+  return above + posterHeight;
+}
+
+/// The room for a page's backdrop above the details: most of it on phones, half of it elsewhere
+/// (with the logo or picture at its foot running on down, more of the details show at first).
+double _artworkRoom(BuildContext context, {bool hasBackdrop = true}) => hasBackdrop
+    ? _PageBackdrop.heightIn(MediaQuery.sizeOf(context)) * (ScreenType.of(context).isPhone ? 0.7 : 0.5)
+    : 0.0;
+
 /// The top of a page over its backdrop: room to see the artwork, with the title's logo (or
 /// name) at the bottom left.
 class _HeroTitle extends StatelessWidget {
@@ -130,14 +164,8 @@ class _HeroTitle extends StatelessWidget {
   Widget build(BuildContext context) {
     final isPhone = ScreenType.of(context).isPhone;
     final logoTag = item.imageTags['Logo'];
-    final size = MediaQuery.sizeOf(context);
     final hasBackdrop = ((item.raw['BackdropImageTags'] as List?)?.isNotEmpty ?? false);
-    // Most of the artwork shows above the details; and the logo, at the bottom of that room,
-    // never reaches up to the top bar's buttons.
-    final height = math.max(
-      hasBackdrop ? _PageBackdrop.heightIn(size) * (isPhone ? 0.7 : 0.55) : 0.0,
-      _clearOfTopBar(context) + logoBox(context),
-    );
+    final height = _heroRoom(context, hasBackdrop: hasBackdrop);
     final name = Text(
       item.name,
       maxLines: 2,
@@ -148,7 +176,7 @@ class _HeroTitle extends StatelessWidget {
       ),
     );
     return Padding(
-      padding: pageSides(context, extra: 12).copyWith(bottom: 8),
+      padding: pageSides(context, extra: 12).copyWith(bottom: _heroBottom),
       child: ConstrainedBox(
         constraints: BoxConstraints(minHeight: height),
         child: Align(
@@ -172,12 +200,9 @@ class _SeasonHero extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final isPhone = ScreenType.of(context).isPhone;
-    final size = MediaQuery.sizeOf(context);
     final hasBackdrop = ((series.raw['BackdropImageTags'] as List?)?.isNotEmpty ?? false);
-    final height = hasBackdrop ? _PageBackdrop.heightIn(size) * (isPhone ? 0.7 : 0.55) : 0.0;
     final poster = season.imageTags['Primary'] != null ? season : series;
-    final (:above, :posterHeight) = _heroPoster(context, height);
+    final (:above, :posterHeight) = _heroPoster(context, _artworkRoom(context, hasBackdrop: hasBackdrop));
     return Padding(
       padding: pageSides(context, extra: 12).copyWith(top: above, bottom: 8),
       child: Align(
@@ -202,7 +227,7 @@ class _SeasonHero extends StatelessWidget {
   final isPhone = ScreenType.of(context).isPhone;
   return (
     above: math.max(room - _HeroTitle.logoBox(context), _clearOfTopBar(context)),
-    posterHeight: isPhone ? 180.0 : (room * 0.85).clamp(180.0, 300.0),
+    posterHeight: isPhone ? 150.0 : (room * 0.85).clamp(180.0, 300.0),
   );
 }
 
@@ -254,7 +279,6 @@ class _PersonHero extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isPhone = ScreenType.of(context).isPhone;
-    final size = MediaQuery.sizeOf(context);
     final muted = context.text.bodyLarge?.copyWith(color: context.colors.onSurfaceVariant);
     final bio = (person.raw['Overview'] as String?)?.trim();
     final counts = [
@@ -262,8 +286,7 @@ class _PersonHero extends StatelessWidget {
       if (shows > 0) '$shows ${shows == 1 ? 'show' : 'shows'}',
     ];
     // The photo sized and placed as a season's poster is, where a title's logo goes.
-    final room = _PageBackdrop.heightIn(size) * (isPhone ? 0.7 : 0.55);
-    final (:above, :posterHeight) = _heroPoster(context, room);
+    final (:above, :posterHeight) = _heroPoster(context, _artworkRoom(context));
     final shadow = const [Shadow(blurRadius: 8, color: Color(0x99000000))];
 
     return Padding(
