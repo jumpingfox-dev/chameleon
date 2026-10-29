@@ -127,6 +127,9 @@ Future<void> showItemMenu(BuildContext context, JellyfinItem item, {ItemMenuList
       label: favorite ? 'Remove from favorites' : 'Add to favorites',
       run: () => change(() async {
         await client.userData.setFavorite(item.id, !favorite);
+        // As the heart on its page does: the Favorites list's cache is out of date (so the
+        // Favorites page loads again when it's next opened), and anything showing it is told.
+        appCache.invalidateWhere((key) => key == 'favorites');
         favoritesChanged.value++;
       }),
     ),
