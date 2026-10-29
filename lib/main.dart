@@ -29,6 +29,7 @@ import 'core/storage/app_defaults.dart';
 import 'features/library/genres.dart';
 import 'core/theming/server_themes.dart';
 import 'app/bottom_bar_tabs.dart';
+import 'features/home/section_settings.dart';
 
 Future<void> main() async {
   _quietMediaKit();
@@ -62,6 +63,7 @@ Future<void> main() async {
   screensaverSettings = await ScreensaverSettings.load();
   homeLayout = await HomeLayoutController.load();
   genreCards = GenreCardsController();
+  sectionSettings = SectionSettings();
   // Everyone has their own settings: load theirs whenever someone else signs in, and again when
   // the server's defaults change (its own, from its Custom CSS: see docs/themes.md).
   void reloadSettings() {
@@ -72,6 +74,7 @@ Future<void> main() async {
     screensaverSettings.reload();
     homeLayout.reload();
     genreCards.reload();
+    sectionSettings.reload();
     bottomBarTabs.defaultsChanged();
   }
 

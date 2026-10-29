@@ -278,3 +278,94 @@ class _ChoiceOptionState extends State<_ChoiceOption> {
     );
   }
 }
+
+/// A centered list to tick any of [options] in (shown by [label]), starting with [selected]
+/// ticked, and Done. Returns what's ticked (in [options]' order), or null if closed without Done.
+Future<List<T>?> showMultiChoicePicker<T>({
+  required BuildContext context,
+  required String title,
+  required List<T> options,
+  required String Function(T option) label,
+  required List<T> selected,
+}) => showGeneralDialog<List<T>>(
+  context: context,
+  barrierDismissible: true,
+  barrierLabel: 'Close',
+  barrierColor: context.colors.scrim,
+  transitionDuration: const Duration(milliseconds: 150),
+  transitionBuilder: (context, animation, _, child) => FadeTransition(opacity: animation, child: child),
+  pageBuilder: (context, _, _) => Center(
+    child: _MultiChoicePicker<T>(title: title, options: options, label: label, selected: selected),
+  ),
+);
+
+class _MultiChoicePicker<T> extends StatefulWidget {
+  const _MultiChoicePicker({required this.title, required this.options, required this.label, required this.selected});
+
+  final String title;
+  final List<T> options;
+  final String Function(T) label;
+  final List<T> selected;
+
+  @override
+  State<_MultiChoicePicker<T>> createState() => _MultiChoicePickerState<T>();
+}
+
+class _MultiChoicePickerState<T> extends State<_MultiChoicePicker<T>> {
+  late final _ticked = {...widget.selected};
+
+  @override
+  Widget build(BuildContext context) {
+    final size = MediaQuery.sizeOf(context);
+    return CallbackShortcuts(
+      bindings: {const SingleActivator(LogicalKeyboardKey.escape): () => Navigator.of(context).pop()},
+      child: SizedBox(
+        width: math.min(440, size.width - 32),
+        child: ConstrainedBox(
+          constraints: BoxConstraints(maxHeight: math.min(560.0, size.height * 0.85)),
+          child: Card(
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                spacing: 12,
+                children: [
+                  Text(widget.title, style: context.text.titleLarge),
+                  Flexible(
+                    child: ListView.separated(
+                      shrinkWrap: true,
+                      padding: EdgeInsets.zero,
+                      itemCount: widget.options.length,
+                      separatorBuilder: (_, _) => const SizedBox(height: 4),
+                      itemBuilder: (context, i) {
+                        final option = widget.options[i];
+                        final ticked = _ticked.contains(option);
+                        return _ChoiceOption(
+                          selected: ticked,
+                          autofocus: i == 0,
+                          onPress: () => setState(() => ticked ? _ticked.remove(option) : _ticked.add(option)),
+                          child: Text(widget.label(option)),
+                        );
+                      },
+                    ),
+                  ),
+                  Align(
+                    alignment: Alignment.centerRight,
+                    child: FilledButton(
+                      onPressed: () => Navigator.of(context).pop([
+                        for (final o in widget.options)
+                          if (_ticked.contains(o)) o,
+                      ]),
+                      child: const Text('Done'),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}

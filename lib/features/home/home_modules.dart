@@ -8,6 +8,8 @@ import 'package:material_ui/material_ui.dart';
 import '../../theme/app_icons.dart';
 import '../../core/focus/focus_rows.dart';
 import 'home_layout.dart';
+import 'section_settings.dart';
+import 'section_settings_form.dart';
 import '../../core/format/item_format.dart';
 import '../../core/jellyfin/jellyfin_controller.dart';
 import '../../core/jellyfin/list_each.dart';
@@ -32,23 +34,71 @@ import '../../core/theming/server_themes.dart';
 /// What a section loaded: its items, and optionally a title that replaces the default
 /// (e.g. "Because you watched Dune").
 class HomeModuleContent {
-  const HomeModuleContent(this.items, {this.title});
+  const HomeModuleContent(this.items, {this.title, this.more = false, this.anchor, this.signature});
 
   final List<JellyfinItem> items;
   final String? title;
 
-  static Object? toJson(HomeModuleContent c) => {'items': itemsToJson(c.items), 'title': c.title};
+  /// There may be more to load (it's loaded [HomePage.size] at a time, up to the section's limit).
+  final bool more;
+
+  /// What it's built around, kept for loading more (Because You Watched's title).
+  final String? anchor;
+
+  /// The section's settings it was loaded with (see SectionSettings.signature): different ones
+  /// load it again.
+  final String? signature;
+
+  HomeModuleContent copyWith({List<JellyfinItem>? items, bool? more, String? signature}) => HomeModuleContent(
+    items ?? this.items,
+    title: title,
+    more: more ?? this.more,
+    anchor: anchor,
+    signature: signature ?? this.signature,
+  );
+
+  static Object? toJson(HomeModuleContent c) => {
+    'items': itemsToJson(c.items),
+    'title': c.title,
+    'more': c.more,
+    'anchor': c.anchor,
+    'signature': c.signature,
+  };
 
   static HomeModuleContent fromJson(Object? json) {
     final map = json! as Map<String, dynamic>;
-    return HomeModuleContent(itemsFromJson(map['items']), title: map['title'] as String?);
+    return HomeModuleContent(
+      itemsFromJson(map['items']),
+      title: map['title'] as String?,
+      more: map['more'] == true,
+      anchor: map['anchor'] as String?,
+      signature: map['signature'] as String?,
+    );
   }
 }
 
-/// Loads a section's content. [module] says what it shows (e.g. which collection).
+/// Which part of a section to load: [limit] items from [start] on, after [shown] (the ones
+/// already there, for random orders, which can't be paged: they're left out instead), around
+/// [anchor] (see [HomeModuleContent.anchor]).
+class HomePage {
+  const HomePage({this.start = 0, this.limit = size, this.shown = const [], this.anchor});
+
+  final int start;
+  final int limit;
+  final List<JellyfinItem> shown;
+  final String? anchor;
+
+  /// How many a section loads at a time, so a big limit never loads a lot at once.
+  static const size = 10;
+
+  List<String> get shownIds => [for (final i in shown) i.id];
+}
+
+/// Loads part of a section's content. [module] says what it shows (e.g. which collection).
 typedef HomeModuleLoader = Future<HomeModuleContent> Function(
     JellyfinClient client,
     HomeModule module,
+    HomePage page,
     );
 
 /// What a kind of section shows and how to load it.
@@ -72,6 +122,10 @@ class HomeModuleSpec {
 
 const _moviesAndShows = [JellyfinItemKind.movie, JellyfinItemKind.series];
 
+/// [items] as a page's content: more to come if it came back full.
+HomeModuleContent _page(List<JellyfinItem> items, HomePage page, {int? fetched, String? title, String? anchor}) =>
+    HomeModuleContent(items, more: (fetched ?? items.length) >= page.limit, title: title, anchor: anchor);
+
 /// Every section's definition. To add a new kind: add it to HomeModuleType, then here.
 final homeModuleSpecs = <HomeModuleType, HomeModuleSpec>{
   HomeModuleType.carousel: HomeModuleSpec(
@@ -84,96 +138,94 @@ final homeModuleSpecs = <HomeModuleType, HomeModuleSpec>{
     title: 'My Media',
     description: 'Your libraries, as tiles',
     icon: (i) => i.folder,
-    load: (_, _) async => const HomeModuleContent([]), // drawn from the libraries, already loaded
+    load: (_, _, _) async => const HomeModuleContent([]), // drawn from the libraries, already loaded
   ),
   HomeModuleType.genres: HomeModuleSpec(
     title: 'Genres',
-    description: 'Ten genres, picked at random',
+    description: 'Your genres, as tiles',
     icon: (i) => i.genres,
-    load: (_, _) async => const HomeModuleContent([]), // drawn from the genres, already loaded
+    load: (_, _, _) async => const HomeModuleContent([]), // drawn from the genres, already loaded
   ),
   HomeModuleType.continueWatching: HomeModuleSpec(
     title: 'Continue Watching',
     description: "Movies and episodes you've started",
     icon: (i) => i.continueWatching,
     view: LibraryView.thumbnail,
-    load: (client, _) async => HomeModuleContent(
-      (await client.items.resume(mediaTypes: const ['Video'], limit: 20)).items,
-    ),
+    load: _continueWatching,
   ),
   HomeModuleType.nextUp: HomeModuleSpec(
     title: 'Next Up',
     description: "The next episode of shows you're watching",
     icon: (i) => i.shows,
     view: LibraryView.thumbnail,
-    load: (client, _) async => HomeModuleContent(
-      (await client.tvShows.nextUp(
-        enableTotalRecordCount: false,
-        limit: 20,
-        enableResumable: false,
-      )) // in-progress episodes are in Continue Watching
-          .items
-          .where((item) => item.type == JellyfinItemKind.episode && !hiddenFromNextUp().contains(item.id))
-          .toList(),
-    ),
+    load: _nextUp,
   ),
   HomeModuleType.favorites: HomeModuleSpec(
     title: 'Favorites',
     description: 'Your favorite movies and shows',
     icon: (i) => i.favorite,
-    load: (client, _) async => HomeModuleContent(
-      await client.items.listEach(
-        filters: const ['IsFavorite'],
-        types: const [..._moviesAndShows, 'BoxSet'],
-        sortBy: const['Random'],
-        limit: 30,
-        fields: const ['RecursiveItemCount'],
-      ),
-    ),
+    load: _favorites,
   ),
   HomeModuleType.recentlyAdded: HomeModuleSpec(
     title: 'Recently Added',
     description: 'The newest movies and shows on your server',
     icon: (i) => i.recentlyAdded,
-    load: (client, _) async => HomeModuleContent(
-      await client.items.listEach(
-        types: _moviesAndShows,
-        sortBy: const ['DateCreated'],
-        descending: true,
-        limit: 30,
-        fields: const ['RecursiveItemCount'],
-      ),
-    ),
+    load: (client, _, page) async {
+      // The first ten quickly, a type at a time (see ListEach); after that, together.
+      final items = page.start == 0
+          ? await client.items.listEach(
+              types: _moviesAndShows,
+              sortBy: const ['DateCreated'],
+              descending: true,
+              limit: page.limit,
+              fields: const ['RecursiveItemCount'],
+            )
+          : (await client.items.list(
+              enableTotalRecordCount: false,
+              includeItemTypes: _moviesAndShows,
+              recursive: true,
+              sortBy: const ['DateCreated'],
+              descending: true,
+              startIndex: page.start,
+              limit: page.limit,
+              fields: const ['RecursiveItemCount'],
+            )).items;
+      return _page(items, page);
+    },
   ),
   HomeModuleType.recentlyAddedMovies: HomeModuleSpec(
     title: 'Recently Added Movies',
     description: 'The newest movies on your server',
     icon: (i) => i.movies,
-    load: (client, _) async => HomeModuleContent(
+    load: (client, _, page) async => _page(
       (await client.items.list(
         enableTotalRecordCount: false,
         includeItemTypes: const [JellyfinItemKind.movie],
         recursive: true,
         sortBy: const ['DateCreated'],
         descending: true,
-        limit: 30,
+        startIndex: page.start,
+        limit: page.limit,
       )).items,
+      page,
     ),
   ),
   HomeModuleType.recentlyAddedSeries: HomeModuleSpec(
     title: 'Recently Added Shows',
     description: 'Shows with the newest episodes',
     icon: (i) => i.shows,
-    load: (client, _) async => HomeModuleContent(
+    load: (client, _, page) async => _page(
       (await client.items.list(
         enableTotalRecordCount: false,
         includeItemTypes: const [JellyfinItemKind.series],
         recursive: true,
         sortBy: const ['DateLastContentAdded'],
         descending: true,
-        limit: 30,
+        startIndex: page.start,
+        limit: page.limit,
         fields: const ['RecursiveItemCount'],
       )).items,
+      page,
     ),
   ),
   HomeModuleType.suggested: HomeModuleSpec(
@@ -184,7 +236,7 @@ final homeModuleSpecs = <HomeModuleType, HomeModuleSpec>{
   ),
   HomeModuleType.becauseYouWatched: HomeModuleSpec(
     title: 'Because You Watched…',
-    description: 'More like the last thing you watched',
+    description: 'More like something you watched',
     icon: (i) => i.becauseYouWatched,
     load: _becauseYouWatched,
   ),
@@ -204,123 +256,214 @@ final homeModuleSpecs = <HomeModuleType, HomeModuleSpec>{
 
 // ─── Loaders ─────────────────────────────────────────────────────────────────
 
-/// A random handful of movies and shows that have backdrop art to show off.
-Future<HomeModuleContent> _featured(JellyfinClient client, HomeModule _) async {
+/// A random handful (as many as set, up to ten) of what's set to be featured that has backdrop
+/// art to show off. All at once: there are only a few.
+Future<HomeModuleContent> _featured(JellyfinClient client, HomeModule module, HomePage _) async {
+  final options = sectionSettings.forModule(module);
+  final types = switch (options.featuredKinds) {
+    FeaturedKinds.all => [..._moviesAndShows, 'BoxSet'],
+    FeaturedKinds.movies => const [JellyfinItemKind.movie],
+    FeaturedKinds.shows => const [JellyfinItemKind.series],
+    FeaturedKinds.collections => const ['BoxSet'],
+  };
   final items = await client.items.listEach(
-    types: _moviesAndShows,
+    types: types,
     sortBy: const ['Random'],
     limit: 30, // more than needed, since some won't have a backdrop
     fields: const ['Overview'],
   );
   final withArt = items
-      .where(
-        (item) => (item.raw['BackdropImageTags'] as List?)?.isNotEmpty ?? false,
-  )
-      .take(8)
+      .where((item) => (item.raw['BackdropImageTags'] as List?)?.isNotEmpty ?? false)
+      .take(options.limit)
       .toList();
   return HomeModuleContent(withArt);
 }
 
-/// Jellyfin's suggestions for this user, or a random mix when there isn't enough history yet.
-Future<HomeModuleContent> _suggested(
-    JellyfinClient client,
-    HomeModule _,
-    ) async {
-  var items = (await client.suggestions.list(
-    enableTotalRecordCount: false,
-    mediaType: const ['Video'],
-    type: _moviesAndShows,
-    limit: 30,
-  )).items;
-  if (items.isEmpty) {
-    items = await client.items.listEach(
-      types: _moviesAndShows,
-      sortBy: const ['Random'],
-      limit: 30,
-      fields: const ['RecursiveItemCount'],
-    );
-  }
-  return HomeModuleContent(items);
+/// What you're partway through, leaving out what you haven't touched in a while if that's set.
+Future<HomeModuleContent> _continueWatching(JellyfinClient client, HomeModule module, HomePage page) async {
+  final raw = (await client.items.resume(mediaTypes: const ['Video'], startIndex: page.start, limit: page.limit)).items;
+  final days = sectionSettings.forModule(module).continueCutoffDays;
+  final since = days == null ? null : DateTime.now().subtract(Duration(days: days));
+  final items = [
+    for (final item in raw)
+      if (since == null ||
+          (DateTime.tryParse(((item.raw['UserData'] as Map?)?['LastPlayedDate'] as String?) ?? '')?.isAfter(since) ??
+              false))
+        item,
+  ];
+  return _page(items, page, fetched: raw.length);
 }
 
-/// Titles similar to the last movie or show you watched: same kind, sharing its genres.
-Future<HomeModuleContent> _becauseYouWatched(
-    JellyfinClient client,
-    HomeModule _,
-    ) async {
-  final last = (await client.items.list(
-    enableTotalRecordCount: false,
-    filters: const ['IsPlayed'],
-    includeItemTypes: const [JellyfinItemKind.movie, JellyfinItemKind.episode],
-    recursive: true,
-    sortBy: const ['DatePlayed'],
-    descending: true,
-    limit: 1,
-  )).items.firstOrNull;
-  if (last == null) return const HomeModuleContent([]);
+/// Your Jellyfin account's own Next Up settings (as its web app keeps them): how many days back
+/// it looks, and whether it offers rewatching. Asked once a session.
+Future<({int days, bool rewatching})>? _serverNextUp;
 
-  final isEpisode = last.type == JellyfinItemKind.episode;
-  final baselineId = isEpisode ? last.raw['SeriesId'] as String? : last.id;
-  if (baselineId == null) return const HomeModuleContent([]);
-  final baseline = await client.items.byId(baselineId);
+Future<({int days, bool rewatching})> _nextUpPrefs(JellyfinClient client) => _serverNextUp ??= () async {
+  try {
+    final prefs = await jellyfin.getJson(
+      '/DisplayPreferences/usersettings',
+      query: {'userId': client.userId!, 'client': 'emby'},
+    );
+    final custom = (prefs as Map)['CustomPrefs'] as Map? ?? const {};
+    return (
+      days: int.tryParse('${custom['maxDaysForNextUp'] ?? ''}') ?? 365,
+      rewatching: '${custom['enableRewatchingInNextUp']}'.toLowerCase() == 'true',
+    );
+  } catch (_) {
+    _serverNextUp = null; // ask again next time
+    return (days: 365, rewatching: false); // Jellyfin's own defaults
+  }
+}();
+
+/// The next episode of shows you're watching (not ones partway, which are in Continue Watching).
+Future<HomeModuleContent> _nextUp(JellyfinClient client, HomeModule module, HomePage page) async {
+  final options = sectionSettings.forModule(module);
+  final server = (options.nextUpCutoff == 'server' || options.nextUpRewatching == 'server')
+      ? await _nextUpPrefs(client)
+      : null;
+  final days = switch (options.nextUpCutoff) {
+    'server' => server!.days,
+    final int d => d,
+    _ => null, // never
+  };
+  final rewatching = switch (options.nextUpRewatching) {
+    'on' => true,
+    'off' => false,
+    _ => server!.rewatching,
+  };
+  final raw = (await client.tvShows.nextUp(
+    enableTotalRecordCount: false,
+    startIndex: page.start,
+    limit: page.limit,
+    enableResumable: false, // in-progress episodes are in Continue Watching
+    enableRewatching: rewatching,
+    nextUpDateCutoff: days == null ? null : DateTime.now().subtract(Duration(days: days)).toUtc().toIso8601String(),
+  )).items;
+  final hidden = hiddenFromNextUp();
+  final items = [
+    for (final item in raw)
+      if (item.type == JellyfinItemKind.episode && !hidden.contains(item.id)) item,
+  ];
+  return _page(items, page, fetched: raw.length);
+}
+
+/// Your favorites: the kinds and order set.
+Future<HomeModuleContent> _favorites(JellyfinClient client, HomeModule module, HomePage page) async {
+  final options = sectionSettings.forModule(module);
+  final kinds = options.favoriteKinds;
+  if (kinds.isEmpty) return const HomeModuleContent([]);
+  final sort = options.favoritesSort;
+  final random = sort == FavoritesSort.random;
+  final items = (await client.items.list(
+    enableTotalRecordCount: false,
+    filters: const ['IsFavorite'],
+    includeItemTypes: kinds,
+    recursive: true,
+    sortBy: [sort.key, if (!random) 'SortName'],
+    descending: sort.descending,
+    // A random order can't be paged: what's shown is left out instead.
+    startIndex: random ? 0 : page.start,
+    excludeItemIds: random ? page.shownIds : const [],
+    limit: page.limit,
+    fields: const ['RecursiveItemCount'],
+  )).items;
+  return _page(items, page);
+}
+
+/// Jellyfin's suggestions for this user, or a random mix when there isn't enough history yet.
+Future<HomeModuleContent> _suggested(JellyfinClient client, HomeModule _, HomePage page) async {
+  if (page.anchor != 'random') {
+    final items = (await client.suggestions.list(
+      enableTotalRecordCount: false,
+      mediaType: const ['Video'],
+      type: _moviesAndShows,
+      startIndex: page.start,
+      limit: page.limit,
+    )).items;
+    if (items.isNotEmpty || page.start > 0) return _page(items, page);
+  }
+  final items = await client.items.listEach(
+    types: _moviesAndShows,
+    sortBy: const ['Random'],
+    excludeItemIds: page.shownIds,
+    limit: page.limit,
+    fields: const ['RecursiveItemCount'],
+  );
+  return _page(items, page, anchor: 'random');
+}
+
+/// Titles similar to something you watched (the last thing, or one of the last few): same kind,
+/// sharing its genres.
+Future<HomeModuleContent> _becauseYouWatched(JellyfinClient client, HomeModule module, HomePage page) async {
+  JellyfinItem? baseline;
+  if (page.anchor case final id?) {
+    baseline = await client.items.byId(id);
+  } else {
+    final random = sectionSettings.forModule(module).becauseBasis == BecauseBasis.random;
+    final recent = (await client.items.list(
+      enableTotalRecordCount: false,
+      filters: const ['IsPlayed'],
+      includeItemTypes: const [JellyfinItemKind.movie, JellyfinItemKind.episode],
+      recursive: true,
+      sortBy: const ['DatePlayed'],
+      descending: true,
+      limit: random ? 10 : 1,
+    )).items;
+    if (recent.isEmpty) return const HomeModuleContent([]);
+    final last = random ? recent[math.Random().nextInt(recent.length)] : recent.first;
+    final baselineId = last.type == JellyfinItemKind.episode ? last.raw['SeriesId'] as String? : last.id;
+    if (baselineId == null) return const HomeModuleContent([]);
+    baseline = await client.items.byId(baselineId);
+  }
   if (baseline == null) return const HomeModuleContent([]);
 
   final title = 'Because You Watched ${baseline.name}';
-  final genres =
-  ((baseline.raw['Genres'] as List?)?.cast<String>() ?? const <String>[])
-      .take(2)
-      .toList();
-  if (genres.isEmpty) return HomeModuleContent(const [], title: title);
+  final genres = ((baseline.raw['Genres'] as List?)?.cast<String>() ?? const <String>[]).take(2).toList();
+  if (genres.isEmpty) return HomeModuleContent(const [], title: title, anchor: baseline.id);
 
   final similar = await client.items.list(
     enableTotalRecordCount: false,
     genres: genres,
-    includeItemTypes: [
-      isEpisode ? JellyfinItemKind.series : JellyfinItemKind.movie,
-    ],
-    excludeItemIds: [baseline.id],
+    includeItemTypes: [baseline.type == JellyfinItemKind.series ? JellyfinItemKind.series : JellyfinItemKind.movie],
+    excludeItemIds: [baseline.id, ...page.shownIds],
     recursive: true,
     sortBy: const ['Random'],
-    limit: 20,
+    limit: page.limit,
     fields: const ['RecursiveItemCount'],
   );
-  return HomeModuleContent(similar.items, title: title);
+  return _page(similar.items, page, title: title, anchor: baseline.id);
 }
 
 /// The movies in the chosen collection, in release order.
-Future<HomeModuleContent> _collection(
-    JellyfinClient client,
-    HomeModule module,
-    ) async {
+Future<HomeModuleContent> _collection(JellyfinClient client, HomeModule module, HomePage page) async {
   final id = module.param;
   if (id == null) return const HomeModuleContent([]);
-  final page = await client.items.list(
+  final items = (await client.items.list(
     enableTotalRecordCount: false,
     parentId: id,
     // Just what's in the collection: a show, not its seasons and every episode as well.
     recursive: false,
     sortBy: const ['ProductionYear', 'SortName'],
-    limit: 50,
+    startIndex: page.start,
+    limit: page.limit,
     fields: const ['RecursiveItemCount'],
-  );
-  return HomeModuleContent(page.items, title: module.label);
+  )).items;
+  return _page(items, page, title: module.label);
 }
 
 /// A random mix of movies and shows from the chosen genre.
-Future<HomeModuleContent> _genre(
-    JellyfinClient client,
-    HomeModule module,
-    ) async {
+Future<HomeModuleContent> _genre(JellyfinClient client, HomeModule module, HomePage page) async {
   final genre = module.param;
   if (genre == null) return const HomeModuleContent([]);
   final items = await client.items.listEach(
     genres: [genre],
     types: _moviesAndShows,
     sortBy: const ['Random'],
-    limit: 30,
+    excludeItemIds: page.shownIds,
+    limit: page.limit,
     fields: const ['RecursiveItemCount'],
   );
-  return HomeModuleContent(items, title: genre);
+  return _page(items, page, title: genre);
 }
 
 // ─── Cache ───────────────────────────────────────────────────────────────────
@@ -410,15 +553,25 @@ class _HomeModuleViewState extends State<HomeModuleView>
   @override
   bool get wantKeepAlive => true;
 
+  /// This section's settings.
+  SectionOptions get _options => sectionSettings.forModule(widget.module);
+
+  /// Its settings as they are now, to tell when they've changed (see HomeModuleContent.signature).
+  String get _signature => sectionSettings.signature(SectionSettings.keyFor(widget.module));
+
   @override
   void initState() {
     super.initState();
     favoritesChanged.addListener(_load);
     homeVisible.addListener(_refreshIfStale);
     watchProgressChanged.addListener(_onWatched);
+    sectionSettings.addListener(_onSettings);
+    _rowScroll.addListener(_onRowScroll);
 
-    _content = appCache.peek(_cacheKey(widget.module.id), fromJson: HomeModuleContent.fromJson);
-    if (!appCache.isFresh(_cacheKey(widget.module.id))) _load();
+    final cached = appCache.peek(_cacheKey(widget.module.id), fromJson: HomeModuleContent.fromJson);
+    // Loaded with other settings: not shown, loaded again.
+    _content = cached?.signature == _signature ? cached : null;
+    if (_content == null || !appCache.isFresh(_cacheKey(widget.module.id))) _load();
   }
 
   @override
@@ -426,6 +579,7 @@ class _HomeModuleViewState extends State<HomeModuleView>
     favoritesChanged.removeListener(_load);
     homeVisible.removeListener(_refreshIfStale);
     watchProgressChanged.removeListener(_onWatched);
+    sectionSettings.removeListener(_onSettings);
     _widen.dispose();
     _rowScroll.dispose();
     super.dispose();
@@ -439,11 +593,30 @@ class _HomeModuleViewState extends State<HomeModuleView>
     if (!appCache.isFresh(_cacheKey(widget.module.id))) _load();
   }
 
+  /// Its settings changed: loaded again with them (just redrawn, for those that only change how
+  /// it looks).
+  void _onSettings() {
+    if (!mounted) return;
+    if (_content != null && _content!.signature != _signature) {
+      _load();
+    } else {
+      setState(() {});
+    }
+  }
+
+  /// The first [HomePage.size] (or fewer, if it's set to show fewer).
   Future<void> _load() async {
     final client = jellyfin.client;
     if (client == null) return;
+    final signature = _signature;
+    final limit = _options.limit;
     try {
-      final content = await _spec.load(client, widget.module);
+      final first = await _spec.load(client, widget.module, HomePage(limit: math.min(HomePage.size, limit)));
+      final content = first.copyWith(
+        items: first.items.take(limit).toList(),
+        more: first.more && first.items.length < limit,
+        signature: signature,
+      );
       appCache.put(_cacheKey(widget.module.id), content, toJson: HomeModuleContent.toJson);
       if (mounted) {
         setState(() {
@@ -453,6 +626,41 @@ class _HomeModuleViewState extends State<HomeModuleView>
       }
     } on JellyfinException catch (e) {
       if (mounted && _content == null) setState(() => _error = describeJellyfinError(e));
+    }
+  }
+
+  bool _loadingMore = false;
+
+  /// Near the row's end: the next [HomePage.size], up to its limit.
+  void _onRowScroll() {
+    if (!_rowScroll.hasClients || _rowScroll.position.extentAfter > 600) return;
+    _loadMore();
+  }
+
+  Future<void> _loadMore() async {
+    final client = jellyfin.client;
+    final content = _content;
+    if (client == null || content == null || !content.more || _loadingMore) return;
+    final limit = _options.limit;
+    final have = content.items.length;
+    if (have >= limit) return;
+    _loadingMore = true;
+    try {
+      final next = await _spec.load(
+        client,
+        widget.module,
+        HomePage(start: have, limit: math.min(HomePage.size, limit - have), shown: content.items, anchor: content.anchor),
+      );
+      if (!mounted || !identical(content, _content)) return; // loaded again meanwhile
+      final ids = {for (final i in content.items) i.id};
+      final items = [...content.items, for (final i in next.items) if (!ids.contains(i.id)) i].take(limit).toList();
+      final grown = content.copyWith(items: items, more: next.more && items.length < limit);
+      appCache.put(_cacheKey(widget.module.id), grown, toJson: HomeModuleContent.toJson);
+      setState(() => _content = grown);
+    } on JellyfinException {
+      // Leave it as it is; scrolling there again tries again.
+    } finally {
+      _loadingMore = false;
     }
   }
 
@@ -496,8 +704,16 @@ class _HomeModuleViewState extends State<HomeModuleView>
       onPressed: widget.isLast ? null : () => _move(1),
       icon: Icon(appIcons.moveDown, fill: 1),
     ),
+    // Its settings (a Collection or Genre row's own).
     IconButton(
-      onPressed: () => homeLayout.remove(widget.module.id),
+      onPressed: () => showSectionSettings(context, widget.module, _content?.title ?? widget.module.label ?? _spec.title),
+      icon: Icon(appIcons.settings, fill: 1),
+    ),
+    IconButton(
+      onPressed: () {
+        homeLayout.remove(widget.module.id);
+        if (widget.module.type.allowsMultiple) sectionSettings.forget(widget.module.id);
+      },
       icon: Icon(
           appIcons.remove,
           color: context.colors.error,
@@ -526,9 +742,12 @@ class _HomeModuleViewState extends State<HomeModuleView>
 
     final title =
         _content?.title ?? module.label ?? module.param ?? _spec.title;
+    // Continue Watching and Next Up name what's in them under the cards, if set to; Favorites
+    // names its seasons and episodes, as the Favorites page does.
+    final options = _options;
     final captions =
-        module.type == HomeModuleType.continueWatching ||
-            module.type == HomeModuleType.nextUp;
+        (module.type.followsProgress && (options.episodeTitles || options.movieTitles)) ||
+        (module.type == HomeModuleType.favorites && (_content?.items.any((i) => options.favoriteNamed(i.type ?? '')) ?? false));
 
     return ScrollIntoViewOnFocus(
       child: Padding(
@@ -539,8 +758,9 @@ class _HomeModuleViewState extends State<HomeModuleView>
           crossAxisAlignment: CrossAxisAlignment.start,
           spacing: 8,
           children: [
-            // The banner and Genres speak for themselves: titled only while editing.
-            if (!(isCarousel || isGenres) || widget.editing)
+            // Its title if it's set to show one (the banner and Genres start without); always
+            // while editing.
+            if (_options.showTitle || widget.editing)
               Padding(
                 padding: pageSides(
                   context,
@@ -568,9 +788,9 @@ class _HomeModuleViewState extends State<HomeModuleView>
             // The banner is a rounded card, so it keeps a margin rather than running to the edge.
               Padding(padding: pageSides(context), child: _carousel(context))
             else if (isMyMedia)
-              _MyMediaRow(sides: _rowSides(context), editing: widget.editing)
+              _MyMediaRow(sides: _rowSides(context), editing: widget.editing, look: _options.look, named: _options.cardNames)
             else if (isGenres)
-              _GenresRow(sides: _rowSides(context), editing: widget.editing)
+              _GenresRow(sides: _rowSides(context), editing: widget.editing, options: _options)
             else
               _row(context, _viewFor(context), captions: captions),
           ],
@@ -597,7 +817,7 @@ class _HomeModuleViewState extends State<HomeModuleView>
     } else if (items.isEmpty) {
       content = Center(child: Text('Nothing to feature yet', style: muted));
     } else {
-      content = _Carousel(items: items);
+      content = _Carousel(items: items, interval: Duration(seconds: _options.featuredSeconds));
     }
 
     return AspectRatio(aspectRatio: isPhone ? 16 / 9 : 21 / 9, child: content);
@@ -608,6 +828,7 @@ class _HomeModuleViewState extends State<HomeModuleView>
     final imageHeight = view == LibraryView.poster
         ? tileWidth * 3 / 2
         : tileWidth * 9 / 16;
+
     final rowHeight = imageHeight + (captions ? _TileCaption.heightOf(context) : 0);
     final muted = context.text.bodyMedium?.copyWith(
       color: context.colors.onSurfaceVariant,
@@ -650,12 +871,15 @@ class _HomeModuleViewState extends State<HomeModuleView>
           itemCount: items.length,
           separatorBuilder: (_, _) => const SizedBox(width: _rowGap),
           itemBuilder: (context, i) {
+            // (Every card the row's shape: a picture of another shape sits whole in it; see
+            // PosterCard.)
+            final width = tileWidth;
             final card = Focus(
               // Doesn't take focus itself: notices the card getting it, and scrolls the row.
               canRequestFocus: false,
               skipTraversal: true,
               onFocusChange: (focused) {
-                if (focused) _keepInSlot(context, i, tileWidth);
+                if (focused) _keepInSlot(context, i, width);
               },
               child: PosterCard(
                 item: items[i],
@@ -683,14 +907,14 @@ class _HomeModuleViewState extends State<HomeModuleView>
             // A poster playing its stills widens to 16:9 in its place, pushing the rest along.
             return SizedBox(
               width: view == LibraryView.poster && _widened == i
-                  ? tileWidth + (imageHeight * 16 / 9 - tileWidth) * _widenCurve.transform(_widen.value)
-                  : tileWidth,
+                  ? width + (imageHeight * 16 / 9 - width) * _widenCurve.transform(_widen.value)
+                  : width,
               child: captions
                   ? Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   SizedBox(height: imageHeight, child: card),
-                  _TileCaption(items[i]),
+                  _TileCaption(items[i], options: _options, favorites: widget.module.type == HomeModuleType.favorites),
                 ],
               )
                   : card,
@@ -978,16 +1202,19 @@ class _OptionPickerState extends State<_OptionPicker> {
 
 /// A rotating banner of featured items. Advances on its own; arrows, dots and swiping move it by hand.
 class _Carousel extends StatefulWidget {
-  const _Carousel({required this.items});
+  const _Carousel({required this.items, this.interval = const Duration(seconds: 8)});
 
   final List<JellyfinItem> items;
+
+  /// How long each slide stays.
+  final Duration interval;
 
   @override
   State<_Carousel> createState() => _CarouselState();
 }
 
 class _CarouselState extends State<_Carousel> {
-  static const _interval = Duration(seconds: 8);
+  Duration get _interval => widget.interval;
 
   /// While someone's on the carousel it holds still, unless they've been idle this long
   /// (probably walked away), after which it resumes advancing.
@@ -1330,9 +1557,16 @@ class _CarouselSlideState extends State<_CarouselSlide> {
 /// Under a Continue Watching or Next Up tile: the show (or movie) name, then
 /// "S1:E2 · Episode name" for episodes, or the year for movies.
 class _TileCaption extends StatelessWidget {
-  const _TileCaption(this.item);
+  const _TileCaption(this.item, {required this.options, this.favorites = false});
 
   final JellyfinItem item;
+
+  /// In Favorites: each kind named if it's set to be (seasons and episodes as on the Favorites
+  /// page; the rest by name and year).
+  final bool favorites;
+
+  /// Whether episodes and movies are named, and how (see SectionOptions).
+  final SectionOptions options;
 
   static const _top = 6.0; // between the artwork and the title
   static const _gap = 2.0; // between the title and the line under it
@@ -1364,12 +1598,26 @@ class _TileCaption extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isEpisode = item.type == JellyfinItemKind.episode;
-    final title = isEpisode
+    final isSeason = item.type == JellyfinItemKind.season;
+    // Not named: the room left empty, so the cards stay in line.
+    if (favorites ? !options.favoriteNamed(item.type ?? '') : (isEpisode ? !options.episodeTitles : !options.movieTitles)) {
+      return const SizedBox.shrink();
+    }
+    final title = isEpisode || isSeason
         ? (item.raw['SeriesName'] as String?) ?? item.name
         : item.name;
 
-    final subtitle = isEpisode
+    final subtitle = isSeason
+        ? item.name
+        : isEpisode && favorites
         ? episodeLabel(item.raw['ParentIndexNumber'], item.raw['IndexNumber'], item.name)
+        : isEpisode
+        ? switch (options.episodeTitleStyle) {
+            EpisodeTitleStyle.both => episodeLabel(item.raw['ParentIndexNumber'], item.raw['IndexNumber'], item.name),
+            EpisodeTitleStyle.code =>
+              seasonEpisode(item.raw['ParentIndexNumber'], item.raw['IndexNumber']) ?? item.name,
+            EpisodeTitleStyle.name => item.name,
+          }
         : item.raw['ProductionYear']?.toString();
 
     return Padding(
@@ -1397,6 +1645,31 @@ class _TileCaption extends StatelessWidget {
     );
   }
 }
+/// [card] as is; or, [named], at [height] with [name] under it.
+Widget _named(bool named, double height, String name, Widget card) => !named
+    ? card
+    : Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [SizedBox(height: height, child: card), _NameCaption(name)],
+      );
+
+/// A card's name under it (My Media's and Genres', if set to), as [_TileCaption] lays out its
+/// first line.
+class _NameCaption extends StatelessWidget {
+  const _NameCaption(this.name);
+
+  final String name;
+
+  /// The room it takes.
+  static double heightOf(BuildContext context) => _TileCaption._top + lineHeightOf(context, _TileCaption._titleStyle(context)) + 1;
+
+  @override
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.fromLTRB(4, _TileCaption._top, 4, 0),
+    child: Text(name, maxLines: 1, overflow: TextOverflow.ellipsis, style: _TileCaption._titleStyle(context)),
+  );
+}
+
 // ─── Placeholders ────────────────────────────────────────────────────────────
 
 /// Fades [child] gently in and out, to show something is on its way.
@@ -1529,9 +1802,12 @@ class _PlaceholderBanner extends StatelessWidget {
 /// Ten of the server's genres, picked at random (once per launch, so they don't shuffle as you
 /// scroll), as tiles like the Genres page's.
 class _GenresRow extends StatefulWidget {
-  const _GenresRow({required this.sides, this.editing = false});
+  const _GenresRow({required this.sides, required this.options, this.editing = false});
 
   final EdgeInsets sides; // the row's padding at its ends
+
+  /// How many genres, and which (see SectionOptions).
+  final SectionOptions options;
 
   /// Editing Home: just the tiles' shapes, as other sections show.
   final bool editing;
@@ -1545,15 +1821,24 @@ class _GenresRowState extends State<_GenresRow> {
 
   static const _gap = genreCardGap;
 
-  static List<String>? _picked;
-  static List<String>? _pickedFrom;
+  /// The server's genres shuffled once a launch, so a random pick doesn't change as you scroll.
+  static List<String>? _shuffled;
+  static List<String>? _shuffledFrom;
 
-  static List<String> _pick(List<String> genres) {
-    if (!identical(genres, _pickedFrom)) {
-      _pickedFrom = genres;
-      _picked = ([...genres]..shuffle()).take(10).toList();
+  /// The genres to show: all of them; or as many as set, picked at random or from the ones
+  /// chosen (in the server's order).
+  List<String> _pick(List<String> genres) {
+    final count = widget.options.genreCount;
+    if (count == null) return genres;
+    if (widget.options.genrePick == GenrePick.chosen) {
+      final chosen = widget.options.chosenGenres.toSet();
+      return genres.where(chosen.contains).take(count).toList();
     }
-    return _picked!;
+    if (!identical(genres, _shuffledFrom)) {
+      _shuffledFrom = genres;
+      _shuffled = [...genres]..shuffle();
+    }
+    return _shuffled!.take(count).toList();
   }
 
   @override
@@ -1602,8 +1887,9 @@ class _GenresRowState extends State<_GenresRow> {
         ),
       );
     }
+    final named = widget.options.cardNames;
     return SizedBox(
-      height: height,
+      height: height + (named ? _NameCaption.heightOf(context) : 0),
       child: FocusRow(
         child: ListView.separated(
           controller: _scroll,
@@ -1621,7 +1907,15 @@ class _GenresRowState extends State<_GenresRow> {
               onFocusChange: (focused) {
                 if (focused) _keepInSlot(i, width);
               },
-              child: GenreTile(genre: genres[i]),
+              child: named
+                  ? Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        SizedBox(height: height, child: GenreTile(genre: genres[i], nameInside: false)),
+                        _NameCaption(genres[i]),
+                      ],
+                    )
+                  : GenreTile(genre: genres[i]),
             ),
           ),
         ),
@@ -1636,7 +1930,13 @@ double _shortcutWidth(BuildContext context) =>
     CardRows.acrossWidth(context, ScreenType.of(context).isPhone ? 2.3 : 4.5, spacing: genreCardGap);
 
 class _MyMediaRow extends StatelessWidget {
-  const _MyMediaRow({required this.sides, this.editing = false});
+  const _MyMediaRow({required this.sides, this.editing = false, this.look = CardLook.pictures, this.named = false});
+
+  /// Each library's name under its card.
+  final bool named;
+
+  /// The libraries' own pictures from Jellyfin, or icon cards.
+  final CardLook look;
 
   final EdgeInsets sides; // the row's padding at its ends
 
@@ -1668,7 +1968,7 @@ class _MyMediaRow extends StatelessWidget {
       );
     }
     return SizedBox(
-      height: height,
+      height: height + (named ? _NameCaption.heightOf(context) : 0),
       child: FocusRow(
         child: ListView.separated(
           scrollDirection: Axis.horizontal,
@@ -1680,7 +1980,11 @@ class _MyMediaRow extends StatelessWidget {
             final library = libraries[i];
             return SizedBox(
               width: width,
-              child: Tappable(
+              child: _named(
+                named,
+                height,
+                library.name,
+                Tappable(
                 onPress: () => context.go('/home/library/${library.id}'),
                 semanticsLabel: library.name,
                 // Like a genre card: the whole tile, growing a little when focused, with the focus
@@ -1694,7 +1998,10 @@ class _MyMediaRow extends StatelessWidget {
                     child: AnimatedContainer(
                       duration: const Duration(milliseconds: 150),
                       clipBehavior: Clip.antiAlias,
-                      decoration: BoxDecoration(borderRadius: BorderRadius.circular(12)),
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(12),
+                        boxShadow: active ? cardHoverShadow : const [], // lifted off the page
+                      ),
                       foregroundDecoration: BoxDecoration(
                         borderRadius: BorderRadius.circular(12),
                         border: Border.all(color: active ? context.colors.primary : const Color(0x00000000), width: 3),
@@ -1703,8 +2010,12 @@ class _MyMediaRow extends StatelessWidget {
                     ),
                   );
                 },
+                // Icons: a card of its own color with its kind's icon.
+                child: look == CardLook.icons
+                    ? IconCard(name: library.name, icon: libraryIcon(library.collectionType), showName: !named)
+                    :
                 // The library's own artwork from Jellyfin; its icon if it has none.
-                child: Image.network(
+                Image.network(
                   jellyfin.client!.images.url(
                     itemId: library.id,
                     type: JellyfinImagesApi.typePrimary,
@@ -1725,7 +2036,8 @@ class _MyMediaRow extends StatelessWidget {
                       spacing: 6,
                       children: [
                         Icon(libraryIcon(library.collectionType), size: height * 0.36, color: const Color(0xFFFFFFFF)),
-                        Padding(
+                        if (!named)
+                          Padding(
                           padding: const EdgeInsets.symmetric(horizontal: 8),
                           child: Text(
                             library.name,
@@ -1738,6 +2050,7 @@ class _MyMediaRow extends StatelessWidget {
                     ),
                   ),
                 ),
+              ),
               ),
             );
           },

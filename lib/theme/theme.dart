@@ -142,6 +142,10 @@ double lineHeightOf(BuildContext context, TextStyle? style) {
   return height;
 }
 
+/// The shadow under a card (a poster, a genre, a library, an episode) while it's hovered over or
+/// focused, lifting it off the page. Animated in and out by the card's own AnimatedContainer.
+const cardHoverShadow = [BoxShadow(color: Color(0x99000000), blurRadius: 18, spreadRadius: 1, offset: Offset(0, 8))];
+
 /// Shortcuts to the current theme's colors and text styles.
 extension ThemeContext on BuildContext {
   ColorScheme get colors => Theme.of(this).colorScheme;

@@ -24,7 +24,8 @@ IconData _iconFor(String genre) {
 
 // ─── The setting ─────────────────────────────────────────────────────────────
 
-/// How genre cards look (Settings › Appearance › Genre cards).
+/// How genre cards look, on the Genres page and Home's Genres section (Settings › Appearance ›
+/// Genre cards).
 enum GenreCardStyle {
   icons('Icons'),
   pictures('Jellyfin pictures'),
@@ -124,9 +125,12 @@ class GenresScreen extends StatelessWidget {
 /// Jellyfin has for it (see [genreCards]), with its name. The Genres page and Home's Genres
 /// section. It fills the room it's given.
 class GenreTile extends StatelessWidget {
-  const GenreTile({super.key, required this.genre});
+  const GenreTile({super.key, required this.genre, this.nameInside = true});
 
   final String genre;
+
+  /// Its name on the card; false when it's named under it instead (Home's Genres, if set to).
+  final bool nameInside;
 
   @override
   Widget build(BuildContext context) {
@@ -150,7 +154,10 @@ class GenreTile extends StatelessWidget {
           child: AnimatedContainer(
             duration: const Duration(milliseconds: 150),
             clipBehavior: Clip.antiAlias,
-            decoration: BoxDecoration(borderRadius: BorderRadius.circular(12)),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(12),
+              boxShadow: active ? cardHoverShadow : const [], // lifted off the page
+            ),
             foregroundDecoration: BoxDecoration(
               borderRadius: BorderRadius.circular(12),
               border: Border.all(color: active ? colors.primary : const Color(0x00000000), width: 3),
@@ -160,10 +167,10 @@ class GenreTile extends StatelessWidget {
         );
       },
       child: picture
-          ? _PictureCard(genre: genre, item: item, tag: tag)
+          ? _PictureCard(genre: genre, item: item, tag: tag, showName: nameInside)
           : themePictures.isNotEmpty
-          ? _ThemePictureCard(genre: genre, pictures: themePictures)
-          : _IconCard(genre: genre),
+          ? _ThemePictureCard(genre: genre, pictures: themePictures, showName: nameInside)
+          : IconCard(name: genre, icon: _iconFor(genre), showName: nameInside),
     );
   }
 }
@@ -193,12 +200,16 @@ class _GenreName extends StatelessWidget {
   );
 }
 
-/// Icons: a deep color of the genre's own (the same every time), its icon large and faint at the
-/// right, and its name.
-class _IconCard extends StatelessWidget {
-  const _IconCard({required this.genre});
+/// Icons: a deep color of its own (the same every time, from its [name]), its [icon] large and
+/// faint at the right, and its name. A genre's card, and a library's in My Media.
+class IconCard extends StatelessWidget {
+  const IconCard({super.key, required this.name, required this.icon, this.showName = true});
 
-  final String genre;
+  final String name;
+  final IconData icon;
+
+  /// Its name on it (not when it's named under it instead).
+  final bool showName;
 
   /// A hue picked from the name, so each genre keeps its color.
   static double _hue(String genre) {
@@ -211,7 +222,7 @@ class _IconCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final hue = _hue(genre);
+    final hue = _hue(name);
     final light = HSLColor.fromAHSL(1, hue, 0.45, 0.36).toColor();
     final dark = HSLColor.fromAHSL(1, (hue + 25) % 360, 0.5, 0.16).toColor();
     return LayoutBuilder(
@@ -228,14 +239,14 @@ class _IconCard extends StatelessWidget {
               child: Transform.rotate(
                 angle: -0.2,
                 child: Icon(
-                  _iconFor(genre),
+                  icon,
                   size: constraints.maxHeight * 0.85,
                   color: const Color(0x33FFFFFF),
                   fill: 1,
                 ),
               ),
             ),
-            _GenreName(genre),
+            if (showName) _GenreName(name),
           ],
         ),
       ),
@@ -245,27 +256,30 @@ class _IconCard extends StatelessWidget {
 
 /// A server theme's picture for the genre, filling the card, with the name over a fade.
 class _ThemePictureCard extends StatelessWidget {
-  const _ThemePictureCard({required this.genre, required this.pictures});
+  const _ThemePictureCard({required this.genre, required this.pictures, this.showName = true});
 
   final String genre;
   final List<ImageProvider> pictures;
+  final bool showName;
 
   @override
   Widget build(BuildContext context) => Stack(
     fit: StackFit.expand,
     children: [
-      LayeredImage(pictures: pictures, fit: BoxFit.cover, fallback: _IconCard(genre: genre)),
-      const DecoratedBox(
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            stops: [0.5, 1],
-            colors: [Color(0x00000000), Color(0xCC000000)],
+      LayeredImage(pictures: pictures, fit: BoxFit.cover, fallback: IconCard(name: genre, icon: _iconFor(genre), showName: showName)),
+      if (showName) ...[
+        const DecoratedBox(
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+              stops: [0.5, 1],
+              colors: [Color(0x00000000), Color(0xCC000000)],
+            ),
           ),
         ),
-      ),
-      _GenreName(genre),
+        _GenreName(genre),
+      ],
     ],
   );
 }
@@ -273,11 +287,12 @@ class _ThemePictureCard extends StatelessWidget {
 /// Jellyfin's picture for the genre, whole, with the name over a fade at the bottom. Its icon
 /// card's color shows until it's in.
 class _PictureCard extends StatelessWidget {
-  const _PictureCard({required this.genre, required this.item, required this.tag});
+  const _PictureCard({required this.genre, required this.item, required this.tag, this.showName = true});
 
   final String genre;
   final JellyfinItem item;
   final String tag;
+  final bool showName;
 
   @override
   Widget build(BuildContext context) => LayoutBuilder(
@@ -294,20 +309,22 @@ class _PictureCard extends StatelessWidget {
           ),
           fit: BoxFit.cover,
           frameBuilder: (context, child, frame, loaded) =>
-              loaded || frame != null ? child : _IconCard(genre: genre),
-          errorBuilder: (_, _, _) => _IconCard(genre: genre),
+              loaded || frame != null ? child : IconCard(name: genre, icon: _iconFor(genre), showName: showName),
+          errorBuilder: (_, _, _) => IconCard(name: genre, icon: _iconFor(genre), showName: showName),
         ),
-        const DecoratedBox(
-          decoration: BoxDecoration(
-            gradient: LinearGradient(
-              begin: Alignment.topCenter,
-              end: Alignment.bottomCenter,
-              stops: [0.5, 1],
-              colors: [Color(0x00000000), Color(0xCC000000)],
+        if (showName) ...[
+          const DecoratedBox(
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                stops: [0.5, 1],
+                colors: [Color(0x00000000), Color(0xCC000000)],
+              ),
             ),
           ),
-        ),
-        _GenreName(genre),
+          _GenreName(genre),
+        ],
       ],
     ),
   );

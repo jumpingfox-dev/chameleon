@@ -246,6 +246,21 @@ class PosterCard extends StatefulWidget {
   /// 1080p TV), so a poster widened to 16:9 for its preview is a thumbnail's size.
   static const height = 220.0;
 
+  /// Behind a picture boxed in a card of another shape (see _boxed): one soft gradient in the
+  /// theme's colors, the same on every card, like the genre and library cards' backgrounds.
+  static Widget boxBackground(ColorScheme colors) => DecoratedBox(
+    decoration: BoxDecoration(
+      gradient: LinearGradient(
+        begin: Alignment.topLeft,
+        end: Alignment.bottomRight,
+        colors: [
+          Color.lerp(colors.surfaceContainerHighest, colors.primary, 0.22)!,
+          Color.lerp(colors.surfaceContainerLow, colors.primary, 0.06)!,
+        ],
+      ),
+    ),
+  );
+
   /// The focus border's width. Stills playing in the card sit just inside it.
   static const borderWidth = 2.5;
 
@@ -300,6 +315,17 @@ class _PosterCardState extends State<PosterCard> {
   ///
   /// Not wideImageUrl: this goes through client.images.url() for its quality and sizing,
   /// not a hand-built address.
+  /// The card's shape and its picture's don't match, so the picture sits whole in it over
+  /// [PosterCard.boxBackground] rather than being cut down to fill it: a season's poster in a
+  /// thumbnail (it has no wide picture of its own), an episode's still in a poster.
+  bool get _boxed => switch (view) {
+    LibraryView.thumbnail =>
+      item.type == JellyfinItemKind.season &&
+          item.imageTags['Thumb'] == null &&
+          ((item.raw['BackdropImageTags'] as List?)?.isEmpty ?? true),
+    LibraryView.poster => item.type == JellyfinItemKind.episode,
+  };
+
   String? _imageUrl(JellyfinClient client, int fillWidth) {
     if (view == LibraryView.thumbnail) {
       final thumb = item.imageTags['Thumb'];
@@ -363,8 +389,13 @@ class _PosterCardState extends State<PosterCard> {
                 curve: Curves.easeOut,
                 child: AnimatedContainer(
                   duration: const Duration(milliseconds: 150),
-                  // Hovered or focused: a border drawn over the artwork's edge (it takes up no space),
-                  // and around stills playing in the card.
+                  // Hovered or focused: a shadow lifting it off the page.
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(8),
+                    boxShadow: active ? cardHoverShadow : const [],
+                  ),
+                  // And a border drawn over the artwork's edge (it takes up no space), and around
+                  // stills playing in the card.
                   foregroundDecoration: BoxDecoration(
                     border: Border.all(
                       color: active
@@ -379,11 +410,13 @@ class _PosterCardState extends State<PosterCard> {
                     child: Stack(
                       fit: StackFit.expand,
                       children: [
+                        if (url != null && _boxed) PosterCard.boxBackground(colors),
                         url == null
                             ? _placeholder(context, colors)
                             : Image.network(
                                 url,
-                                fit: BoxFit.cover,
+                                // A picture of another shape than the card's sits whole in it.
+                                fit: _boxed ? BoxFit.contain : BoxFit.cover,
                                 gaplessPlayback: true, // a bigger copy replaces the smaller in place
                                 width: double.infinity,
                                 height: double.infinity,
