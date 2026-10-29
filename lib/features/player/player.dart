@@ -7,6 +7,7 @@ import 'dart:io';
 import 'dart:math' as math;
 
 import 'package:dart_jellyfin/dart_jellyfin.dart';
+import 'package:flutter/foundation.dart' show listEquals;
 import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 import 'package:material_ui/material_ui.dart';
@@ -37,6 +38,7 @@ import '../home/home_modules.dart';
 import '../screensaver/screensaver.dart';
 import '../../theme/theme.dart';
 import '../../widgets/tappable.dart';
+import '../library/poster_card.dart' show PosterCard, WatchProgressBar;
 
 part 'player_controls.dart';
 part 'player_segments.dart';
@@ -131,7 +133,8 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
   final _upNextNode = FocusNode(debugLabel: 'Up next: play now');
   final _upNextScope = FocusNode(debugLabel: 'Up next', skipTraversal: true, canRequestFocus: false);
 
-  List<FocusNode> get _optionRow => [_audioNode, _subtitlesNode, _fitNode];
+  final _chaptersNode = FocusNode(debugLabel: 'Chapters');
+  List<FocusNode> get _optionRow => [_chaptersNode, _audioNode, _subtitlesNode, _fitNode];
   List<FocusNode> get _transportRow => [_previousNode, _playNode, _nextNode];
   List<FocusNode> get _allButtons => [
     _backNode,
@@ -149,6 +152,12 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
   static const _controlsClearancePhone = 146.0;
 
   bool get _isPhone => ScreenType.of(context).isPhone;
+
+  /// The chapter row's height, as wide as the controls are (see _PlayerControls).
+  double _chapterRowHeight(BuildContext context, {required bool compact}) {
+    final width = MediaQuery.sizeOf(context).width - _overlayInsets(context, compact: compact).horizontal - (compact ? 48 : 64);
+    return _ChapterRow.heightFor(context, width);
+  }
 
   EdgeInsets _subtitlePadding({required bool lifted}) {
     lifted = lifted && playbackSettings.liftSubtitles; // "Move up when controls show" in Settings
@@ -168,6 +177,53 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
 
   /// Chapters with their names, for showing while scrubbing.
   List<({String name, Duration start})> _namedChapters = const [];
+
+  /// The chapter row under the controls (see _ChapterRow): its chapters, a focus node for each,
+  /// and whether it's open.
+  List<_ChapterCard> _chapterCards = const [];
+  List<FocusNode> _chapterNodes = const [];
+  bool _chaptersOpen = false;
+
+  void _setChapterCards(List<_ChapterCard> cards) {
+    for (final node in _chapterNodes) {
+      node.dispose();
+    }
+    _chapterCards = cards;
+    _chapterNodes = [for (final (i, _) in cards.indexed) FocusNode(debugLabel: 'Chapter $i')];
+    _chaptersOpen = false;
+  }
+
+  bool get _onChapter => _chapterNodes.any((n) => n.hasPrimaryFocus);
+
+  /// Opens the chapter row, on the chapter playing.
+  void _openChapters() {
+    if (_chapterCards.isEmpty) return;
+    _showControls();
+    setState(() => _chaptersOpen = true);
+    final active = _activeChapterIn(_chapterCards, _scrub ?? _player.state.position);
+    // (Once it's open and scrolled to it: see _ChapterRow.)
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted && _chaptersOpen) _chapterNodes[active].requestFocus();
+    });
+  }
+
+  /// Closes the chapter row; focus back to [to] if it was in it.
+  void _closeChapters({FocusNode? to}) {
+    if (!_chaptersOpen) return;
+    if (_onChapter) (to ?? (_isPhone ? _seekNode : _playNode)).requestFocus();
+    setState(() => _chaptersOpen = false);
+  }
+
+  void _toggleChapters() => _chaptersOpen ? _closeChapters(to: _chaptersNode) : _openChapters();
+
+  /// A chapter chosen: jump to it, and put the row away. Landing in an intro or credits doesn't
+  /// skip it: you asked for it (the Skip button shows instead).
+  void _pickChapter(Duration start) {
+    _autoSkipped.addAll(_segments.where((s) => start >= s.start - _sameStart && start < s.end));
+    _seekTo(start);
+    _closeChapters();
+    _showControls();
+  }
 
   /// Skippable stretches (intro, credits, ...), and the one playing right now, if any.
   List<_Segment> _segments = const [];
@@ -349,6 +405,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
         _item = item;
         _chapters = _chaptersOf(item);
         _namedChapters = _namedChaptersOf(item);
+        _setChapterCards(_chapterCardsOf(item));
         _trickplay = playbackSettings.trickplay ? _Trickplay.of(item) : null;
       });
       // Movies and episodes stay sideways until the phone has been turned sideways once.
@@ -966,6 +1023,7 @@ builder: (context) => Dialog(child: Padding(
       _error = null;
       _chapters = const [];
       _namedChapters = const [];
+      _setChapterCards(const []);
       _segments = const [];
       _activeSegment = null;
       _autoSkipped.clear();
@@ -1287,6 +1345,9 @@ builder: (context) => Dialog(child: Padding(
       node.dispose();
     }
     _seekNode.dispose();
+    for (final node in _chapterNodes) {
+      node.dispose();
+    }
     _skipNode.dispose();
     _upNextNode.dispose();
     _upNextScope.dispose();
@@ -1646,6 +1707,8 @@ builder: (context) => Dialog(child: Padding(
 
   /// Back while the controls are up: put them away (dropping any unfinished scrub).
   void _hideControlsNow() {
+    // Back with the chapters open: just put them away.
+    if (_chaptersOpen) return _closeChapters();
     _hideTimer?.cancel();
     _scrubCommit?.cancel();
     if (_scrub != null) setState(() => _scrub = null);
@@ -1696,9 +1759,10 @@ builder: (context) => Dialog(child: Padding(
     // Hiding: leave the control buttons. Back to the skip button if it's on screen,
     // otherwise to the video (so the next key scrubs, plays or pauses).
     if (!visible &&
-        (_seekNode.hasFocus || _allButtons.any((n) => n.hasFocus))) {
+        (_seekNode.hasFocus || _onChapter || _allButtons.any((n) => n.hasFocus))) {
       _activeSegment != null ? _skipNode.requestFocus() : _focus.requestFocus();
     }
+    if (!visible && _chaptersOpen) setState(() => _chaptersOpen = false);
     // (The subtitles slide up or down with it: see the subtitles in build.)
     if (visible != _controlsVisible) setState(() => _controlsVisible = visible);
   }
@@ -1707,6 +1771,19 @@ builder: (context) => Dialog(child: Padding(
   /// ↑ goes to the controls row and ↓ to Play/Pause.
   void _moveFocus(TraversalDirection direction) {
     _showControls(autoHide: _scrub == null);
+    // In the chapter row: ←/→ along it, ↑ back to the buttons above.
+    if (_onChapter) {
+      if (direction == TraversalDirection.up) _closeChapters();
+      if (direction == TraversalDirection.left || direction == TraversalDirection.right) moveFocus(direction);
+      return;
+    }
+    // ↓ from the bottom row of controls: the chapters, opened on the one playing.
+    if (direction == TraversalDirection.down &&
+        _chapterCards.isNotEmpty &&
+        (_isPhone ? _seekNode.hasPrimaryFocus : _transportRow.any((n) => n.hasPrimaryFocus))) {
+      _openChapters();
+      return;
+    }
     final onControl =
         _seekNode.hasPrimaryFocus ||
             _skipNode.hasPrimaryFocus ||
@@ -1756,7 +1833,7 @@ builder: (context) => Dialog(child: Padding(
       return KeyEventResult.handled;
     }
 
-    final onButton = _allButtons.any((n) => n.hasPrimaryFocus);
+    final onButton = _allButtons.any((n) => n.hasPrimaryFocus) || _onChapter;
     final onSkip = _skipNode.hasPrimaryFocus;
     final onUpNext = _upNextScope.hasFocus; // the Up Next card's buttons
 
@@ -1959,6 +2036,12 @@ builder: (context) => Dialog(child: Padding(
                                 onSubtitles: _openSubtitles,
                                 onInteract: _showControls,
                                 onCast: () => showCastMenu(context),
+                                chapterCards: _chapterCards,
+                                chapterNodes: _chapterNodes,
+                                chaptersNode: _chaptersNode,
+                                chaptersOpen: _chaptersOpen,
+                                onPickChapter: _pickChapter,
+                                onToggleChapters: _toggleChapters,
                               ),
                             ),
                           ),
@@ -1969,7 +2052,9 @@ builder: (context) => Dialog(child: Padding(
                             curve: Curves.easeOut,
                             right: compact ? 16 : 32,
                             // Above the controls when they're showing; near the corner otherwise.
-                            bottom: _controlsVisible ? (compact ? 146 : 170) : (compact ? 12 : 24),
+                            bottom: _controlsVisible
+                                ? (compact ? 146 : 170) + (_chaptersOpen ? _chapterRowHeight(context, compact: compact) : 0)
+                                : (compact ? 12 : 24),
                             child: Column(
                               mainAxisSize: MainAxisSize.min,
                               crossAxisAlignment: CrossAxisAlignment.end,

@@ -142,7 +142,22 @@ class _PlayerControls extends StatelessWidget {
     required this.onInteract,
     required this.onDragPreview,
     required this.onCast,
+    required this.chapterCards,
+    required this.chapterNodes,
+    required this.chaptersNode,
+    required this.chaptersOpen,
+    required this.onPickChapter,
+    required this.onToggleChapters,
   });
+
+  /// The chapter row (see [_ChapterRow]): its chapters, a focus node for each, whether it's open,
+  /// and the button that opens it (for touch, where there's no ↓).
+  final List<_ChapterCard> chapterCards;
+  final List<FocusNode> chapterNodes;
+  final FocusNode chaptersNode;
+  final bool chaptersOpen;
+  final ValueChanged<Duration> onPickChapter;
+  final VoidCallback onToggleChapters;
 
   final PlaybackEngine player;
   final JellyfinItem? item;
@@ -280,6 +295,14 @@ class _PlayerControls extends StatelessWidget {
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.end,
                   children: [
+                    if (chapterCards.isNotEmpty)
+                      _ControlButton(
+                        focusNode: chaptersNode,
+                        icon: Icons.view_carousel_rounded,
+                        label: chaptersOpen ? 'Hide chapters' : 'Chapters',
+                        size: compact ? 28 : 22,
+                        onPress: onToggleChapters,
+                      ),
                     _ControlButton(
                       focusNode: audioNode,
                       icon: Icons.graphic_eq_rounded,
@@ -324,6 +347,26 @@ class _PlayerControls extends StatelessWidget {
                 const SizedBox(height: 4),
                 transport(skipSize: 28, playSize: 32, spacing: 24),
               ],
+              // The chapters: tucked away below until opened, when they slide up into view and
+              // everything above moves up to make room.
+              if (chapterCards.isNotEmpty && item != null)
+                ClipRect(
+                  clipper: const _ClipHeightOnly(),
+                  child: AnimatedAlign(
+                    duration: const Duration(milliseconds: 220),
+                    curve: Curves.easeOutCubic,
+                    alignment: Alignment.topCenter,
+                    heightFactor: chaptersOpen ? 1 : 0,
+                    child: _ChapterRow(
+                      player: player,
+                      itemId: item!.id,
+                      chapters: chapterCards,
+                      nodes: chapterNodes,
+                      open: chaptersOpen,
+                      onPick: onPickChapter,
+                    ),
+                  ),
+                ),
             ],
           ),
         ),
@@ -690,10 +733,26 @@ class _SeekBarState extends State<_SeekBar> {
                   clipBehavior: Clip.none, // the preview rises above the bar
                   alignment: Alignment.centerLeft,
                   children: [
-                    _bar(width, const Color(0x40FFFFFF), thickness),
-                    _bar(width * buffered, const Color(0x66FFFFFF), thickness),
-                    // White, like YouTube's, and the theme's color while scrubbing.
-                    _bar(x, preview != null ? primary : _white, thickness),
+                    // Cut where each chapter starts: a see-through gap across the whole bar.
+                    ClipPath(
+                      clipper: _ChapterCuts([
+                        if (total > 0)
+                          for (final c in widget.chapters)
+                            if (c.start > Duration.zero && c.start.inMilliseconds < total) width * fractionOf(c.start),
+                      ], _chapterMark),
+                      child: SizedBox(
+                        width: width,
+                        height: thickness,
+                        child: Stack(
+                          children: [
+                            _bar(width, const Color(0x40FFFFFF), thickness),
+                            _bar(width * buffered, const Color(0x66FFFFFF), thickness),
+                            // White, like YouTube's, and the theme's color while scrubbing.
+                            _bar(x, preview != null ? primary : _white, thickness),
+                          ],
+                        ),
+                      ),
+                    ),
                     // The handle only shows while the bar has focus or is being dragged.
                     Positioned(
                       left: math.max(0, x - handle / 2),
@@ -736,6 +795,9 @@ class _SeekBarState extends State<_SeekBar> {
     },
   );
 
+  /// How wide a chapter's mark in the bar is.
+  static const _chapterMark = 3.0;
+
   Widget _bar(double width, Color color, double thickness) => Container(
     width: width,
     height: thickness,
@@ -743,5 +805,298 @@ class _SeekBarState extends State<_SeekBar> {
       color: color,
       borderRadius: BorderRadius.circular(thickness / 2),
     ),
+  );
+}
+
+// ─── Chapters ────────────────────────────────────────────────────────────────
+
+/// Clips the top and bottom only: the chapter row hides below while closed, but its cards
+/// still reach past the controls' sides to the screen's edges.
+class _ClipHeightOnly extends CustomClipper<Rect> {
+  const _ClipHeightOnly();
+
+  @override
+  Rect getClip(Size size) => Rect.fromLTRB(-10000, 0, size.width + 10000, size.height);
+
+  @override
+  bool shouldReclip(_ClipHeightOnly old) => false;
+}
+
+/// The seek bar with a gap [gap] wide cut at each of [cuts] (where chapters start).
+class _ChapterCuts extends CustomClipper<Path> {
+  const _ChapterCuts(this.cuts, this.gap);
+
+  final List<double> cuts;
+  final double gap;
+
+  @override
+  Path getClip(Size size) {
+    final path = Path()
+      ..fillType = PathFillType.evenOdd
+      ..addRect(Offset.zero & size);
+    for (final x in cuts) {
+      path.addRect(Rect.fromLTWH(x - gap / 2, 0, gap, size.height));
+    }
+    return path;
+  }
+
+  @override
+  bool shouldReclip(_ChapterCuts old) => old.gap != gap || !listEquals(old.cuts, cuts);
+}
+
+/// A chapter, for the chapter row: its place in the item's list (for its picture), its name and
+/// where it starts, and its picture's tag (null: none).
+typedef _ChapterCard = ({int index, String name, Duration start, String? tag});
+
+/// The item's chapters, in order. Unnamed ones are "Chapter 3".
+List<_ChapterCard> _chapterCardsOf(JellyfinItem item) {
+  final raw = (item.raw['Chapters'] as List?) ?? const [];
+  return [
+    for (final (i, c) in raw.indexed)
+      if (c is Map && c['StartPositionTicks'] is int)
+        (
+          index: i,
+          name: switch (c['Name']) {
+            final String n when n.trim().isNotEmpty => n.trim(),
+            _ => 'Chapter ${i + 1}',
+          },
+          start: Duration(microseconds: (c['StartPositionTicks'] as int) ~/ 10),
+          tag: c['ImageTag'] as String?,
+        ),
+  ]..sort((a, b) => a.start.compareTo(b.start));
+}
+
+/// How close a chapter and a segment start for them to be the same (see _pickChapter).
+const _sameStart = Duration(seconds: 3);
+
+/// The chapter playing at [position]: the first before the first one starts.
+int _activeChapterIn(List<_ChapterCard> chapters, Duration position) =>
+    math.max(0, chapters.lastIndexWhere((c) => c.start <= position));
+
+/// The chapters, as a row of cards under the controls, like Home's rows: ↓ from the buttons
+/// opens it on the chapter playing, and choosing one jumps there.
+class _ChapterRow extends StatefulWidget {
+  const _ChapterRow({
+    required this.player,
+    required this.itemId,
+    required this.chapters,
+    required this.nodes,
+    required this.open,
+    required this.onPick,
+  });
+
+  final PlaybackEngine player;
+  final String itemId;
+  final List<_ChapterCard> chapters;
+  final List<FocusNode> nodes; // one per chapter
+  final bool open;
+  final ValueChanged<Duration> onPick;
+
+  /// How many show across: 3.5, as Home's Continue Watching (2.3 on phones).
+  static double cardWidth(BuildContext context, double rowWidth) {
+    final across = ScreenType.of(context).isPhone ? 2.3 : 3.5;
+    return (rowWidth - (across.ceil() - 1) * _gap) / across;
+  }
+
+  static const _gap = 12.0;
+
+  /// Above and below the cards: room for a focused one to grow.
+  static const _pad = 10.0;
+
+  static TextStyle? _nameStyle(BuildContext context) =>
+      context.text.titleSmall?.copyWith(color: _white, fontWeight: FontWeight.w700);
+  static TextStyle? _timeStyle(BuildContext context) => context.text.bodySmall?.copyWith(color: _dimWhite);
+
+  /// The row's height, [rowWidth] wide.
+  static double heightFor(BuildContext context, double rowWidth) =>
+      _pad * 2 +
+      cardWidth(context, rowWidth) * 9 / 16 +
+      8 +
+      lineHeightOf(context, _nameStyle(context)) +
+      2 +
+      lineHeightOf(context, _timeStyle(context));
+
+  @override
+  State<_ChapterRow> createState() => _ChapterRowState();
+}
+
+class _ChapterRowState extends State<_ChapterRow> {
+  final _scroll = ScrollController();
+
+  @override
+  void dispose() {
+    _scroll.dispose();
+    super.dispose();
+  }
+
+  @override
+  void didUpdateWidget(_ChapterRow old) {
+    super.didUpdateWidget(old);
+    // Opening: start where the chapter playing is (its card focused just after; see the player).
+    if (widget.open && !old.open) _jumpTo(_activeChapterIn(widget.chapters, widget.player.state.position));
+  }
+
+  /// The scroll offset that keeps [index]'s card in its slot, as Home's rows do: the row
+  /// scrolls under a card that stays put, until the row's end.
+  double? _offsetFor(int index, double width) {
+    if (!_scroll.hasClients) return null;
+    final position = _scroll.position;
+    final step = width + _ChapterRow._gap;
+    final slot = math.max(0, ((position.viewportDimension - _side - width) / step).floor());
+    return ((index - slot) * step).clamp(position.minScrollExtent, position.maxScrollExtent);
+  }
+
+  double get _width =>
+      _ChapterRow.cardWidth(context, _scroll.hasClients ? _scroll.position.viewportDimension - _side * 2 : 0);
+
+  void _jumpTo(int index) {
+    final offset = _offsetFor(index, _width);
+    if (offset != null) _scroll.jumpTo(offset);
+  }
+
+  void _keepInSlot(int index) {
+    if (FocusManager.instance.highlightMode != FocusHighlightMode.traditional) return;
+    final offset = _offsetFor(index, _width);
+    if (offset == null || (offset - _scroll.position.pixels).abs() < 0.5) return;
+    _scroll.animateTo(offset, duration: const Duration(milliseconds: 200), curve: Curves.easeOutCubic);
+  }
+
+  /// The room before the first card (and after the last): the row reaches the screen's edges,
+  /// so the cards scroll off them, as Home's do, but starts in line with the seek bar.
+  double _side = 0;
+
+  @override
+  Widget build(BuildContext context) => LayoutBuilder(
+    builder: (context, constraints) {
+      final width = _ChapterRow.cardWidth(context, constraints.maxWidth);
+      final imageHeight = width * 9 / 16;
+      final client = jellyfin.client;
+      final screen = MediaQuery.sizeOf(context).width;
+      _side = math.max(0.0, (screen - constraints.maxWidth) / 2);
+      final height = _ChapterRow.heightFor(context, constraints.maxWidth);
+      return SizedBox(
+        height: height,
+        child: OverflowBox(
+        minWidth: constraints.maxWidth + _side * 2,
+        maxWidth: constraints.maxWidth + _side * 2,
+        // (Its own height: in the controls' column, the height on offer has no end.)
+        minHeight: height,
+        maxHeight: height,
+        alignment: Alignment.center,
+        child: SizedBox(
+        height: height,
+        // Out of reach while it's closed, so ↑/↓ and taps pass it by.
+        child: ExcludeFocus(
+          excluding: !widget.open,
+          child: IgnorePointer(
+            ignoring: !widget.open,
+            child: FocusRow(
+              child: ListView.separated(
+                controller: _scroll,
+                scrollDirection: Axis.horizontal,
+                padding: EdgeInsets.symmetric(vertical: _ChapterRow._pad, horizontal: _side),
+                clipBehavior: Clip.none, // a focused card grows past the row's ends
+                itemCount: widget.chapters.length,
+                separatorBuilder: (_, _) => const SizedBox(width: _ChapterRow._gap),
+                itemBuilder: (context, i) {
+                  final chapter = widget.chapters[i];
+                  final next = i + 1 < widget.chapters.length ? widget.chapters[i + 1].start : widget.player.state.duration;
+                  final picture = Tappable(
+                    focusNode: widget.nodes[i],
+                    onPress: () => widget.onPick(chapter.start),
+                    semanticsLabel: chapter.name,
+                    // Like Home's cards: growing a little when focused, lifted off the video, the
+                    // focus border over the picture's edge.
+                    builder: (context, states, child) {
+                      final active = isHighlighted(states);
+                      return AnimatedScale(
+                        scale: active ? 1.04 : 1,
+                        duration: const Duration(milliseconds: 150),
+                        curve: Curves.easeOut,
+                        child: AnimatedContainer(
+                          duration: const Duration(milliseconds: 150),
+                          clipBehavior: Clip.antiAlias,
+                          decoration: BoxDecoration(
+                            borderRadius: BorderRadius.circular(12),
+                            boxShadow: active ? cardHoverShadow : const [],
+                          ),
+                          foregroundDecoration: BoxDecoration(
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(color: active ? context.colors.primary : const Color(0x00000000), width: 3),
+                          ),
+                          child: child,
+                        ),
+                      );
+                    },
+                    child: Stack(
+                      fit: StackFit.expand,
+                      children: [
+                        PosterCard.boxBackground(context.colors),
+                        if (client != null && chapter.tag != null)
+                          Image.network(
+                            client.images.url(
+                              itemId: widget.itemId,
+                              type: 'Chapter',
+                              imageIndex: chapter.index,
+                              tag: chapter.tag,
+                              fillWidth: (width * View.of(context).devicePixelRatio).round(),
+                              quality: 90,
+                            ),
+                            fit: BoxFit.cover,
+                            errorBuilder: (_, _, _) => const SizedBox.shrink(),
+                          ),
+                        // How far into it you are, on the chapter playing.
+                        StreamBuilder<Duration>(
+                          stream: widget.player.stream.position,
+                          builder: (context, _) {
+                            final position = widget.player.state.position;
+                            if (position < chapter.start || position >= next || next <= chapter.start) {
+                              return const SizedBox.shrink();
+                            }
+                            final progress = (position - chapter.start).inMilliseconds / (next - chapter.start).inMilliseconds;
+                            return Positioned(left: 8, right: 8, bottom: 8, child: WatchProgressBar(progress));
+                          },
+                        ),
+                      ],
+                    ),
+                  );
+                  return SizedBox(
+                    width: width,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Focus(
+                          // Doesn't take focus itself: notices the card getting it, and scrolls the row.
+                          canRequestFocus: false,
+                          skipTraversal: true,
+                          onFocusChange: (focused) {
+                            if (focused) _keepInSlot(i);
+                          },
+                          child: SizedBox(height: imageHeight, child: picture),
+                        ),
+                        const SizedBox(height: 8),
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 4),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            spacing: 2,
+                            children: [
+                              Text(chapter.name, maxLines: 1, overflow: TextOverflow.ellipsis, style: _ChapterRow._nameStyle(context)),
+                              Text(formatDuration(chapter.start), maxLines: 1, style: _ChapterRow._timeStyle(context)),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  );
+                },
+              ),
+            ),
+          ),
+        ),
+        ),
+        ),
+      );
+    },
   );
 }
