@@ -43,6 +43,41 @@
     }
   },
   "home": ["carousel", "genres", "myMedia", "continueWatching", "nextUp", "recentlyAdded", "suggested"],
+  "sections": {
+    "carousel": { "showTitle": false, "limit": 8, "kinds": "all", "seconds": 8 },
+    "myMedia": { "showTitle": true, "look": "pictures", "cardNames": false },
+    "genres": { "showTitle": false, "cardNames": false, "genreCount": "all", "pick": "random", "chosen": [] },
+    "continueWatching": {
+      "showTitle": true,
+      "limit": 20,
+      "episodeTitles": true,
+      "episodeTitleStyle": "both",
+      "movieTitles": false,
+      "cutoffDays": "never"
+    },
+    "nextUp": {
+      "showTitle": true,
+      "limit": 20,
+      "episodeTitles": true,
+      "episodeTitleStyle": "both",
+      "cutoff": "server",
+      "rewatching": "server"
+    },
+    "favorites": {
+      "showTitle": true,
+      "limit": 30,
+      "kinds": ["Movie", "Series", "BoxSet"],
+      "names": { "Movie": false, "Series": false, "BoxSet": false, "Season": true, "Episode": true },
+      "sort": "random"
+    },
+    "recentlyAdded": { "showTitle": true, "limit": 30 },
+    "recentlyAddedMovies": { "showTitle": true, "limit": 30 },
+    "recentlyAddedSeries": { "showTitle": true, "limit": 30 },
+    "suggested": { "showTitle": true, "limit": 30 },
+    "becauseYouWatched": { "showTitle": true, "limit": 20, "basis": "last" },
+    "collection": { "showTitle": true, "limit": 50 },
+    "genre": { "showTitle": true, "limit": 30 }
+  },
   "playback": {
     "episodes": {
       "skip": { "intro": "ask", "recap": "ask", "credits": "ask", "preview": "ask" },

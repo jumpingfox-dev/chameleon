@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
 
+import '../../core/storage/app_defaults.dart';
 import '../../core/storage/storage.dart';
 import 'home_layout.dart';
 
@@ -64,8 +65,10 @@ class SectionSettings extends ChangeNotifier {
     await storage.setString(_key, jsonEncode(_all));
   }
 
-  /// Everything set for [key], to tell when a section's content needs loading again.
-  String signature(String key) => jsonEncode(_all[key] ?? const {});
+  /// Everything set for [module], here and as its defaults, to tell when a section's
+  /// content needs loading again.
+  String signature(HomeModule module) =>
+      jsonEncode([_all[keyFor(module)] ?? const {}, SectionOptions.defaultsOf(module.type)]);
 }
 
 /// What Featured shows.
@@ -137,13 +140,24 @@ class SectionOptions {
   final HomeModuleType type;
   final String key;
 
-  T _read<T>(String name, T fallback) => switch (_settings._get(key, name)) {
+  /// [name] as set: by this person, or else by the server's CSS or assets/defaults.json's
+  /// "sections" (by the section's kind, so a Collection row's come from "collection"), or null.
+  Object? _value(String name) => _settings._get(key, name) ?? _defaults[name];
+
+  Map<String, dynamic> get _defaults => defaultsOf(type);
+
+  /// [type]'s defaults: the server's and assets/defaults.json's (see AppDefaults.sectionDefaults).
+  static Map<String, dynamic> defaultsOf(HomeModuleType type) => appDefaults.sectionDefaults(
+    type.name,
+    longer: [for (final t in HomeModuleType.values) if (t != type && t.name.startsWith(type.name)) t.name],
+  );
+
+  T _read<T>(String name, T fallback) => switch (_value(name)) {
     final T value => value,
     _ => fallback,
   };
 
-  E _enum<E extends Enum>(String name, List<E> values, E fallback) =>
-      values.asNameMap()[_settings._get(key, name)] ?? fallback;
+  E _enum<E extends Enum>(String name, List<E> values, E fallback) => values.asNameMap()[_value(name)] ?? fallback;
 
   Future<void> set(String name, Object? value) =>
       _settings._set(key, name, value is Enum ? value.name : value);
@@ -188,13 +202,16 @@ class SectionOptions {
 
   // ── Genres ──
 
-  /// How many genres: null for all of them.
-  int? get genreCount => _settings._get(key, 'genreCount') as int?;
+  /// How many genres: null for all of them (saved as "all").
+  int? get genreCount => switch (_value('genreCount')) {
+    final int n => n,
+    _ => null,
+  };
 
   GenrePick get genrePick => _enum('pick', GenrePick.values, GenrePick.random);
 
   List<String> get chosenGenres => [
-    for (final g in (_settings._get(key, 'chosen') as List?) ?? const []) ?(g is String ? g : null),
+    for (final g in (_value('chosen') as List?) ?? const []) ?(g is String ? g : null),
   ];
 
   // ── Continue Watching, Next Up ──
@@ -205,13 +222,21 @@ class SectionOptions {
   /// Movies show their name in their thumbnail already, so they start without one.
   bool get movieTitles => _read('movieTitles', false);
 
-  /// Continue Watching: leave out what hasn't been touched in this many days (null: never).
-  int? get continueCutoffDays => _settings._get(key, 'cutoffDays') as int?;
+  /// Continue Watching: leave out what hasn't been touched in this many days (null: never,
+  /// saved as "never").
+  int? get continueCutoffDays => switch (_value('cutoffDays')) {
+    final int n => n,
+    _ => null,
+  };
   static const continueCutoffOptions = <int?>[null, 30, 90, 180];
 
   /// Next Up: leave out shows not watched in this many days: 'server' (your Jellyfin account's
   /// "Max days in Next Up"), 'never', or a number.
-  Object get nextUpCutoff => _settings._get(key, 'cutoff') ?? 'server';
+  Object get nextUpCutoff => switch (_value('cutoff')) {
+    final int days => days,
+    'never' => 'never',
+    _ => 'server',
+  };
   static const nextUpCutoffOptions = <Object>['server', 'never', 30, 90, 180, 365];
 
   /// Next Up: shows you've watched through, again ('server': your Jellyfin account's setting).
@@ -222,7 +247,7 @@ class SectionOptions {
 
   /// Which kinds of favorites, by Jellyfin item type.
   List<String> get favoriteKinds {
-    final saved = _settings._get(key, 'kinds');
+    final saved = _value('kinds');
     if (saved is List) return [for (final k in saved) ?(k is String ? k : null)];
     return const ['Movie', 'Series', 'BoxSet'];
   }
@@ -237,7 +262,8 @@ class SectionOptions {
 
   /// Favorites: whether [kind] (a Jellyfin item type) is named under its card. Seasons and
   /// episodes are, to start with (their pictures don't say which show); the rest aren't.
-  bool favoriteNamed(String kind) => switch ((_settings._get(key, 'names') as Map?)?[kind]) {
+  bool favoriteNamed(String kind) => switch ((_settings._get(key, 'names') as Map?)?[kind] ??
+      (_defaults['names'] as Map?)?[kind]) {
     final bool named => named,
     _ => kind == 'Season' || kind == 'Episode',
   };

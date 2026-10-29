@@ -557,7 +557,7 @@ class _HomeModuleViewState extends State<HomeModuleView>
   SectionOptions get _options => sectionSettings.forModule(widget.module);
 
   /// Its settings as they are now, to tell when they've changed (see HomeModuleContent.signature).
-  String get _signature => sectionSettings.signature(SectionSettings.keyFor(widget.module));
+  String get _signature => sectionSettings.signature(widget.module);
 
   @override
   void initState() {

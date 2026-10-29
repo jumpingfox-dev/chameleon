@@ -43,6 +43,33 @@ The Home sections, in order: `carousel`, `myMedia`, `genres`, `continueWatching`
 `recentlyAdded`, `recentlyAddedMovies`, `recentlyAddedSeries`, `suggested`, `becauseYouWatched`.
 (Collection and genre sections need a choice, so they're added in the app.)
 
+## sections
+
+How each Home section starts out (what its cog in Edit home sets), by section, as in `home`.
+`collection` and `genre` are the defaults for every Collection and Genre row.
+
+| Key | Sections | Values |
+| --- | --- | --- |
+| `showTitle` | All | `true` / `false`: the section's title above it |
+| `limit` | All but `myMedia` and `genres` | How many it shows: `carousel` `1` to `10`; the rest `10`, `20`, `30`, `50` or `100` |
+| `kinds` | `carousel` | `all`, `movies`, `shows`, `collections` |
+| `seconds` | `carousel` | Seconds per slide: `5`, `8`, `10`, `15`, `20` |
+| `look` | `myMedia` | `pictures` (Jellyfin's), `icons` |
+| `cardNames` | `myMedia`, `genres` | `true` / `false`: each card's name under it |
+| `genreCount` | `genres` | `"all"`, or how many |
+| `pick` | `genres` | `random`, `chosen` (when not showing them all) |
+| `chosen` | `genres` | The genres to show, by name, for `pick: chosen` |
+| `episodeTitles` | `continueWatching`, `nextUp` | `true` / `false`: the show and episode under each card |
+| `episodeTitleStyle` | `continueWatching`, `nextUp` | `both` (S1:E5 · name), `code` (S1:E5), `name` |
+| `movieTitles` | `continueWatching` | `true` / `false` |
+| `cutoffDays` | `continueWatching` | Leave out what hasn't been touched in: `"never"`, `30`, `90`, `180` (days) |
+| `cutoff` | `nextUp` | Leave out shows not watched in: `"server"` (as set in Jellyfin), `"never"`, `30`, `90`, `180`, `365` (days) |
+| `rewatching` | `nextUp` | Shows you've watched through, again: `"server"`, `"on"`, `"off"` |
+| `kinds` | `favorites` | Any of `Movie`, `Series`, `BoxSet`, `Season`, `Episode` |
+| `names` | `favorites` | For each of those kinds, `true` / `false`: its name under its card |
+| `sort` | `favorites` | `random`, `name`, `added`, `released` |
+| `basis` | `becauseYouWatched` | `last` (the last thing watched), `random` (one of the last few) |
+
 ## playback
 
 | Key | Values |

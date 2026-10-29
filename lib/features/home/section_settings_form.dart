@@ -115,7 +115,7 @@ class SectionSettingsForm extends StatelessWidget {
               value: o.continueCutoffDays,
               options: SectionOptions.continueCutoffOptions,
               format: (d) => d == null ? 'Never leave anything out' : _days(d),
-              onChange: (d) => o.set('cutoffDays', d),
+              onChange: (d) => o.set('cutoffDays', d ?? 'never'),
             ),
           ],
           if (type == HomeModuleType.nextUp) ...[
@@ -222,7 +222,7 @@ class SectionSettingsForm extends StatelessWidget {
         // All of them, or any number short of that.
         options: [null, for (var n = 1; n < all.length; n++) n],
         format: (n) => n == null ? 'All of them' : '$n',
-        onChange: (n) => o.set('genreCount', n),
+        onChange: (n) => o.set('genreCount', n ?? 'all'),
       ),
       _Choice<GenrePick>(
         label: 'Which',

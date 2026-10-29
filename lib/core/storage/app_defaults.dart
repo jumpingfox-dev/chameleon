@@ -92,6 +92,65 @@ class AppDefaults {
     };
   }
 
+  /// A Home section's defaults (see SectionOptions): the file's "sections" entry for [type],
+  /// with the server's on top, set in its CSS as `--section-<type>-<option>` (kebab-case:
+  /// `--section-continue-watching-limit`). A favorite kind's name setting is
+  /// `--section-favorites-names-<kind>`. [longer]: other sections whose names start with
+  /// [type]'s (recentlyAddedMovies, for recentlyAdded), whose options aren't [type]'s.
+  Map<String, dynamic> sectionDefaults(String type, {Iterable<String> longer = const []}) {
+    // (Worked out again only when the server's CSS changes.)
+    if (!identical(_sectionsFor, server)) {
+      _sectionsFor = server;
+      _sections.clear();
+    }
+    return _sections[type] ??= _sectionDefaults(type, longer);
+  }
+
+  Map<String, String>? _sectionsFor;
+  final _sections = <String, Map<String, dynamic>>{};
+
+  static String _camel(String prefix, String name) => '$prefix${name[0].toUpperCase()}${name.substring(1)}';
+
+  Map<String, dynamic> _sectionDefaults(String type, Iterable<String> longer) {
+    final file = section('sections', [type]);
+    final prefix = _camel('section', type);
+    final others = [for (final t in longer) _camel('section', t)];
+    final merged = {...file};
+    for (final MapEntry(:key, :value) in server.entries) {
+      if (!key.startsWith(prefix) || key.length == prefix.length) continue;
+      // (Another section's: sectionGenres… isn't sectionGenre's, nor sectionRecentlyAddedMovies…
+      // sectionRecentlyAdded's.)
+      if (key[prefix.length] != key[prefix.length].toUpperCase()) continue;
+      if (others.any(key.startsWith)) continue;
+      final name = '${key[prefix.length].toLowerCase()}${key.substring(prefix.length + 1)}';
+      if (name.startsWith('names') && name.length > 5) {
+        // A favorite kind's: names: {Season: true, ...}.
+        final kind = name.substring(5);
+        final kindKey = file['names'] is Map
+            ? (file['names'] as Map).keys.whereType<String>().firstWhere((k) => k.toLowerCase() == kind.toLowerCase(), orElse: () => kind)
+            : kind;
+        merged['names'] = {...?(merged['names'] as Map?)?.cast<String, dynamic>(), kindKey: _fromServer(key, true)};
+        continue;
+      }
+      // Read as the file has it: a list, a number, true or false. Where the file has text, a
+      // number is still a number (genreCount is "all" or a count).
+      final like = file[name];
+      merged[name] = like is String || like == null ? _guess(value) : _fromServer(key, like) ?? _guess(value);
+    }
+    return merged;
+  }
+
+  /// A server value with nothing in the file to read it like: a number, true or false, or text.
+  static Object _guess(String raw) {
+    final text = raw.trim().replaceAll(RegExp(r'''^["']|["']$'''), '').trim();
+    return int.tryParse(text) ??
+        switch (text.toLowerCase()) {
+          'true' => true,
+          'false' => false,
+          _ => text,
+        };
+  }
+
   /// A string from the 'appearance' section (its groups opened up: 'fonts' and so on).
   String? appearance(String key) => switch (settings('appearance')[key] ?? _fromServer(key, '')) {
     final String s => s,
