@@ -1579,9 +1579,10 @@ builder: (context) => Dialog(child: Padding(
     setState(() => _activeSegment = active);
 
     if (appeared && !_upNextShown) {
-      // A skip button just appeared: select it, so Select presses it right away.
+      // A skip button just appeared: select it, so Select presses it right away. Only while just
+      // watching, though: not out from under a button or chapter you're on.
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted && _activeSegment != null) _skipNode.requestFocus();
+        if (mounted && _activeSegment != null && _focus.hasPrimaryFocus) _skipNode.requestFocus();
       });
     } else if (active == null && hadFocus) {
       _focus.requestFocus(); // the button has gone: back to the video
