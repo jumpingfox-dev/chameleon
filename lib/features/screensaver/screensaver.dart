@@ -10,8 +10,6 @@ import 'package:material_ui/material_ui.dart';
 
 import '../../core/jellyfin/jellyfin_controller.dart';
 import '../../core/jellyfin/list_each.dart';
-import '../../core/platform/keep_awake.dart';
-import '../../core/platform/screen_off.dart';
 import '../../core/platform/screen_type.dart';
 import '../../theme/theme.dart';
 import '../../widgets/app_logo.dart';
@@ -31,9 +29,8 @@ void showScreensaver(ScreensaverStyle style) => _ScreensaverHostState._instance?
 /// Shows the screensaver over [child] (the whole app) after a while without a button press
 /// or touch, as set in Settings. Any button or touch ends it, without doing anything else.
 ///
-/// While it shows, the screen stays on for up to [ScreensaverSettings.awakeFor]. After that the
-/// app turns the screen off if [ScreensaverSettings.turnOff] says so (and it's allowed), and
-/// otherwise lets the device sleep (or start its own screensaver) as it would without the app.
+/// It doesn't keep the screen on: the device still sleeps (or starts its own screensaver) after
+/// its own timeout, as set in its system settings, as it would without the app.
 class ScreensaverHost extends StatefulWidget {
   const ScreensaverHost({super.key, required this.child});
 
@@ -47,9 +44,7 @@ class _ScreensaverHostState extends State<ScreensaverHost> with WidgetsBindingOb
   static _ScreensaverHostState? _instance;
 
   final _focus = FocusNode(debugLabel: 'Screensaver');
-  final _awake = KeepAwake();
   Timer? _idle;
-  Timer? _awakeTimer;
   bool _resumed = true;
 
   /// The style showing now, or null when it isn't.
@@ -83,8 +78,6 @@ class _ScreensaverHostState extends State<ScreensaverHost> with WidgetsBindingOb
     _settings.removeListener(_restart);
     screensaverBlocks.removeListener(_restart);
     _idle?.cancel();
-    _awakeTimer?.cancel();
-    _awake.release();
     _focus.dispose();
     super.dispose();
   }
@@ -106,28 +99,14 @@ class _ScreensaverHostState extends State<ScreensaverHost> with WidgetsBindingOb
     _idle?.cancel();
     _returnFocus = FocusManager.instance.primaryFocus;
     setState(() => _showing = style);
-    _awakeTimer?.cancel();
-    // Dimming leaves the device to sleep when it usually would; a screensaver keeps it on.
-    if (style != ScreensaverStyle.off) {
-      _awake.hold();
-      _awakeTimer = Timer(Duration(minutes: _settings.awakeFor), _timeUp);
-    }
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted && _showing != null) _focus.requestFocus();
     });
   }
 
-  /// The screensaver has kept the screen on as long as it should.
-  Future<void> _timeUp() async {
-    _awake.release();
-    if (_settings.turnOff) await ScreenOff.turnOff();
-  }
-
   void _hide() {
     if (_showing == null) return;
     setState(() => _showing = null);
-    _awakeTimer?.cancel();
-    _awake.release();
     _ignorePopsUntil = DateTime.now().add(const Duration(milliseconds: 600));
     final back = _returnFocus;
     _returnFocus = null;

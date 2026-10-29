@@ -14,8 +14,6 @@
       "styleElsewhere": "off",
       "startAfter": 3,
       "dimAfter": 5,
-      "awakeFor": 60,
-      "turnOff": false,
       "dim": 0,
       "backdrops": {
         "backdropContent": "all",

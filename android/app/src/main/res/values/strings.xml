@@ -1,5 +1,0 @@
-<?xml version="1.0" encoding="utf-8"?>
-<resources>
-    <!-- Shown on Android's device admin screen (see ScreenOff.kt). -->
-    <string name="screen_off_admin">Turns the screen off when the screensaver\'s time is up. Chameleon can\'t do anything else with this.</string>
-</resources>

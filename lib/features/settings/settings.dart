@@ -16,7 +16,6 @@ import '../../theme/theme_controller.dart';
 import '../../theme/theme_presets.dart';
 import '../../core/jellyfin/jellyfin_controller.dart';
 import '../../core/platform/screen_type.dart';
-import '../../core/platform/screen_off.dart';
 import '../../core/cast/sync_play_controller.dart';
 import '../../core/jellyfin/account_settings.dart';
 import '../player/playback_settings.dart';
@@ -35,8 +34,8 @@ import '../../theme/theme.dart';
 import '../../widgets/tappable.dart';
 import '../../core/platform/page_insets.dart';
 import '../../widgets/remote_text_field.dart';
-import '../library/genres.dart';
 import '../../core/theming/server_themes.dart';
+import '../library/genres.dart';
 
 part 'screensaver_tab.dart';
 part 'server_tab.dart';
@@ -474,7 +473,7 @@ class _AppearanceCard extends StatelessWidget {
             ),
           ),
 
-          // ── Genre cards ──
+          // ── Genre cards: the Genres page's and Home's Genres section's ──
           const _SectionTitle('Genre cards', description: 'How genres look on the Genres page and on Home.'),
           ValueListenableBuilder(
             valueListenable: genreCards,

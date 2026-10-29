@@ -1,7 +1,0 @@
-<?xml version="1.0" encoding="utf-8"?>
-<!-- What Chameleon may do as a device admin: only lock the screen (see ScreenOff.kt). -->
-<device-admin>
-    <uses-policies>
-        <force-lock />
-    </uses-policies>
-</device-admin>

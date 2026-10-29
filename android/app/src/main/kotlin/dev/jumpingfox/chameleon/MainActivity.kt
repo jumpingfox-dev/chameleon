@@ -56,15 +56,6 @@ class MainActivity : FlutterActivity() {
         if (this is ViewGroup) for (i in 0 until childCount) getChildAt(i).hideFocusHighlight()
     }
 
-    private var screenOff: ScreenOff? = null
-
-    @Deprecated("Deprecated in Java")
-    override fun onActivityResult(requestCode: Int, resultCode: Int, data: android.content.Intent?) {
-        if (screenOff?.onActivityResult(requestCode) == true) return
-        @Suppress("DEPRECATION")
-        super.onActivityResult(requestCode, resultCode, data)
-    }
-
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         // Video frames reach Flutter through a SurfaceTexture rather than an ImageReader. Flutter
         // draws an ImageReader's whole buffer, ignoring the decoder's crop, so a decoder that pads
@@ -75,7 +66,6 @@ class MainActivity : FlutterActivity() {
         super.configureFlutterEngine(flutterEngine)
         val videoSurface = VideoSurface(this, flutterEngine.dartExecutor.binaryMessenger)
         ExoEngine(this, flutterEngine.dartExecutor.binaryMessenger, videoSurface)
-        screenOff = ScreenOff(this, flutterEngine.dartExecutor.binaryMessenger)
         CastStyle(applicationContext, flutterEngine.dartExecutor.binaryMessenger)
         // What this device can do with video and audio, so the player picks how to play each file
         // (see lib/core/platform/media_support.dart).

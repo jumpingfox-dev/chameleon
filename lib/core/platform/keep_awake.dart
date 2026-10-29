@@ -1,8 +1,8 @@
 import 'package:flutter/foundation.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
 
-/// Keeps the screen on while any [KeepAwake] is held: the video player while it plays, the
-/// screensaver while it shows. Counted, so one letting go doesn't turn off another's.
+/// Keeps the screen on while any [KeepAwake] is held: the video player while it plays, a
+/// trailer. Counted, so one letting go doesn't turn off another's.
 class KeepAwake {
   bool _held = false;
 

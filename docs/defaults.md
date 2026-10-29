@@ -26,8 +26,7 @@ rather than the device (audio and subtitle languages, Parental Controls) aren't 
 | Key | Values |
 | --- | --- |
 | `styleOnTv`, `styleElsewhere` | `off`, `backdrops`, `posters`, `clock`, `logo` |
-| `startAfter`, `dimAfter`, `awakeFor` | Minutes (`dimAfter` `0` never dims) |
-| `turnOff` | `true` / `false` |
+| `startAfter`, `dimAfter` | Minutes (`dimAfter` `0` never dims) |
 | `dim` | `0`, `10`, `20`, `30`, `40`, `50`, `60` (percent) |
 | `backdrops.backdropContent`, `posterWall.posterContent` | `all`, `movies`, `shows` |
 | `backdrops.backdropSeconds` | Seconds per picture |

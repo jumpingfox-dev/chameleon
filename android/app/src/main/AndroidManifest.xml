@@ -38,20 +38,6 @@
                 <category android:name="android.intent.category.LEANBACK_LAUNCHER"/>
             </intent-filter>
         </activity>
-        <!-- Turns the screen off when the screensaver's time is up, if allowed (ScreenOff.kt). -->
-        <receiver
-            android:name=".ScreenOff$Admin"
-            android:exported="true"
-            android:label="Chameleon"
-            android:description="@string/screen_off_admin"
-            android:permission="android.permission.BIND_DEVICE_ADMIN">
-            <meta-data
-                android:name="android.app.device_admin"
-                android:resource="@xml/screen_off_admin" />
-            <intent-filter>
-                <action android:name="android.app.action.DEVICE_ADMIN_ENABLED" />
-            </intent-filter>
-        </receiver>
         <!-- Don't delete the meta-data below.
              This is used by the Flutter tool to generate GeneratedPluginRegistrant.java -->
         <meta-data
