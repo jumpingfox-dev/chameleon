@@ -366,7 +366,7 @@ class _KenBurns extends StatelessWidget {
   }
 }
 
-/// The title's logo (or name) and its genres.
+/// The title's logo (or name) and its genres, centred on each other: as wide as the logo's box.
 class _TitleArt extends StatelessWidget {
   const _TitleArt({required this.item});
 
@@ -377,27 +377,37 @@ class _TitleArt extends StatelessWidget {
     final logoTag = item.imageTags[JellyfinImagesApi.typeLogo];
     final genres = ((item.raw['Genres'] as List?) ?? const []).whereType<String>().take(3).join('  ·  ');
     const shadow = [Shadow(blurRadius: 12, color: Color(0x99000000))];
-    final name = Text(item.name, style: context.text.headlineMedium!.copyWith(color: _white, shadows: shadow));
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      crossAxisAlignment: CrossAxisAlignment.start,
-      spacing: 10,
-      children: [
-        if (logoTag == null)
-          ConstrainedBox(constraints: const BoxConstraints(maxWidth: 360), child: name)
-        else
-          TitleLogo(
-            itemId: item.id,
-            tag: logoTag,
-            size: TitleLogo.screensaver(ScreenType.of(context).isPhone),
-            fallback: name,
-          ),
-        if (genres.isNotEmpty)
-          Text(
-            genres,
-            style: context.text.titleMedium!.copyWith(color: const Color(0xDDFFFFFF), shadows: shadow),
-          ),
-      ],
+    final name = Text(
+      item.name,
+      textAlign: TextAlign.center,
+      style: context.text.headlineMedium!.copyWith(color: _white, shadows: shadow),
+    );
+    final size = TitleLogo.screensaver(ScreenType.of(context).isPhone);
+    return SizedBox(
+      width: size.width,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.center,
+        spacing: 10,
+        children: [
+          if (logoTag == null)
+            name
+          else
+            TitleLogo(
+              itemId: item.id,
+              tag: logoTag,
+              size: size,
+              fallback: name,
+              alignment: Alignment.bottomCenter,
+            ),
+          if (genres.isNotEmpty)
+            Text(
+              genres,
+              textAlign: TextAlign.center,
+              style: context.text.titleMedium!.copyWith(color: const Color(0xDDFFFFFF), shadows: shadow),
+            ),
+        ],
+      ),
     );
   }
 }
