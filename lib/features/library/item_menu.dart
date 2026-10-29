@@ -235,7 +235,7 @@ class _ItemMenu extends StatelessWidget {
                     builder: (context, states, _) => Container(
                       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                       decoration: BoxDecoration(
-                        color: isHighlighted(states) ? context.colors.surfaceContainerHighest : const Color(0x00000000),
+                        color: isHighlighted(states) ? context.colors.surfaceContainerHighest : context.colors.surfaceContainerHighest.withValues(alpha: 0),
                         borderRadius: BorderRadius.circular(8),
                       ),
                       child: Row(

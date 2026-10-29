@@ -379,7 +379,7 @@ class _FilterLine extends StatelessWidget {
           duration: const Duration(milliseconds: 120),
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
           decoration: BoxDecoration(
-            color: isHighlighted(states) ? colors.onSurface.withValues(alpha: 0.10) : const Color(0x00000000),
+            color: isHighlighted(states) ? colors.onSurface.withValues(alpha: 0.10) : colors.onSurface.withValues(alpha: 0),
             borderRadius: BorderRadius.circular(12),
           ),
           child: child,

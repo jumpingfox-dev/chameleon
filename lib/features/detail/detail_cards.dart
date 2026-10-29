@@ -616,7 +616,7 @@ class _EpisodeTile extends StatelessWidget {
                   ),
                   foregroundDecoration: BoxDecoration(
                     border: Border.all(
-                      color: active ? colors.primary : const Color(0x00000000),
+                      color: active ? colors.primary : colors.primary.withValues(alpha: 0),
                       width: 2.5,
                     ),
                     borderRadius: BorderRadius.circular(8),
@@ -752,7 +752,7 @@ class _CastTile extends StatelessWidget {
                   foregroundDecoration: BoxDecoration(
                     shape: BoxShape.circle,
                     border: Border.all(
-                      color: active ? colors.primary : const Color(0x00000000),
+                      color: active ? colors.primary : colors.primary.withValues(alpha: 0),
                       width: 2.5,
                     ),
                   ),

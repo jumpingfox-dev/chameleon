@@ -381,7 +381,7 @@ class _PersonPortrait extends StatelessWidget {
           foregroundDecoration: BoxDecoration(
             borderRadius: BorderRadius.circular(12),
             border: Border.all(
-              color: active ? context.colors.primary : const Color(0x00000000),
+              color: active ? context.colors.primary : context.colors.primary.withValues(alpha: 0),
               width: PosterCard.borderWidth,
             ),
           ),
@@ -780,7 +780,7 @@ class _MediaInfo extends StatelessWidget {
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(12),
               border: Border.all(
-                color: isHighlighted(states) ? context.colors.primary : const Color(0x00000000),
+                color: isHighlighted(states) ? context.colors.primary : context.colors.primary.withValues(alpha: 0),
                 width: PosterCard.borderWidth,
               ),
             ),

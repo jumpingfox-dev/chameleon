@@ -40,7 +40,7 @@ class PersonTile extends StatelessWidget {
                 foregroundDecoration: BoxDecoration(
                   shape: BoxShape.circle,
                   border: Border.all(
-                    color: active ? context.colors.primary : const Color(0x00000000),
+                    color: active ? context.colors.primary : context.colors.primary.withValues(alpha: 0),
                     width: 2.5,
                   ),
                 ),

@@ -146,7 +146,7 @@ class _DownloadTile extends StatelessWidget {
             color: isHighlighted(states) ? context.colors.surfaceContainerHigh : context.colors.surfaceContainer,
             borderRadius: BorderRadius.circular(12),
             border: Border.all(
-              color: isHighlighted(states) ? context.colors.primary : const Color(0x00000000),
+              color: isHighlighted(states) ? context.colors.primary : context.colors.primary.withValues(alpha: 0),
               width: 2,
             ),
           ),

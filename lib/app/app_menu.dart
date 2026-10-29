@@ -200,7 +200,7 @@ class _BarButton extends StatelessWidget {
       alignment: Alignment.center,
       decoration: BoxDecoration(
         shape: BoxShape.circle,
-        color: isHighlighted(states) ? context.colors.onSurface.withValues(alpha: 0.14) : const Color(0x00000000),
+        color: isHighlighted(states) ? context.colors.onSurface.withValues(alpha: 0.14) : context.colors.onSurface.withValues(alpha: 0),
       ),
       child: child,
     ),
@@ -439,7 +439,7 @@ class _MenuItem extends StatelessWidget {
                   ? darker(colors.primary)
                   : highlighted
                   ? colors.onSurface.withValues(alpha: 0.10)
-                  : const Color(0x00000000),
+                  : colors.onSurface.withValues(alpha: 0),
               borderRadius: BorderRadius.circular(12),
             ),
             child: Row(
@@ -478,7 +478,7 @@ class _MenuHeading extends StatelessWidget {
       duration: const Duration(milliseconds: 120),
       padding: const EdgeInsets.fromLTRB(14, 8, 10, 8),
       decoration: BoxDecoration(
-        color: isHighlighted(states) ? context.colors.onSurface.withValues(alpha: 0.10) : const Color(0x00000000),
+        color: isHighlighted(states) ? context.colors.onSurface.withValues(alpha: 0.10) : context.colors.onSurface.withValues(alpha: 0),
         borderRadius: BorderRadius.circular(12),
       ),
       child: child,
@@ -559,7 +559,7 @@ class _BottomBar extends StatelessWidget {
                                     ? colors.primary
                                     : isHighlighted(states)
                                     ? colors.onSurface.withValues(alpha: 0.10)
-                                    : const Color(0x00000000),
+                                    : colors.onSurface.withValues(alpha: 0),
                                 borderRadius: BorderRadius.circular(999),
                               ),
                               child: child,

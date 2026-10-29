@@ -199,7 +199,7 @@ class _SettingsLink extends StatelessWidget {
       builder: (context, states, child) => AnimatedContainer(
         duration: const Duration(milliseconds: 120),
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
-        color: isHighlighted(states) ? colors.surfaceContainerHighest : const Color(0x00000000),
+        color: isHighlighted(states) ? colors.surfaceContainerHighest : colors.surfaceContainerHighest.withValues(alpha: 0),
         child: child,
       ),
       child: Text(label, style: context.text.titleMedium),

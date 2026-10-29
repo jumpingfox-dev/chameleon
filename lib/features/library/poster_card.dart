@@ -400,7 +400,7 @@ class _PosterCardState extends State<PosterCard> {
                     border: Border.all(
                       color: active
                           ? context.colors.primary
-                          : const Color(0x00000000),
+                          : context.colors.primary.withValues(alpha: 0),
                       width: PosterCard.borderWidth,
                     ),
                     borderRadius: BorderRadius.circular(8),

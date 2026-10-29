@@ -258,7 +258,7 @@ class _ChoiceOptionState extends State<_ChoiceOption> {
           decoration: BoxDecoration(
             color: _focused || _hovered
                 ? colors.surfaceContainerHighest
-                : const Color(0x00000000),
+                : colors.surfaceContainerHighest.withValues(alpha: 0),
             borderRadius: BorderRadius.circular(8),
           ),
           child: Row(

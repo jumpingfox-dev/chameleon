@@ -163,7 +163,7 @@ class GenreTile extends StatelessWidget {
             ),
             foregroundDecoration: BoxDecoration(
               borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: active ? colors.primary : const Color(0x00000000), width: 3),
+              border: Border.all(color: active ? colors.primary : colors.primary.withValues(alpha: 0), width: 3),
             ),
             child: child,
           ),

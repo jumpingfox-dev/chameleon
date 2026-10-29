@@ -524,7 +524,7 @@ class _ProfileTileState extends State<ProfileTile> {
                         border: Border.all(
                           width: 3,
                           // (The row's ring marks the one you're on.)
-                          color: widget.current && !active ? theme.colorScheme.outlineVariant : Colors.transparent,
+                          color: widget.current && !active ? theme.colorScheme.outlineVariant : theme.colorScheme.outlineVariant.withValues(alpha: 0),
                         ),
                       ),
                       child: Opacity(opacity: widget.busy ? 0.4 : 1, child: picture),
