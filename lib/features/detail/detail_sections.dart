@@ -136,11 +136,15 @@ const _heroTop = 24.0;
 const _heroBottom = 8.0;
 
 /// How tall the room for the artwork above a title's details is, its logo (or name) at the
-/// bottom: down to where a season's poster or a person's photo ends on their pages (see
-/// [_heroPoster]), so the logo sits as low as those do, further over the fade, where it's
-/// easier to read; and never up by the top bar's buttons.
+/// bottom: on TVs and tablets, down to where a season's poster or a person's photo ends on their
+/// pages (see [_heroPoster]), so the logo sits as low as those do, further over the fade, where
+/// it's easier to read; and never up by the top bar's buttons.
 double _heroRoom(BuildContext context, {bool hasBackdrop = true}) {
-  final (:above, :posterHeight) = _heroPoster(context, _artworkRoom(context, hasBackdrop: hasBackdrop));
+  final room = _artworkRoom(context, hasBackdrop: hasBackdrop);
+  // Phones: the logo at the foot of the artwork's room itself, close under the fade (lower, the
+  // backdrop is short enough on a phone to leave a gap between the two).
+  if (ScreenType.of(context).isPhone) return math.max(room, _clearOfTopBar(context) + _HeroTitle.logoBox(context));
+  final (:above, :posterHeight) = _heroPoster(context, room);
   return above + posterHeight;
 }
 
