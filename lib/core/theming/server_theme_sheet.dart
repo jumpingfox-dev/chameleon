@@ -124,7 +124,7 @@ ServerThemeSheet parseServerThemes(String css) {
         genreFolder: _link(props['genre-folder']),
         settings: {
           for (final MapEntry(:key, :value) in props.entries)
-            if (key != 'theme' && key != 'logo' && !key.startsWith('genre-'))
+            if (key != 'theme' && key != 'logo' && (!key.startsWith('genre-') || key == 'genre-cards'))
               key.replaceAllMapped(RegExp('-([a-z0-9])'), (m) => m[1]!.toUpperCase()): value,
         },
       );
@@ -164,7 +164,7 @@ String? _link(String? value) {
 
 Map<String, String> _genres(Map<String, String> props) => {
   for (final MapEntry(:key, :value) in props.entries)
-    if (key.startsWith('genre-') && key != 'genre-folder') genreKey(key.substring(6)): ?_link(value),
+    if (key.startsWith('genre-') && key != 'genre-folder' && key != 'genre-cards') genreKey(key.substring(6)): ?_link(value),
 };
 
 /// The theme's colors: its seed's (or the Default theme's), with its own on top.
