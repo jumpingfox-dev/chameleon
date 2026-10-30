@@ -37,6 +37,7 @@ import '../settings/choice_picker.dart';
 import '../home/home_modules.dart';
 import '../screensaver/screensaver.dart';
 import '../../theme/theme.dart';
+import '../../widgets/focus_slot_row.dart';
 import '../../widgets/tappable.dart';
 import '../library/poster_card.dart' show PosterCard, WatchProgressBar;
 

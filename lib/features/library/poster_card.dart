@@ -13,6 +13,7 @@ import '../../widgets/tappable.dart';
 import '../previews/card_preview.dart';
 import 'item_menu.dart';
 import '../previews/frames_preview.dart';
+import '../../widgets/focus_slot_row.dart';
 
 enum LibraryView { poster, thumbnail }
 
@@ -398,7 +399,8 @@ class _PosterCardState extends State<PosterCard> {
                   // stills playing in the card.
                   foregroundDecoration: BoxDecoration(
                     border: Border.all(
-                      color: active
+                      // (In a FocusSlotRow, the row draws it.)
+                      color: active && !FocusSlotRow.ownsBorder(context)
                           ? context.colors.primary
                           : context.colors.primary.withValues(alpha: 0),
                       width: PosterCard.borderWidth,

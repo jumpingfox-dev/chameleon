@@ -18,11 +18,18 @@ final _isColumn = Expando<bool>('FocusColumn');
 /// Rows a page doesn't start in (see [FocusRow.startsPage]).
 final _notStart = Expando<bool>('not where a page starts');
 
+/// Rows entered at their first card on screen (see [FocusRow.entersAtStart]).
+final _entersAtStart = Expando<bool>('entered at its start');
+
 /// Marks its focusable descendants as one horizontal row (a section's cards, a row of buttons...).
 class FocusRow extends StatefulWidget {
-  const FocusRow({super.key, required this.child, this.startsPage = true});
+  const FocusRow({super.key, required this.child, this.startsPage = true, this.entersAtStart = false});
 
   final Widget child;
+
+  /// ↑/↓ into it (where you weren't in it before) land on its first card on screen, rather than
+  /// the one nearest across: for a row that keeps the card you're on in its first slot.
+  final bool entersAtStart;
 
   /// False for a row of controls at the top of a page (a library's filters): the page starts on
   /// what's under it instead (see [firstFocusable]).
@@ -47,14 +54,17 @@ class _FocusRowState extends State<FocusRow> {
   }
 
   @override
+  Widget build(BuildContext context) {
+    _entersAtStart[_node] = widget.entersAtStart ? true : null;
+    return Focus(focusNode: _node, child: widget.child);
+  }
+
+  @override
   void dispose() {
     _node.dispose();
     super.dispose();
   }
 
-  @override
-  Widget build(BuildContext context) =>
-      Focus(focusNode: _node, child: widget.child);
 }
 
 /// Marks its focusable descendants as one vertical column, kept apart from the rest of the
@@ -348,14 +358,15 @@ bool moveFocus(TraversalDirection direction) {
 
   final targetRow = _rowOf(nearest);
   if (targetRow != null) {
-  // Back to where you were in that row, or the item closest horizontally.
+  // Back to where you were in that row, or the item closest horizontally (in a row entered at
+  // its start: its first card wholly past its left edge, the one in its first slot).
   final remembered = _lastInRow[targetRow];
+  final inRow = ahead.where((n) => _rowOf(n) == targetRow);
   target = remembered != null && ahead.contains(remembered)
   ? remembered
-      : _best(
-  ahead.where((n) => _rowOf(n) == targetRow),
-  horizontalDistance,
-  );
+      : _entersAtStart[targetRow] == true
+      ? _best(inRow.where((n) => n.rect.left >= targetRow.rect.left - 0.5), (r) => r.left)
+      : _best(inRow, horizontalDistance);
   } else {
   final line = nearest.rect;
   target = _best(

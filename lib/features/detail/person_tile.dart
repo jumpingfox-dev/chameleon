@@ -6,6 +6,7 @@ import '../../core/jellyfin/jellyfin_controller.dart';
 import '../../widgets/hover_lift.dart';
 import '../../theme/theme.dart';
 import '../../widgets/tappable.dart';
+import '../../widgets/focus_slot_row.dart';
 
 /// A round photo with the person's name underneath. Lifts and gets a ring on hover or remote
 /// focus, like a poster.
@@ -14,12 +15,16 @@ class PersonTile extends StatelessWidget {
     super.key,
     required this.person,
     required this.onPress,
-    this.size = 96,
+    this.size = photo,
   });
 
   final JellyfinItem person;
   final VoidCallback onPress;
   final double size;
+
+  /// The default tile's width, and its photo's.
+  static const width = photo + 14;
+  static const photo = 96.0;
 
   @override
   Widget build(BuildContext context) => HoverLift(
@@ -40,7 +45,7 @@ class PersonTile extends StatelessWidget {
                 foregroundDecoration: BoxDecoration(
                   shape: BoxShape.circle,
                   border: Border.all(
-                    color: active ? context.colors.primary : context.colors.primary.withValues(alpha: 0),
+                    color: active && !FocusSlotRow.ownsBorder(context) ? context.colors.primary : context.colors.primary.withValues(alpha: 0),
                     width: 2.5,
                   ),
                 ),

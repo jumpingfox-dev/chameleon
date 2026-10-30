@@ -16,6 +16,7 @@ import '../../core/platform/page_insets.dart';
 import '../../widgets/tappable.dart';
 import 'poster_card.dart';
 import 'icon_card_art.dart';
+import '../../widgets/focus_slot_row.dart';
 
 IconData _iconFor(String genre) {
   final name = genre.toLowerCase();
@@ -166,7 +167,7 @@ class GenreTile extends StatelessWidget {
             ),
             foregroundDecoration: BoxDecoration(
               borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: active ? colors.primary : colors.primary.withValues(alpha: 0), width: 3),
+              border: Border.all(color: active && !FocusSlotRow.ownsBorder(context) ? colors.primary : colors.primary.withValues(alpha: 0), width: 3),
             ),
             child: child,
           ),

@@ -13,6 +13,7 @@ import '../../theme/app_icons.dart';
 import '../../theme/theme.dart';
 import '../../core/platform/page_insets.dart';
 import '../../core/jellyfin/together.dart';
+import '../../widgets/focus_slot_row.dart';
 import '../../widgets/remote_text_field.dart';
 
 class SearchScreen extends StatefulWidget {
@@ -280,10 +281,17 @@ class _SearchScreenState extends State<SearchScreen> {
           SliverToBoxAdapter(
             child: SizedBox(
               height: 130,
-              child: ListView.separated(
-                scrollDirection: Axis.horizontal,
+              child: FocusSlotRow(
                 padding: sides, // runs to the screen's edges, starting in line with the page
                 itemCount: _people.length,
+                itemWidth: PersonTile.width,
+                // The photo, centred at the top of the tile.
+                frameFor: (_) => const SlotFrame(
+                  width: PersonTile.photo,
+                  height: PersonTile.photo,
+                  left: (PersonTile.width - PersonTile.photo) / 2,
+                  circle: true,
+                ),
                 separatorBuilder: (_, _) => const SizedBox(width: 12),
                 itemBuilder: (context, i) => PersonTile(
                   person: _people[i],

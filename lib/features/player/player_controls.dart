@@ -936,14 +936,12 @@ class _ChapterRowState extends State<_ChapterRow> {
     if (widget.open && !old.open) _jumpTo(_activeChapterIn(widget.chapters, widget.player.state.position));
   }
 
-  /// The scroll offset that keeps [index]'s card in its slot, as Home's rows do: the row
-  /// scrolls under a card that stays put, until the row's end.
+  /// The scroll offset that puts [index]'s card in the row's first slot, as Home's rows do (see
+  /// FocusSlotRow).
   double? _offsetFor(int index, double width) {
     if (!_scroll.hasClients) return null;
     final position = _scroll.position;
-    final step = width + _ChapterRow._gap;
-    final slot = math.max(0, ((position.viewportDimension - _side - width) / step).floor());
-    return ((index - slot) * step).clamp(position.minScrollExtent, position.maxScrollExtent);
+    return (index * (width + _ChapterRow._gap)).clamp(position.minScrollExtent, position.maxScrollExtent);
   }
 
   double get _width =>
@@ -952,13 +950,6 @@ class _ChapterRowState extends State<_ChapterRow> {
   void _jumpTo(int index) {
     final offset = _offsetFor(index, _width);
     if (offset != null) _scroll.jumpTo(offset);
-  }
-
-  void _keepInSlot(int index) {
-    if (FocusManager.instance.highlightMode != FocusHighlightMode.traditional) return;
-    final offset = _offsetFor(index, _width);
-    if (offset == null || (offset - _scroll.position.pixels).abs() < 0.5) return;
-    _scroll.animateTo(offset, duration: const Duration(milliseconds: 200), curve: Curves.easeOutCubic);
   }
 
   /// The room before the first card (and after the last): the row reaches the screen's edges,
@@ -990,13 +981,13 @@ class _ChapterRowState extends State<_ChapterRow> {
           excluding: !widget.open,
           child: IgnorePointer(
             ignoring: !widget.open,
-            child: FocusRow(
-              child: ListView.separated(
+            child: FocusSlotRow(
                 controller: _scroll,
-                scrollDirection: Axis.horizontal,
                 padding: EdgeInsets.symmetric(vertical: _ChapterRow._pad, horizontal: _side),
                 clipBehavior: Clip.none, // a focused card grows past the row's ends
                 itemCount: widget.chapters.length,
+                itemWidth: width,
+                frameFor: (_) => SlotFrame(width: width, height: imageHeight, radius: 12, borderWidth: 3, scale: 1.04),
                 separatorBuilder: (_, _) => const SizedBox(width: _ChapterRow._gap),
                 itemBuilder: (context, i) {
                   final chapter = widget.chapters[i];
@@ -1022,7 +1013,7 @@ class _ChapterRowState extends State<_ChapterRow> {
                           ),
                           foregroundDecoration: BoxDecoration(
                             borderRadius: BorderRadius.circular(12),
-                            border: Border.all(color: active ? context.colors.primary : context.colors.primary.withValues(alpha: 0), width: 3),
+                            border: Border.all(color: active && !FocusSlotRow.ownsBorder(context) ? context.colors.primary : context.colors.primary.withValues(alpha: 0), width: 3),
                           ),
                           child: child,
                         ),
@@ -1065,15 +1056,7 @@ class _ChapterRowState extends State<_ChapterRow> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Focus(
-                          // Doesn't take focus itself: notices the card getting it, and scrolls the row.
-                          canRequestFocus: false,
-                          skipTraversal: true,
-                          onFocusChange: (focused) {
-                            if (focused) _keepInSlot(i);
-                          },
-                          child: SizedBox(height: imageHeight, child: picture),
-                        ),
+                        SizedBox(height: imageHeight, child: picture),
                         const SizedBox(height: 8),
                         Padding(
                           padding: const EdgeInsets.symmetric(horizontal: 4),
@@ -1090,7 +1073,6 @@ class _ChapterRowState extends State<_ChapterRow> {
                     ),
                   );
                 },
-              ),
             ),
           ),
         ),

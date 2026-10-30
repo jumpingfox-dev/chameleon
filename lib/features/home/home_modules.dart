@@ -28,6 +28,7 @@ import '../../theme/theme.dart';
 import '../../widgets/remote_text_field.dart';
 import '../../widgets/title_logo.dart';
 import '../../core/theming/server_themes.dart';
+import '../../widgets/focus_slot_row.dart';
 
 // ─── Definitions ─────────────────────────────────────────────────────────────
 
@@ -873,27 +874,23 @@ class _HomeModuleViewState extends State<HomeModuleView>
         child: Text('Nothing here yet', style: muted),
       ); // edit mode only
     } else {
-      content = FocusRow(
-        child: ListView.separated(
-          controller: _rowScroll,
-          scrollDirection: Axis.horizontal,
-          // Inside the list, so the first card starts in line with the title
-          // but cards can still scroll right to the screen's edge.
-          padding: _rowSides(context),
-          itemCount: items.length,
-          separatorBuilder: (_, _) => const SizedBox(width: _rowGap),
-          itemBuilder: (context, i) {
+      // A poster playing its stills widens to 16:9 in its place, pushing the rest along.
+      double widthOf(int i) => view == LibraryView.poster && _widened == i
+          ? tileWidth + (imageHeight * 16 / 9 - tileWidth) * _widenCurve.transform(_widen.value)
+          : tileWidth;
+      content = FocusSlotRow(
+        controller: _rowScroll,
+        // Inside the list, so the first card starts in line with the title
+        // but cards can still scroll right to the screen's edge.
+        padding: _rowSides(context),
+        itemCount: items.length,
+        itemWidth: tileWidth,
+        frameFor: (i) => SlotFrame(width: widthOf(i), height: imageHeight, borderWidth: PosterCard.borderWidth),
+        separatorBuilder: (_, _) => const SizedBox(width: _rowGap),
+        itemBuilder: (context, i) {
             // (Every card the row's shape: a picture of another shape sits whole in it; see
             // PosterCard.)
-            final width = tileWidth;
-            final card = Focus(
-              // Doesn't take focus itself: notices the card getting it, and scrolls the row.
-              canRequestFocus: false,
-              skipTraversal: true,
-              onFocusChange: (focused) {
-                if (focused) _keepInSlot(context, i, width);
-              },
-              child: PosterCard(
+            final card = PosterCard(
                 item: items[i],
                 view: view,
                 preview: !widget.module.type.followsProgress, // none in Continue Watching or Next Up
@@ -914,13 +911,9 @@ class _HomeModuleViewState extends State<HomeModuleView>
                   HomeModuleType.nextUp => ItemMenuList.nextUp,
                   _ => null,
                 },
-              ),
             );
-            // A poster playing its stills widens to 16:9 in its place, pushing the rest along.
             return SizedBox(
-              width: view == LibraryView.poster && _widened == i
-                  ? width + (imageHeight * 16 / 9 - width) * _widenCurve.transform(_widen.value)
-                  : width,
+              width: widthOf(i),
               child: captions
                   ? Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -931,8 +924,7 @@ class _HomeModuleViewState extends State<HomeModuleView>
               )
                   : card,
             );
-          },
-        ),
+        },
       );
     }
 
@@ -975,22 +967,6 @@ class _HomeModuleViewState extends State<HomeModuleView>
     if (_shift > 0 && _widen.status == AnimationStatus.forward && _rowScroll.hasClients) {
       _rowScroll.jumpTo(_shiftFrom + _shift * _widenCurve.transform(_widen.value));
     }
-  }
-
-  /// With a remote or keyboard, scrolls the row so card [index] sits where the last card that
-  /// fits whole on screen sits when the row is at its start (the third, say). Focus moves along
-  /// the first few without the row moving; after that, each next card slides into that same
-  /// spot, and going back works the same way.
-  void _keepInSlot(BuildContext context, int index, double tileWidth) {
-    if (FocusManager.instance.highlightMode != FocusHighlightMode.traditional) return;
-    if (!_rowScroll.hasClients) return;
-    final position = _rowScroll.position;
-    final step = tileWidth + _rowGap;
-    final start = _rowSides(context).left; // the row's padding before the first card
-    final slot = math.max(0, ((position.viewportDimension - start - tileWidth) / step).floor());
-    final offset = ((index - slot) * step).clamp(position.minScrollExtent, position.maxScrollExtent);
-    if ((offset - position.pixels).abs() < 0.5) return;
-    position.animateTo(offset, duration: const Duration(milliseconds: 200), curve: Curves.easeOutCubic);
   }
 
   static double _tileWidth(BuildContext context, LibraryView view) => CardRows.tileWidth(context, view);
@@ -1859,19 +1835,6 @@ class _GenresRowState extends State<_GenresRow> {
     super.dispose();
   }
 
-  /// With a remote, as the other rows do: tile [index] sits in the last slot that fits whole,
-  /// so the row moves under it and it never runs to the screen's edge.
-  void _keepInSlot(int index, double width) {
-    if (FocusManager.instance.highlightMode != FocusHighlightMode.traditional) return;
-    if (!_scroll.hasClients) return;
-    final position = _scroll.position;
-    final step = width + _gap;
-    final slot = math.max(0, ((position.viewportDimension - widget.sides.left - width) / step).floor());
-    final offset = ((index - slot) * step).clamp(position.minScrollExtent, position.maxScrollExtent);
-    if ((offset - position.pixels).abs() < 0.5) return;
-    position.animateTo(offset, duration: const Duration(milliseconds: 200), curve: Curves.easeOutCubic);
-  }
-
   @override
   Widget build(BuildContext context) => ListenableBuilder(
     listenable: Listenable.merge([genreCards, serverThemes]), // the cards' style, and a theme's pictures
@@ -1902,34 +1865,25 @@ class _GenresRowState extends State<_GenresRow> {
     final named = widget.options.cardNames;
     return SizedBox(
       height: height + (named ? _NameCaption.heightOf(context) : 0),
-      child: FocusRow(
-        child: ListView.separated(
-          controller: _scroll,
-          scrollDirection: Axis.horizontal,
-          clipBehavior: Clip.none, // a focused card grows past the row's ends
-          padding: widget.sides, // the first in line with the sections' titles
-          itemCount: genres.length,
-          separatorBuilder: (_, _) => const SizedBox(width: _gap),
-          itemBuilder: (context, i) => SizedBox(
-            width: width,
-            child: Focus(
-              // Doesn't take focus itself: notices the tile getting it, and scrolls the row.
-              canRequestFocus: false,
-              skipTraversal: true,
-              onFocusChange: (focused) {
-                if (focused) _keepInSlot(i, width);
-              },
-              child: named
-                  ? Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        SizedBox(height: height, child: GenreTile(genre: genres[i], nameInside: false)),
-                        _NameCaption(genres[i]),
-                      ],
-                    )
-                  : GenreTile(genre: genres[i]),
-            ),
-          ),
+      child: FocusSlotRow(
+        controller: _scroll,
+        clipBehavior: Clip.none, // a focused card grows past the row's ends
+        padding: widget.sides, // the first in line with the sections' titles
+        itemCount: genres.length,
+        itemWidth: width,
+        frameFor: (_) => SlotFrame(width: width, height: height, radius: 12, borderWidth: 3, scale: 1.04),
+        separatorBuilder: (_, _) => const SizedBox(width: _gap),
+        itemBuilder: (context, i) => SizedBox(
+          width: width,
+          child: named
+              ? Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    SizedBox(height: height, child: GenreTile(genre: genres[i], nameInside: false)),
+                    _NameCaption(genres[i]),
+                  ],
+                )
+              : GenreTile(genre: genres[i]),
         ),
       ),
     );
@@ -1981,12 +1935,12 @@ class _MyMediaRow extends StatelessWidget {
     }
     return SizedBox(
       height: height + (named ? _NameCaption.heightOf(context) : 0),
-      child: FocusRow(
-        child: ListView.separated(
-          scrollDirection: Axis.horizontal,
+      child: FocusSlotRow(
           padding: sides,
           clipBehavior: Clip.none, // a focused tile grows past the row's ends
           itemCount: libraries.length,
+          itemWidth: width,
+          frameFor: (_) => SlotFrame(width: width, height: height, radius: 12, borderWidth: 3, scale: 1.04),
           separatorBuilder: (_, _) => const SizedBox(width: genreCardGap),
           itemBuilder: (context, i) {
             final library = libraries[i];
@@ -2016,7 +1970,7 @@ class _MyMediaRow extends StatelessWidget {
                       ),
                       foregroundDecoration: BoxDecoration(
                         borderRadius: BorderRadius.circular(12),
-                        border: Border.all(color: active ? context.colors.primary : context.colors.primary.withValues(alpha: 0), width: 3),
+                        border: Border.all(color: active && !FocusSlotRow.ownsBorder(context) ? context.colors.primary : context.colors.primary.withValues(alpha: 0), width: 3),
                       ),
                       child: child,
                     ),
@@ -2066,7 +2020,6 @@ class _MyMediaRow extends StatelessWidget {
               ),
             );
           },
-        ),
       ),
     );
   }
