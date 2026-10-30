@@ -206,6 +206,9 @@ class ExoEngine(private val activity: Activity, messenger: BinaryMessenger, priv
         pendingSubtitle = null
         exo.setMediaSource(mediaSource(), startMs)
         exo.playWhenReady = play
+        // Said even when unchanged (the last video ended still set to play), since Dart starts
+        // each video over as not playing: otherwise pause would ask it to play.
+        send("playing" to play)
         exo.prepare()
         handler.removeCallbacks(ticker)
         handler.post(ticker)
