@@ -385,8 +385,10 @@ class ServerThemes extends ChangeNotifier {
     final (logo, splash) = await (signedIn ? Future.value(serverThemes.logo) : logoOf(url), splashOf(url)).wait;
     return SignInBranding(
       logo: logo,
-      splash: splash,
-      disclaimer: _disclaimerIn(branding) ?? (signedIn ? serverThemes.loginDisclaimer : null),
+      splash: signInShows.backdrop(sheet) ? splash : null,
+      disclaimer: signInShows.disclaimer(sheet)
+          ? _disclaimerIn(branding) ?? (signedIn ? serverThemes.loginDisclaimer : null)
+          : null,
       colors: signedIn ? null : sheet.themeNamed(sheet.defaults.theme)?.colors,
     );
   }
@@ -671,3 +673,37 @@ extension on ServerDefaults {
 }
 
 late final ServerThemes serverThemes;
+
+/// Whether a server's sign-in pages (and "Who's watching?") show its splash screen behind them and
+/// its login disclaimer: your choice on this device (Settings › Appearance › Sign-in), or else
+/// the server's (`--server-backdrop` and `--login-disclaimer` in its .chameleon-defaults), or else
+/// assets/defaults.json's. Kept for the device, since they show before anyone's signed in.
+class SignInShows extends ChangeNotifier {
+  static const _backdropKey = 'sign_in_backdrop';
+  static const _disclaimerKey = 'sign_in_disclaimer';
+
+  /// [sheet]: the server's, for what it says.
+  bool backdrop([ServerThemeSheet? sheet]) => _show(_backdropKey, 'serverBackdrop', sheet);
+  bool disclaimer([ServerThemeSheet? sheet]) => _show(_disclaimerKey, 'loginDisclaimer', sheet);
+
+  Future<void> setBackdrop(bool on) => _set(_backdropKey, on);
+  Future<void> setDisclaimer(bool on) => _set(_disclaimerKey, on);
+
+  bool _show(String key, String setting, ServerThemeSheet? sheet) =>
+      storage.getBool(key) ??
+      _flag((sheet ?? serverThemes.sheet).defaults.settings[setting]) ??
+      appDefaults.section('appearance', const ['signIn'])[setting] != false;
+
+  static bool? _flag(String? raw) => switch (raw?.trim().replaceAll(RegExp(r'''^["']|["']$'''), '').toLowerCase()) {
+    'true' || 'yes' || 'on' => true,
+    'false' || 'no' || 'off' => false,
+    _ => null,
+  };
+
+  Future<void> _set(String key, bool on) async {
+    await storage.setString(key, '$on');
+    notifyListeners();
+  }
+}
+
+final signInShows = SignInShows();

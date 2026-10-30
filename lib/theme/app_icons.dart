@@ -587,6 +587,9 @@ class IconController extends ValueNotifier<IconStyle> {
       IconStyle.values.asNameMap()[storage.getString(_key) ?? appDefaults.appearance('icons')] ??
       IconStyle.materialSymbols;
 
+  /// The style you chose yourself, if you did (rather than the defaults or your theme's).
+  IconStyle? get own => IconStyle.values.asNameMap()[storage.getString(_key)];
+
   /// Loads the icon style saved for whoever is signed in now (see Storage.user).
   void reload() {
     final saved = _saved();

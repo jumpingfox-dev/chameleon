@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:chameleon/core/theming/server_theme_sheet.dart';
 import 'package:flutter/material.dart' show Brightness, Color;
 import 'package:flutter_test/flutter_test.dart';
@@ -118,7 +120,7 @@ void main() {
     });
   });
 
-  test("a theme's own settings, apart from its colors and pictures", () {
+  test("a theme's looks, apart from its colors and pictures; anything else is the defaults'", () {
     final sheet = parseServerThemes('''
 .chameleon-theme[data-name="Retro"] {
   --seed: 270-325-9-1;
@@ -130,13 +132,35 @@ void main() {
   --icons: phosphor;
   --genre-cards: icons;
   --section-carousel-seconds: 5;
+  --subtitle-color: yellow;
 }
 ''');
-    expect(sheet.themes.single.settings, {
+    final theme = sheet.themes.single;
+    expect(theme.settings, {
       'headingFont': '"Press Start 2P"',
       'icons': 'phosphor',
       'genreCards': 'icons',
-      'sectionCarouselSeconds': '5',
     });
+    expect(theme.problems, [
+      '--section-carousel-seconds belongs in .chameleon-defaults, not a theme',
+      '--subtitle-color belongs in .chameleon-defaults, not a theme',
+    ]);
+  });
+
+  test('the example themes read without problems', () {
+    final sheet = parseServerThemes(File('examples/themes/themes.css').readAsStringSync());
+    expect(sheet.defaults.theme, 'Nightowl Cinema');
+    expect(sheet.defaults.logo, isNull); // commented out, so logoless themes show Chameleon's
+    expect(sheet.defaults.settings['serverBackdrop'], 'false');
+    expect(sheet.defaults.settings['sectionCarouselSeconds'], '10');
+    expect(sheet.themes.map((t) => t.name), [
+      'Nightowl Cinema', 'Popcorn Palace', 'Driftwood Media', 'Neon Arcade', 'Paper Lantern', //
+      'Velvet Curtain', 'Glacier', 'Graphite',
+    ]);
+    for (final theme in sheet.themes) {
+      expect(theme.problems, isEmpty, reason: theme.name);
+      expect(theme.settings.keys.toSet().difference(themeLookSettings), isEmpty, reason: theme.name);
+    }
+    expect(sheet.themes.where((t) => t.logo == null).map((t) => t.name), ['Velvet Curtain', 'Glacier', 'Graphite']);
   });
 }

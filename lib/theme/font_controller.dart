@@ -115,6 +115,13 @@ class FontController extends ChangeNotifier {
   String get display => _display;
   String get body => _body;
 
+  /// The fonts you chose yourself, if you did (rather than the defaults or your theme's).
+  String? get ownDisplay => storage.getString(_displayKey);
+  String? get ownBody => storage.getString(_bodyKey);
+
+  /// Whether [font] is one of Google Fonts' (as a setting's value has to be).
+  static bool exists(String font) => GoogleFonts.asMap().containsKey(font);
+
   static Future<FontController> load() async =>
       FontController._(_saved(_displayKey, _defaultDisplay), _saved(_bodyKey, _defaultBody));
 

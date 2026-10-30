@@ -2,15 +2,77 @@
    Dashboard › General › Custom CSS code. See docs/themes.md. */
 
 /* chameleon-defaults
-   version: 1 */
+   version: 2 */
 .chameleon-defaults {
   --theme: "Nightowl Cinema";
-  --logo: url("https://raw.githubusercontent.com/jumpingfox-dev/Chameleon/main/examples/themes/nightowl.svg");
+
+  /* A server-wide logo, for themes without their own. Left out here so the logoless themes
+     below show Chameleon's own wordmark; uncomment to see them use this instead. */
+  /* --logo: url("https://raw.githubusercontent.com/jumpingfox-dev/Chameleon/main/examples/themes/nightowl.svg"); */
+
+  /* Sign-in pages: no splash screen behind them, but keep the login disclaimer. */
+  --server-backdrop: false;
+  --login-disclaimer: true;
+
+  /* Fonts, icons and genre cards for anyone on one of Chameleon's own themes (each theme below
+     has its own). */
+  --heading-font: "Outfit";
+  --body-font: "Inter";
+  --icons: lucide;
+  --genre-cards: pictures;
+
+  /* Menus */
+  --bottom-bar: home, search, favorites, settings;
+  --menu-pinned: true;
+
+  /* Home */
+  --home: carousel, continueWatching, nextUp, myMedia, recentlyAddedMovies, recentlyAddedSeries, genres, favorites;
+  --section-carousel-kinds: movies;
+  --section-carousel-limit: 6;
+  --section-carousel-seconds: 10;
+  --section-continue-watching-limit: 30;
+  --section-continue-watching-movie-titles: true;
+  --section-next-up-limit: 30;
+  --section-my-media-look: pictures;
+  --section-genres-show-title: true;
+  --section-genres-genre-count: 8;
+  --section-favorites-kinds: Movie, Series;
+  --section-recently-added-movies-limit: 50;
+  --section-recently-added-series-limit: 50;
+
+  /* Playback */
+  --autoplay-next: true;
+  --countdown-seconds: 15;
+  --still-watching-after: 4;
+  --skip-intro: auto;
+  --skip-recap: auto;
+  --skip-credits: ask;
+  --skip-preview: ignore;
+  --seek-step: 15;
+  --resume: ask;
+  --show-rating: true;
+  --preview-delay: 3;
+
+  /* Subtitles */
+  --subtitle-font: "Noto Sans";
+  --subtitle-size: large;
+  --subtitle-color: yellow;
+  --subtitle-background: box;
+  --lift-subtitles: true;
+
+  /* Screensaver */
+  --style-on-tv: posters;
+  --start-after: 5;
+  --poster-rows: 4;
+  --poster-speed: slow;
+  --backdrop-seconds: 20;
 }
+
+/* ── Themes with their own logo ─────────────────────────────────────────────────────────── */
 
 /* chameleon-theme: Nightowl Cinema
    author: Chameleon examples
-   version: 1 */
+   version: 2 */
 .chameleon-theme[data-name="Nightowl Cinema"] {
   --seed: 225-038-8-1;
   --logo: url("https://raw.githubusercontent.com/jumpingfox-dev/Chameleon/main/examples/themes/nightowl.svg");
@@ -24,12 +86,11 @@
   --heading-font: "Bebas Neue";
   --body-font: "Inter";
   --icons: fluent;
-  --section-carousel-seconds: 10;
 }
 
 /* chameleon-theme: Popcorn Palace
    author: Chameleon examples
-   version: 1 */
+   version: 2 */
 .chameleon-theme[data-name="Popcorn Palace"] {
   --seed: 000-000-7-1;
   --logo: url("https://raw.githubusercontent.com/jumpingfox-dev/Chameleon/main/examples/themes/popcorn.svg");
@@ -43,13 +104,11 @@
   --heading-font: "Playfair Display";
   --body-font: "Lato";
   --icons: phosphor;
-  --subtitle-color: yellow;
-  --section-carousel-kinds: movies;
 }
 
 /* chameleon-theme: Driftwood Media
    author: Chameleon examples
-   version: 1 */
+   version: 2 */
 .chameleon-theme[data-name="Driftwood Media"] {
   --seed: 185-175-6-1;
   --logo: url("https://raw.githubusercontent.com/jumpingfox-dev/Chameleon/main/examples/themes/driftwood.svg");
@@ -64,12 +123,11 @@
   --body-font: "Nunito";
   --icons: lucide;
   --genre-cards: pictures;
-  --section-carousel-seconds: 15;
 }
 
 /* chameleon-theme: Neon Arcade
    author: Chameleon examples
-   version: 1 */
+   version: 2 */
 .chameleon-theme[data-name="Neon Arcade"] {
   --seed: 270-325-9-1;
   --logo: url("https://raw.githubusercontent.com/jumpingfox-dev/Chameleon/main/examples/themes/neon.svg");
@@ -85,13 +143,11 @@
   --heading-font: "Orbitron";
   --body-font: "Exo 2";
   --icons: materialSymbols;
-  --subtitle-color: cyan;
-  --section-carousel-seconds: 5;
 }
 
 /* chameleon-theme: Paper Lantern
    author: Chameleon examples
-   version: 1 */
+   version: 2 */
 .chameleon-theme[data-name="Paper Lantern"] {
   --brightness: light;
   --logo: url("https://raw.githubusercontent.com/jumpingfox-dev/Chameleon/main/examples/themes/lantern.svg");
@@ -108,5 +164,59 @@
   --heading-font: "Merriweather";
   --body-font: "Source Sans 3";
   --icons: cupertino;
-  --subtitle-background: box;
+}
+
+/* ── Themes without a logo: the defaults' logo if it has one, else Chameleon's own ───────── */
+
+/* chameleon-theme: Velvet Curtain
+   author: Chameleon examples
+   version: 1 */
+.chameleon-theme[data-name="Velvet Curtain"] {
+  --seed: 345-045-7-1;
+  --background: #1C0A12;
+  --foreground: #F8E9EE;
+  --card: #2A111C;
+  --primary: #D4A94F;
+  --primary-foreground: #241A06;
+  --muted-foreground: #C29AAA;
+  --border: #40202E;
+  --heading-font: "Cinzel";
+  --body-font: "Libre Franklin";
+  --icons: phosphor;
+}
+
+/* chameleon-theme: Glacier
+   author: Chameleon examples
+   version: 1 */
+.chameleon-theme[data-name="Glacier"] {
+  --brightness: light;
+  --seed: 205-190-5-1;
+  --background: #EEF4F8;
+  --foreground: #1B2B38;
+  --card: #FFFFFF;
+  --primary: #2F7FC1;
+  --primary-foreground: #FFFFFF;
+  --muted-foreground: #4A5F70;
+  --border: #D3E0EA;
+  --heading-font: "Manrope";
+  --body-font: "Manrope";
+  --icons: lucide;
+}
+
+/* chameleon-theme: Graphite
+   author: Chameleon examples
+   version: 1 */
+.chameleon-theme[data-name="Graphite"] {
+  --seed: 220-140-2-1;
+  --background: #121314;
+  --foreground: #ECEDEE;
+  --card: #1B1C1E;
+  --primary: #4ADE80;
+  --primary-foreground: #06240F;
+  --muted-foreground: #9A9EA4;
+  --border: #2A2C2F;
+  --heading-font: "Space Grotesk";
+  --body-font: "IBM Plex Sans";
+  --icons: materialSymbols;
+  --genre-cards: icons;
 }

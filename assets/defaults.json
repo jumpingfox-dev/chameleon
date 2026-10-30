@@ -9,6 +9,10 @@
     "genreCards": "icons",
     "bottomBar": ["home", "search", "downloads", "settings"],
     "menuPinned": false,
+    "signIn": {
+      "serverBackdrop": true,
+      "loginDisclaimer": true
+    },
     "screensaver": {
       "styleOnTv": "backdrops",
       "styleElsewhere": "off",

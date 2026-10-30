@@ -468,6 +468,33 @@ class _AppearanceCard extends StatelessWidget {
             ),
           ),
 
+          // ── Sign-in: what a server's sign-in pages show of its branding ──
+          const _SectionTitle(
+            'Sign-in',
+            description: 'What a server\'s sign-in pages and "Who\'s watching?" show, from its branding in Jellyfin.',
+          ),
+          ListenableBuilder(
+            listenable: Listenable.merge([signInShows, serverThemes]),
+            builder: (context, _) => Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                SwitchSetting(
+                  label: 'Server backdrop',
+                  description: 'The server\'s splash screen, dimmed behind the sign-in pages.',
+                  value: signInShows.backdrop(),
+                  onChange: signInShows.setBackdrop,
+                ),
+                const SizedBox(height: 16),
+                SwitchSetting(
+                  label: 'Login disclaimer',
+                  description: 'The server\'s message under the sign-in form.',
+                  value: signInShows.disclaimer(),
+                  onChange: signInShows.setDisclaimer,
+                ),
+              ],
+            ),
+          ),
+
           // ── Bottom bar (phones and tablets) ──
           if (ScreenType.of(context) case ScreenType.phone || ScreenType.tablet) ...[
             const _SectionTitle(

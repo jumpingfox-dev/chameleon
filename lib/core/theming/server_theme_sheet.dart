@@ -51,8 +51,8 @@ class ServerTheme {
   /// A folder of genre pictures, named after the genres (see [genreFolderFiles]).
   final String? genreFolder;
 
-  /// Settings' defaults while it's the theme in use (fonts, icons...), as [ServerDefaults.settings]
-  /// has them, over those.
+  /// Its looks ([themeLookSettings]: fonts, icons, genre cards), as [ServerDefaults.settings]
+  /// has them. Picking the theme makes them yours (see ServerThemeLooks).
   final Map<String, String> settings;
 
   /// What in it couldn't be read (a color that isn't one, say), for the theme picker.
@@ -97,6 +97,10 @@ List<String> genreFolderFiles(String folder, String genre) {
 String genreKey(String genre) =>
     genre.toLowerCase().replaceAll(RegExp('[^a-z0-9]+'), '-').replaceAll(RegExp(r'^-+|-+$'), '');
 
+/// The settings a theme can set: how the app looks. Everything else (playback, subtitles, Home's
+/// sections...) belongs in the defaults, for everyone on the server whatever their theme.
+const themeLookSettings = {'headingFont', 'bodyFont', 'icons', 'genreCards'};
+
 final _comment = RegExp(r'/\*.*?\*/', dotAll: true);
 final _rule = RegExp(r'([^{}]+)\{([^{}]*)\}');
 final _themeSelector = RegExp(r'''\.chameleon-theme\s*\[\s*data-name\s*=\s*(["'])(.*?)\1\s*\]''');
@@ -133,6 +137,10 @@ ServerThemeSheet parseServerThemes(String css) {
       final name = match.group(2)!.trim();
       if (name.isEmpty || themes.any((t) => t.name == name)) continue; // the first of a name wins
       final (colors, problems) = _colors(props);
+      final settings = _settings(props, {'seed', 'brightness', ..._colorNames});
+      for (final key in settings.keys.where((k) => !themeLookSettings.contains(k))) {
+        problems.add('--${_kebab(key)} belongs in .chameleon-defaults, not a theme');
+      }
       themes.add(
         ServerTheme(
           name: name,
@@ -141,7 +149,10 @@ ServerThemeSheet parseServerThemes(String css) {
           logo: _link(props['logo']),
           genres: _genres(props),
           genreFolder: _link(props['genre-folder']),
-          settings: _settings(props, {'seed', 'brightness', ..._colorNames}),
+          settings: {
+            for (final MapEntry(:key, :value) in settings.entries)
+              if (themeLookSettings.contains(key)) key: value,
+          },
           problems: problems,
         ),
       );
@@ -157,6 +168,9 @@ Map<String, String> _settings(Map<String, String> props, Set<String> skip) => {
     if (key != 'logo' && !skip.contains(key) && (!key.startsWith('genre-') || key == 'genre-cards'))
       key.replaceAllMapped(RegExp('-([a-z0-9])'), (m) => m[1]!.toUpperCase()): value,
 };
+
+/// A setting's name as it's written in CSS: `headingFont` is `heading-font`.
+String _kebab(String name) => name.replaceAllMapped(RegExp('[A-Z]'), (m) => '-${m[0]!.toLowerCase()}');
 
 /// The color tokens' names in CSS (primary-foreground for primaryForeground), and what they set.
 final _colorTokens = {

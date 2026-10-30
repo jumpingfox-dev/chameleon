@@ -4,6 +4,8 @@ import '../../core/platform/screen_type.dart';
 import '../../theme/theme_controller.dart';
 import '../../theme/theme_presets.dart';
 import '../../theme/app_icons.dart';
+import '../../theme/font_controller.dart';
+import '../library/genres.dart';
 import '../../core/theming/server_themes.dart';
 import 'choice_picker.dart';
 import '../../theme/theme.dart';
@@ -68,10 +70,72 @@ class _ServerThemes extends StatelessWidget {
         );
         if (picked == null) return;
         final theme = themeController.serverPresets.where((p) => p.id == picked.$1).firstOrNull;
+        // Its looks replace any you chose yourself: say which, first.
+        final changes = _lookChanges(serverThemes.sheet.themeNamed(theme?.label));
+        if (changes.isNotEmpty && context.mounted && !await _confirmLooks(context, theme!.label, changes)) return;
         await themeController.select(theme ?? themeController.custom);
+        for (final change in changes) {
+          await change.apply();
+        }
       },
     );
   }
+
+  /// Asks before [theme]'s looks replace yours. True to go ahead.
+  static Future<bool> _confirmLooks(BuildContext context, String theme, List<_LookChange> changes) async =>
+      await showDialog<bool>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: Text('Use $theme\'s settings?'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            spacing: 8,
+            children: [
+              Text('$theme sets these, and will replace what you chose:'),
+              for (final c in changes) Text('${c.what}: ${c.yours} → ${c.theirs}'),
+            ],
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.of(context).pop(false), child: const Text('Cancel')),
+            FilledButton(onPressed: () => Navigator.of(context).pop(true), child: const Text('Use theme')),
+          ],
+        ),
+      ) ??
+      false;
+}
+
+/// One of a server theme's looks (see themeLookSettings) that's different from what you chose
+/// yourself: what it is, yours, the theme's, and how to make the theme's yours.
+typedef _LookChange = ({String what, String yours, String theirs, Future<void> Function() apply});
+
+/// [theme]'s looks that differ from ones you chose yourself. (Ones you never changed follow the
+/// theme as it is.)
+List<_LookChange> _lookChanges(ServerTheme? theme) {
+  if (theme == null) return const [];
+  String? value(String key) => theme.settings[key]?.trim().replaceAll(RegExp(r'''^["']|["']$'''), '').trim();
+  final changes = <_LookChange>[];
+  if (value('headingFont') case final font? when FontController.exists(font)) {
+    if (fontController.ownDisplay case final mine? when mine != font) {
+      changes.add((what: 'Heading font', yours: mine, theirs: font, apply: () => fontController.setDisplay(font)));
+    }
+  }
+  if (value('bodyFont') case final font? when FontController.exists(font)) {
+    if (fontController.ownBody case final mine? when mine != font) {
+      changes.add((what: 'Body font', yours: mine, theirs: font, apply: () => fontController.setBody(font)));
+    }
+  }
+  if (IconStyle.values.asNameMap()[value('icons')] case final style?) {
+    if (iconController.own case final mine? when mine != style) {
+      changes.add((what: 'Icons', yours: mine.label, theirs: style.label, apply: () => iconController.select(style)));
+    }
+  }
+  if (GenreCardStyle.values.asNameMap()[value('genreCards')] case final style?) {
+    if (genreCards.own case final mine? when mine != style) {
+      changes.add((what: 'Genre cards', yours: mine.label, theirs: style.label, apply: () => genreCards.select(style)));
+    }
+  }
+  return changes;
 }
 
 /// A server theme in the list: its name, who made it, and whether its pictures load.

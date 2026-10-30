@@ -20,6 +20,8 @@ rather than the device (audio and subtitle languages, Parental Controls) aren't 
 | `genreCards` | `icons`, `pictures` (the pictures Jellyfin has for each genre), `theme` (the server theme's: see [themes.md](themes.md)) |
 | `bottomBar` | Up to 4 of `home`, `search`, `downloads`, `favorites`, `genres`, `settings`, or a library kind: `movies`, `tvshows`, `music`, `boxsets`, ... (the first library of that kind). `downloads` becomes `favorites` on devices without downloads. |
 | `menuPinned` | `true` keeps the menu open beside the page on wide screens |
+| `signIn.serverBackdrop` | `false` hides the server's splash screen behind its sign-in pages and "Who's watching?" (Settings › Appearance › Sign-in). Kept for the device, not per person: it shows before anyone's signed in. |
+| `signIn.loginDisclaimer` | `false` hides the server's login disclaimer under the sign-in form. Also kept for the device. |
 
 ### appearance.screensaver
 

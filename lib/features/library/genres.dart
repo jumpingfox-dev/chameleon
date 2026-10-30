@@ -52,6 +52,9 @@ class GenreCardsController extends ValueNotifier<GenreCardStyle> {
   /// Loads the style saved for whoever is signed in now.
   void reload() => value = _saved();
 
+  /// The style you chose yourself, if you did (rather than the defaults or your theme's).
+  GenreCardStyle? get own => GenreCardStyle.values.asNameMap()[storage.getString(_key)];
+
   Future<void> select(GenreCardStyle style) async {
     value = style;
     await storage.setString(_key, style.name);

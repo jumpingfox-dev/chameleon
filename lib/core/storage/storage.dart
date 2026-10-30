@@ -23,8 +23,12 @@ class Storage {
   final Map<String, String> _settings;
 
   /// Settings for the whole device rather than one person: which server and account are
-  /// signed in, this device's id, and the import marker.
-  static const _deviceKeys = {'jf_server', 'jf_token', 'jf_user_id', 'jf_device_id', _importedKey};
+  /// signed in, this device's id, the import marker, and what the sign-in pages show (seen
+  /// before anyone's signed in: see SignInShows).
+  static const _deviceKeys = {
+    'jf_server', 'jf_token', 'jf_user_id', 'jf_device_id', _importedKey, //
+    'sign_in_backdrop', 'sign_in_disclaimer',
+  };
 
   /// Whose settings are read and saved: "server|userId", or null when nobody is signed in.
   /// Listened to by everything that holds settings, to load the new person's.
