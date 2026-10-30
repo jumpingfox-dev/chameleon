@@ -430,8 +430,10 @@ class _MenuItem extends StatelessWidget {
           // in every theme (toward the text's color made it lighter in some, darker in others).
           Color darker(Color c) => highlighted ? Color.lerp(c, const Color(0xFF000000), 0.25)! : c;
           final foreground = selected ? darker(colors.onPrimary) : colors.onSurface;
+          // The text and icon change color along with the fill, so neither is ever on the wrong one.
+          const duration = Duration(milliseconds: 120);
           return AnimatedContainer(
-            duration: const Duration(milliseconds: 120),
+            duration: duration,
             padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
             decoration: BoxDecoration(
               // The page you're on is filled in; under the remote or the pointer, a little darker.
@@ -442,19 +444,23 @@ class _MenuItem extends StatelessWidget {
                   : colors.onSurface.withValues(alpha: 0),
               borderRadius: BorderRadius.circular(12),
             ),
-            child: Row(
-              spacing: 14,
-              children: [
-                leading ?? Icon(icon, size: 24, color: foreground, fill: 1),
-                Expanded(
-                  child: Text(
-                    label,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: context.text.titleMedium?.copyWith(color: foreground),
+            child: TweenAnimationBuilder<Color?>(
+              tween: ColorTween(end: foreground),
+              duration: duration,
+              builder: (context, foreground, _) => Row(
+                spacing: 14,
+                children: [
+                  leading ?? Icon(icon, size: 24, color: foreground, fill: 1),
+                  Expanded(
+                    child: Text(
+                      label,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: context.text.titleMedium?.copyWith(color: foreground),
+                    ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
           );
         },
