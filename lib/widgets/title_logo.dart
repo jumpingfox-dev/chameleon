@@ -18,7 +18,21 @@ class TitleLogo extends StatelessWidget {
     required this.size,
     required this.fallback,
     this.alignment = Alignment.bottomLeft,
-  });
+  }) : fill = false;
+
+  /// As wide as [size] (a wide logo), or as tall (a squarer one), but only as tall as it then
+  /// is: no room left under a wide logo. It sits at the top left, or [alignment].
+  const TitleLogo.upTo({
+    super.key,
+    required this.itemId,
+    required this.tag,
+    required this.size,
+    required this.fallback,
+    this.alignment = Alignment.topLeft,
+  }) : fill = true;
+
+  /// See [TitleLogo.upTo].
+  final bool fill;
 
   final String itemId;
   final String tag;
@@ -31,7 +45,29 @@ class TitleLogo extends StatelessWidget {
   static Size banner(bool isPhone) => isPhone ? const Size(160, 64) : const Size(280, 110);
 
   @override
-  Widget build(BuildContext context) => SizedBox.fromSize(
+  Widget build(BuildContext context) {
+    if (fill) {
+      return ConstrainedBox(
+        constraints: BoxConstraints(maxWidth: size.width, maxHeight: size.height),
+        child: Image.network(
+          jellyfin.client!.images.url(
+            itemId: itemId,
+            type: JellyfinImagesApi.typeLogo,
+            tag: tag,
+            fillWidth: (size.width * MediaQuery.devicePixelRatioOf(context)).round(),
+          ),
+          // Its width given, it's as tall as its shape makes it, within the limit.
+          width: size.width,
+          fit: BoxFit.contain,
+          alignment: alignment,
+          errorBuilder: (_, _, _) => Align(alignment: alignment, child: fallback),
+        ),
+      );
+    }
+    return _box(context);
+  }
+
+  Widget _box(BuildContext context) => SizedBox.fromSize(
     size: size,
     child: Image.network(
       jellyfin.client!.images.url(

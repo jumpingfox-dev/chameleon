@@ -11,6 +11,7 @@ import 'package:material_ui/material_ui.dart';
 import '../../theme/app_icons.dart';
 import '../../core/storage/app_cache.dart';
 import '../../core/focus/focus_rows.dart';
+import '../../core/downloads/downloads.dart';
 import '../../core/format/format.dart';
 import '../../core/format/item_format.dart';
 import '../../core/jellyfin/jellyfin_controller.dart';
@@ -27,6 +28,7 @@ import '../library/poster_card.dart';
 import '../../core/focus/scroll_into_view.dart';
 import '../../theme/theme.dart';
 import '../../widgets/tappable.dart';
+import '../../widgets/focus_slot_row.dart';
 import '../../core/platform/page_insets.dart';
 import '../../core/jellyfin/together.dart';
 import '../../widgets/title_logo.dart';
@@ -375,7 +377,6 @@ class CollectionLayout extends DetailLayout {
 
   @override
   List<Widget> buildSlivers(BuildContext context, DetailData data) => [
-    SliverToBoxAdapter(child: _HeroTitle(item: data.item)),
     SliverToBoxAdapter(
       child: _CollectionInfoCard(collection: data.item, items: data.children),
     ),
@@ -398,7 +399,6 @@ class MovieLayout extends DetailLayout {
 
   @override
   List<Widget> buildSlivers(BuildContext context, DetailData data) => [
-    SliverToBoxAdapter(child: _HeroTitle(item: data.item)),
     SliverToBoxAdapter(child: _MovieInfoCard(movie: data.item)),
     SliverToBoxAdapter(child: _RelatedRows(item: data.item)),
     SliverToBoxAdapter(child: _MediaInfo(item: data.item)),
@@ -422,7 +422,6 @@ class SeriesLayout extends DetailLayout {
 
   @override
   List<Widget> buildSlivers(BuildContext context, DetailData data) => [
-    SliverToBoxAdapter(child: _HeroTitle(item: data.item)),
     SliverToBoxAdapter(
       child: _SeriesInfoCard(series: data.item, seasons: data.children),
     ),
@@ -436,6 +435,11 @@ class SeriesLayout extends DetailLayout {
             _ItemRow(title: 'Seasons', items: data.children, view: LibraryView.poster, top: 8, captioned: true),
           ],
         ),
+      ),
+    // The cast, under the seasons.
+    if (_peopleOf(data.item) case final cast when cast.isNotEmpty)
+      SliverToBoxAdapter(
+        child: _DetailCard(edgeToEdge: true, child: _CardColumn(children: _castSection(context, cast, divider: false))),
       ),
     SliverToBoxAdapter(child: _RelatedRows(item: data.item)),
   ];
@@ -451,7 +455,7 @@ class SeriesLayout extends DetailLayout {
 }
 
 /// A season, over its show's backdrop: the season's poster, Play, Trailer, Favorite and Mark
-/// as watched, its description, the cast, then its episodes.
+/// as watched, its description, its episodes, then the cast.
 class SeasonLayout extends DetailLayout {
   const SeasonLayout();
 
@@ -459,7 +463,6 @@ class SeasonLayout extends DetailLayout {
 
   @override
   List<Widget> buildSlivers(BuildContext context, DetailData data) => [
-    SliverToBoxAdapter(child: _SeasonHero(season: data.item, series: _series(data))),
     SliverToBoxAdapter(
       child: _SeasonInfoCard(season: data.item, series: _series(data), episodes: data.children),
     ),

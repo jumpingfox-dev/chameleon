@@ -4,7 +4,6 @@ import 'package:flutter/services.dart';
 import 'package:material_ui/material_ui.dart';
 
 import 'focus_rows.dart';
-import '../../theme/theme.dart';
 
 /// Scrolls the page so this widget sits comfortably in view whenever keyboard or remote focus
 /// arrives inside it: about a third of the way down, rather than Flutter's default of
@@ -142,7 +141,6 @@ class _KeyboardReadableState extends State<KeyboardReadable> {
       48.0; // treat content this close to the edge as fully shown
 
   late final FocusNode _node = widget.focusNode ?? FocusNode();
-  bool _reading = false; // this block itself has focus (not a link inside it)
 
   bool get _keyboard =>
       FocusManager.instance.highlightMode == FocusHighlightMode.traditional;
@@ -188,10 +186,15 @@ class _KeyboardReadableState extends State<KeyboardReadable> {
       curve: Curves.easeOut,
     );
 
+    // (In a small scrolling box, as a description beside a title's logo: the room it has.)
+    final margin = math.min(_margin, viewport.size.height * 0.1);
+    final atEnd = position.pixels >= position.maxScrollExtent - 0.5;
+    final atStart = position.pixels <= position.minScrollExtent + 0.5;
+
     if (down) {
-      if (bottom > viewport.size.height - _margin) {
+      if (!atEnd && bottom > viewport.size.height - margin) {
         scrollBy(
-          math.min(_step, bottom - (viewport.size.height - _margin)),
+          math.min(_step, bottom - (viewport.size.height - margin)),
         ); // more below: keep reading
       } else if (widget.onEnd != null) {
         widget.onEnd!(); // reached the end
@@ -201,8 +204,8 @@ class _KeyboardReadableState extends State<KeyboardReadable> {
       return KeyEventResult.handled;
     }
 
-    if (top < _margin) {
-      scrollBy(-math.min(_step, _margin - top)); // more above: keep reading
+    if (!atStart && top < margin) {
+      scrollBy(-math.min(_step, margin - top)); // more above: keep reading
       return KeyEventResult.handled;
     }
     return KeyEventResult.ignored; // back at the start: let focus move up
@@ -215,38 +218,10 @@ class _KeyboardReadableState extends State<KeyboardReadable> {
     skipTraversal: !widget.enabled,
     onKeyEvent: _onKey,
     onFocusChange: (_) {
-      final reading = _node.hasPrimaryFocus;
-      if (reading != _reading) setState(() => _reading = reading);
       // Arriving by keyboard: the page grows by as much as it needs to show all of it, from
       // where it is (or, too long for that, its start at the top), rather than jumping it up.
-      if (reading && _keyboard) KeepClearOfEdges.reveal(context, margin: 0.06);
+      if (_node.hasPrimaryFocus && _keyboard) KeepClearOfEdges.reveal(context, margin: 0.06);
     },
-    // While reading: the content on a box in the theme's color, reaching into the margin
-    // around it, so the content itself never moves, whether it's expanded, being read, or neither.
-    child: Stack(
-      clipBehavior: Clip.none, // the box reaches past the content's edges
-      children: [
-        Positioned(
-          left: -12,
-          right: -12,
-          top: -8,
-          bottom: -8,
-          child: IgnorePointer(
-            child: AnimatedOpacity(
-              opacity: widget.enabled && _reading && _keyboard ? 1 : 0,
-              duration: const Duration(milliseconds: 150),
-              child: DecoratedBox(
-                decoration: BoxDecoration(
-                  // Solid (it can be over a bright backdrop): the card color, tinted the theme's.
-                  color: Color.alphaBlend(context.colors.primary.withValues(alpha: 0.16), context.colors.surfaceContainer),
-                  borderRadius: BorderRadius.circular(10),
-                ),
-              ),
-            ),
-          ),
-        ),
-        widget.child, // over the box
-      ],
-    ),
+    child: widget.child,
   );
 }

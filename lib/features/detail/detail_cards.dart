@@ -75,7 +75,6 @@ class _CollectionInfoCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colors = context.colors;
-    final isPhone = ScreenType.of(context).isPhone;
     final muted = context.text.bodyMedium?.copyWith(
       color: colors.onSurfaceVariant,
     );
@@ -84,76 +83,66 @@ class _CollectionInfoCard extends StatelessWidget {
     final rating = _rating;
     final genres = _genres;
 
-    return _DetailCard(
-      edgeToEdge: true,
-      child: _CardColumn(
+    // ── Count, years, age rating ──
+    final facts = _FactsRow(
+      children: [
+        Text('${items.length} ${items.length == 1 ? 'title' : 'titles'}', style: muted),
+        if (years != null) Text(years, style: muted),
+        if (rating != null) _RatingBadge(rating),
+      ],
+    );
+
+    // ── Play, Shuffle, Favorite ──
+    final buttons = ScrollIntoViewOnFocus(
+      child: Wrap(
+        spacing: 8,
+        runSpacing: 8,
         children: [
-          // ── Count, years, age rating ──
-          _FactsRow(
-            children: [
-              Text(
-                '${items.length} ${items.length == 1 ? 'title' : 'titles'}',
-                style: muted,
+          _StartsHere(
+            child: Builder(
+              builder: (context) => _playButton(
+                context,
+                label: 'Play',
+                onPressed: items.isEmpty ? null : () => playQueue(GoRouter.of(context), collectionQueue(items)),
               ),
-              if (years != null) Text(years, style: muted),
-              if (rating != null) _RatingBadge(rating),
-            ],
-          ),
-
-          // ── Play, Shuffle, Favorite ──
-          ScrollIntoViewOnFocus(
-            child: Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: [
-                _StartsHere(
-                  child: FilledButton(
-                    style: actionButtonStyle,
-                    onPressed: items.isEmpty
-                        ? null
-                        : () => playQueue(GoRouter.of(context), collectionQueue(items)),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      spacing: 8,
-                      children: [Icon(appIcons.play, size: 18, fill: 1), const Text('Play')],
-                    ),
-                  ),
-                ),
-                FilledButton.tonal(
-                  style: actionButtonStyle,
-                  onPressed: items.length < 2
-                      ? null
-                      : () => playQueue(GoRouter.of(context), collectionQueue(items, shuffle: true)),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    spacing: 8,
-                    children: [Icon(appIcons.shuffle, size: 18, fill: 1), const Text('Shuffle')],
-                  ),
-                ),
-                _FavoriteButton(item: collection),
-              ],
             ),
           ),
-
-          // ── Description ──
-          if (description != null && description.isNotEmpty)
-            ExpandableText(
-              description,
-              limit: isPhone ? 150 : 400,
-              style: context.text.bodyLarge,
+          Builder(
+            builder: (context) => _action(
+              context,
+              icon: Icon(appIcons.shuffle, size: 18, fill: 1),
+              label: 'Shuffle',
+              onPressed: items.length < 2
+                  ? null
+                  : () => playQueue(GoRouter.of(context), collectionQueue(items, shuffle: true)),
             ),
-
-          // ── Genres ──
-          if (genres.isNotEmpty) _GenreButtons(genres),
-
-          // ── Movies ──
-          if (items.isNotEmpty) ...[
-            const _CardDivider(),
-            Text('Movies', style: context.text.titleLarge),
-            _InlineItemGrid(items),
-          ],
+          ),
+          _FavoriteButton(item: collection),
         ],
       ),
+    );
+
+    final genreButtons = genres.isEmpty ? null : _GenreButtons(genres);
+    final movies = [
+      if (items.isNotEmpty) ...[
+        const _CardDivider(),
+        Text('Movies', style: context.text.titleLarge),
+        _InlineItemGrid(items),
+      ],
+    ];
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        _SplitHero(
+          title: (room) => _HeroTitle.mark(context, collection, room: room),
+          buttons: buttons,
+          about: [facts],
+          description: description,
+          genres: genreButtons,
+        ),
+        if (movies.isNotEmpty) _DetailCard(edgeToEdge: true, child: _CardColumn(children: movies)),
+      ],
     );
   }
 }
@@ -180,7 +169,6 @@ class _MovieInfoCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colors = context.colors;
-    final isPhone = ScreenType.of(context).isPhone;
     final muted = context.text.bodyMedium?.copyWith(
       color: colors.onSurfaceVariant,
     );
@@ -194,74 +182,73 @@ class _MovieInfoCard extends StatelessWidget {
         (movie.raw['Genres'] as List?)?.cast<String>() ?? const <String>[];
     final cast = _cast;
 
-    return _DetailCard(
-      edgeToEdge: true,
-      child: _CardColumn(
+    // ── Year, runtime, age rating, score ──
+    final facts = _FactsRow(
+      children: [
+        if (year != null) Text('$year', style: muted),
+        if (runtime != null) Text(runtime, style: muted),
+        if (rating != null && rating.isNotEmpty) _RatingBadge(rating),
+        if (score != null) _Score(score),
+      ],
+    );
+
+    // ── Play, Favorite, Trailer, Mark as watched, Download ──
+    final buttons = ScrollIntoViewOnFocus(
+      child: Wrap(
+        spacing: 8,
+        runSpacing: 8,
         children: [
-          // ── Year, runtime, age rating, score ──
-          _FactsRow(
-            children: [
-              if (year != null) Text('$year', style: muted),
-              if (runtime != null) Text(runtime, style: muted),
-              if (rating != null && rating.isNotEmpty) _RatingBadge(rating),
-              if (score != null)
-                Row(
-                  mainAxisSize: MainAxisSize.min,
-                  spacing: 4,
-                  children: [
-                    Icon(appIcons.star, size: 14, color: colors.primary, fill: 1),
-                    Text(score.toStringAsFixed(1), style: muted),
-                  ],
-                ),
-            ],
-          ),
-
-          // ── Play, Favorite ──
-          ScrollIntoViewOnFocus(
-            child: Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: [
-                _StartsHere(
-                  child: FilledButton(
-                    style: actionButtonStyle,
-                    onPressed: () => context.push('/play/${movie.id}'),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      spacing: 8,
-                      children: [
-                        Icon(appIcons.play, size: 18, fill: 1),
-                        // Partway through: it picks up where you left off.
-                        Text(_partway ? 'Continue' : 'Play'),
-                      ],
-                    ),
-                  ),
-                ),
-                _FavoriteButton(item: movie),
-                _TrailerButton(item: movie),
-                _WatchedButton(item: movie),
-                DownloadButton(item: movie, style: actionButtonStyle),
-              ],
+          _StartsHere(
+            child: Builder(
+              builder: (context) => _playButton(
+                context,
+                // Partway through: it picks up where you left off.
+                label: _partway ? 'Continue' : 'Play',
+                onPressed: () => context.push('/play/${movie.id}'),
+              ),
             ),
           ),
-
-          // ── Description ──
-          if (description != null && description.isNotEmpty)
-            ExpandableText(
-              description,
-              limit: isPhone ? 150 : 400,
-              style: context.text.bodyLarge,
-            ),
-
-          // ── Genres ──
-          if (genres.isNotEmpty) _GenreButtons(genres),
-
-          // ── Cast ──
-          ..._castSection(context, cast),
+          _TrailerButton(item: movie),
+          _FavoriteButton(item: movie),
+          _WatchedButton(item: movie),
+          Builder(builder: (context) => DownloadButton(item: movie, style: actionButtonStyle, compact: _IconActions.of(context))),
         ],
       ),
     );
+
+    final genreButtons = genres.isEmpty ? null : _GenreButtons(genres);
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        _SplitHero(
+          title: (room) => _HeroTitle.mark(context, movie, room: room),
+          buttons: buttons,
+          about: [facts],
+          description: description,
+          genres: genreButtons,
+        ),
+        if (cast.isNotEmpty) _DetailCard(edgeToEdge: true, child: _CardColumn(children: _castSection(context, cast))),
+      ],
+    );
   }
+}
+
+/// A title's score from its viewers, with a star.
+class _Score extends StatelessWidget {
+  const _Score(this.score);
+
+  final num score;
+
+  @override
+  Widget build(BuildContext context) => Row(
+    mainAxisSize: MainAxisSize.min,
+    spacing: 4,
+    children: [
+      Icon(appIcons.star, size: 14, color: context.colors.primary, fill: 1),
+      Text(score.toStringAsFixed(1), style: context.text.bodyMedium?.copyWith(color: context.colors.onSurfaceVariant)),
+    ],
+  );
 }
 
 // ─── Series pieces ───────────────────────────────────────────────────────────
@@ -288,7 +275,6 @@ class _SeriesInfoCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colors = context.colors;
-    final isPhone = ScreenType.of(context).isPhone;
     final muted = context.text.bodyMedium?.copyWith(
       color: colors.onSurfaceVariant,
     );
@@ -301,66 +287,46 @@ class _SeriesInfoCard extends StatelessWidget {
     final genres =
         (series.raw['Genres'] as List?)?.cast<String>() ?? const <String>[];
 
-    return _DetailCard(
-      edgeToEdge: true,
-      child: _CardColumn(
+    // ── Years, seasons, age rating, score ──
+    final facts = _FactsRow(
+      children: [
+        if (years != null) Text(years, style: muted),
+        if (seasonCount > 0) Text('$seasonCount ${seasonCount == 1 ? 'season' : 'seasons'}', style: muted),
+        if (rating != null && rating.isNotEmpty) _RatingBadge(rating),
+        if (score != null) _Score(score),
+      ],
+    );
+
+    // ── Play, Favorite, Trailer, Mark as watched ──
+    final buttons = ScrollIntoViewOnFocus(
+      child: Wrap(
+        spacing: 8,
+        runSpacing: 8,
         children: [
-          // ── Years, seasons, age rating, score ──
-          _FactsRow(
-            children: [
-              if (years != null) Text(years, style: muted),
-              if (seasonCount > 0)
-                Text(
-                  '$seasonCount ${seasonCount == 1 ? 'season' : 'seasons'}',
-                  style: muted,
-                ),
-              if (rating != null && rating.isNotEmpty) _RatingBadge(rating),
-              if (score != null)
-                Row(
-                  mainAxisSize: MainAxisSize.min,
-                  spacing: 4,
-                  children: [
-                    Icon(appIcons.star, size: 14, color: colors.primary, fill: 1),
-                    Text(score.toStringAsFixed(1), style: muted),
-                  ],
-                ),
-            ],
-          ),
-
-          // ── Play, Favorite, Trailer, Mark as watched ──
-          ScrollIntoViewOnFocus(
-            child: Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: [
-                _StartsHere(child: _SeriesPlayButton(series: series, seasons: seasons)),
-                _FavoriteButton(item: series),
-                _TrailerButton(item: series),
-                _WatchedButton(item: series),
-              ],
-            ),
-          ),
-
-          // ── Description ──
-          if (description != null && description.isNotEmpty)
-            ExpandableText(
-              description,
-              limit: isPhone ? 150 : 400,
-              style: context.text.bodyLarge,
-            ),
-
-          // ── Genres ──
-          if (genres.isNotEmpty) _GenreButtons(genres),
+          _StartsHere(child: _SeriesPlayButton(series: series, seasons: seasons)),
+          _TrailerButton(item: series),
+          _FavoriteButton(item: series),
+          _WatchedButton(item: series),
         ],
       ),
+    );
+
+    final genreButtons = genres.isEmpty ? null : _GenreButtons(genres);
+
+    return _SplitHero(
+      title: (room) => _HeroTitle.mark(context, series, room: room),
+      buttons: buttons,
+      about: [facts],
+      description: description,
+      genres: genreButtons,
     );
   }
 }
 
 // ─── Season pieces ───────────────────────────────────────────────────────────
 
-/// A season's Play, Favorite and Mark as watched, its description, the
-/// cast, then its episodes.
+/// A season's Play, Favorite and Mark as watched, its description, its episodes, then the
+/// cast.
 class _SeasonInfoCard extends StatefulWidget {
   const _SeasonInfoCard({required this.season, required this.series, required this.episodes});
 
@@ -430,7 +396,6 @@ class _SeasonInfoCardState extends State<_SeasonInfoCard> {
   @override
   Widget build(BuildContext context) {
     final season = widget.season;
-    final isPhone = ScreenType.of(context).isPhone;
     final muted = context.text.bodyMedium?.copyWith(color: context.colors.onSurfaceVariant);
     final description = ((season.raw['Overview'] as String?)?.trim().isNotEmpty ?? false)
         ? (season.raw['Overview'] as String).trim()
@@ -441,56 +406,99 @@ class _SeasonInfoCardState extends State<_SeasonInfoCard> {
     final allWatched = _allWatched;
     final started = !allWatched && _episodes.any((e) => isWatched(e) || watchProgress(e) != null);
 
-    return _DetailCard(
-      edgeToEdge: true,
-      child: _CardColumn(
+    // ── Year, episodes, how long they are all together, age rating, score (the show's, where
+    //    the season has none) ──
+    final year = season.raw['ProductionYear'] ??
+        DateTime.tryParse((_episodes.firstOrNull?.raw['PremiereDate'] as String?) ?? '')?.year;
+    final runtime = formatRuntime(_episodes.fold<int>(0, (sum, e) => sum + ((e.raw['RunTimeTicks'] as int?) ?? 0)));
+    final rating = (season.raw['OfficialRating'] ?? widget.series.raw['OfficialRating']) as String?;
+    final score = (season.raw['CommunityRating'] ?? widget.series.raw['CommunityRating']) as num?;
+    final facts = _FactsRow(
+      children: [
+        if (year != null) Text('$year', style: muted),
+        if (_episodes.isNotEmpty) Text('${_episodes.length} ${_episodes.length == 1 ? 'episode' : 'episodes'}', style: muted),
+        if (runtime != null) Text(runtime, style: muted),
+        if (rating != null && rating.isNotEmpty) _RatingBadge(rating),
+        if (score != null) _Score(score),
+      ],
+    );
+    final genres = (widget.series.raw['Genres'] as List?)?.cast<String>() ?? const <String>[];
+    final genreButtons = genres.isEmpty ? null : _GenreButtons(genres);
+
+    // ── Play, Favorite, Mark as watched (the trailer is on the show's page) ──
+    final buttons = ScrollIntoViewOnFocus(
+      child: Wrap(
+        spacing: 8,
+        runSpacing: 8,
         children: [
-          // ── Play, Favorite, Mark as watched (the trailer is on the show's page) ──
-          ScrollIntoViewOnFocus(
-            child: Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: [
-                _StartsHere(
-                  child: FilledButton(
-                    style: actionButtonStyle,
-                    onPressed: next == null ? null : () => context.push('/play/${next.id}'),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      spacing: 8,
-                      children: [Icon(appIcons.play, size: 18, fill: 1), Text(started ? 'Continue' : 'Play')],
-                    ),
-                  ),
-                ),
-                _FavoriteButton(item: season),
-                _watchedButton(context, watched: allWatched, onPressed: _episodes.isEmpty ? null : _toggleWatched),
-              ],
+          _StartsHere(
+            child: Builder(
+              builder: (context) => _playButton(
+                context,
+                label: started ? 'Continue' : 'Play',
+                onPressed: next == null ? null : () => context.push('/play/${next.id}'),
+              ),
             ),
           ),
+          _FavoriteButton(item: season),
+          // (Its own context: icon-only beside the poster, see _IconActions.)
+          Builder(
+            builder: (context) =>
+                _watchedButton(context, watched: allWatched, onPressed: _episodes.isEmpty ? null : _toggleWatched),
+          ),
+        ],
+      ),
+    );
 
-          // ── Description ──
-          if (description != null && description.isNotEmpty)
-            ExpandableText(
-              description,
-              limit: isPhone ? 150 : 400,
-              style: context.text.bodyLarge,
-            ),
 
-          // ── Cast ──
-          ..._castSection(context, cast),
-
+    final rest = <Widget>[
           // ── Episodes ──
           const _CardDivider(),
           Text('Episodes', style: context.text.titleLarge),
           if (_episodes.isEmpty)
             Text('No episodes in this season yet.', style: muted)
           else
-            Column(
-              spacing: 8,
-              children: [for (final episode in _episodes) _EpisodeTile(episode: episode)],
+            _EdgeToEdge(
+              // Runs to the screen's edges, so the episodes scroll all the way across.
+              builder: (padding) {
+                final width = _EpisodeTile.widthOf(context);
+                return ScrollIntoViewOnFocus(
+                  child: SizedBox(
+                    height: _EpisodeTile.heightOf(context, width),
+                    child: FocusSlotRow(
+                      // Room above and below for a card's lift and shadow.
+                      padding: padding.copyWith(top: _EpisodeTile.lift, bottom: _EpisodeTile.lift),
+                      itemCount: _episodes.length,
+                      itemWidth: width,
+                      frameFor: (_) => SlotFrame(width: width, height: width * 9 / 16),
+                      separatorBuilder: (_, _) => const SizedBox(width: 12),
+                      itemBuilder: (context, i) => _EpisodeTile(episode: _episodes[i], width: width),
+                    ),
+                  ),
+                );
+              },
             ),
-        ],
-      ),
+
+          // ── Cast, straight under the episodes ──
+          ..._castSection(context, cast, divider: false),
+    ];
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        _SplitHero(
+          title: (_) => _SeasonHero.poster(context, season, widget.series),
+          titleSize: Size(
+            _SeasonHero.posterHeight(context, widget.series) * 2 / 3,
+            _SeasonHero.posterHeight(context, widget.series),
+          ),
+          buttons: buttons,
+          about: [facts],
+          description: description,
+          genres: genreButtons,
+        ),
+        _DetailCard(edgeToEdge: true, child: _CardColumn(children: rest)),
+      ],
     );
   }
 }
@@ -519,22 +527,28 @@ String? _jobOf(Map<String, dynamic> person) {
   };
 }
 
-/// The cast and crew, under a divider: a heading, and a row of people that scrolls sideways to
-/// the card's edges. Nothing when there's no one.
-List<Widget> _castSection(BuildContext context, List<Map<String, dynamic>> cast) => [
+/// The cast and crew, under a divider (unless [divider] is false): a heading, and a row of people
+/// that scrolls sideways to the card's edges. Nothing when there's no one.
+List<Widget> _castSection(BuildContext context, List<Map<String, dynamic>> cast, {bool divider = true}) => [
   if (cast.isNotEmpty) ...[
-    const _CardDivider(),
+    if (divider) const _CardDivider(),
     Text('Cast & Crew', style: context.text.titleLarge),
     _EdgeToEdge(
       // Runs to the card's edges, so the cast scrolls all the way across.
       builder: (padding) => ScrollIntoViewOnFocus(
         child: SizedBox(
           height: _CastTile.heightOf(context),
-          child: FocusRow(
-            child: ListView.separated(
-              scrollDirection: Axis.horizontal,
+          child: FocusSlotRow(
               padding: padding,
               itemCount: cast.length,
+              itemWidth: _CastTile.width,
+              // The photo, centred at the top of the tile.
+              frameFor: (_) => const SlotFrame(
+                width: _CastTile.photo,
+                height: _CastTile.photo,
+                left: (_CastTile.width - _CastTile.photo) / 2,
+                circle: true,
+              ),
               // Between the last of the cast and the first of the crew, a line down the middle.
               separatorBuilder: (context, i) => _isActing(cast[i]) && !_isActing(cast[i + 1])
                   ? Padding(
@@ -543,7 +557,6 @@ List<Widget> _castSection(BuildContext context, List<Map<String, dynamic>> cast)
                     )
                   : const SizedBox(width: 8),
               itemBuilder: (context, i) => _CastTile(person: cast[i]),
-            ),
           ),
         ),
       ),
@@ -551,12 +564,42 @@ List<Widget> _castSection(BuildContext context, List<Map<String, dynamic>> cast)
   ],
 ];
 
-/// One episode: thumbnail on the left; number, title, runtime, air date and description beside it.
-/// Lifts on hover or remote focus, and plays when selected.
+/// One episode in the season's row: its thumbnail, then number and title, runtime and air date,
+/// and the start of its description. Lifts on hover or remote focus, and plays when selected.
 class _EpisodeTile extends StatelessWidget {
-  const _EpisodeTile({required this.episode});
+  const _EpisodeTile({required this.episode, required this.width});
 
   final JellyfinItem episode;
+  final double width;
+
+  /// Room above and below the row for a card's shadow when it lifts.
+  static const lift = 8.0;
+
+  /// As wide as Home's thumbnail cards.
+  static double widthOf(BuildContext context) => CardRows.tileWidth(context, LibraryView.thumbnail);
+
+  static int _overviewLines(BuildContext context) => ScreenType.of(context).isPhone ? 2 : 3;
+
+  /// The download button's height beside the title, where there is one.
+  static const _buttonHeight = 40.0;
+
+  /// The row's height: the thumbnail, then a line of title (or the download button beside it),
+  /// a line of details and the description's lines, measured in the font and text size in use
+  /// (so nothing's cut off with larger text). The same for every episode, said or not.
+  static double heightOf(BuildContext context, double width) {
+    final title = lineHeightOf(context, _titleStyle(context));
+    return lift +
+        width * 9 / 16 +
+        8 +
+        (DownloadsController.supported ? math.max(title, _buttonHeight) : title) +
+        4 +
+        lineHeightOf(context, context.text.bodySmall) +
+        4 +
+        _overviewLines(context) * lineHeightOf(context, context.text.bodyMedium) +
+        lift;
+  }
+
+  static TextStyle? _titleStyle(BuildContext context) => context.text.bodyLarge?.copyWith(fontWeight: FontWeight.w600);
 
   static const _months = [
     'Jan',
@@ -586,29 +629,26 @@ class _EpisodeTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colors = context.colors;
-    final isPhone = ScreenType.of(context).isPhone;
     final number = episode.raw['IndexNumber'];
     final tag = episode.imageTags['Primary']; // an episode's Primary image is its 16:9 thumbnail
     final overview = (episode.raw['Overview'] as String?)?.trim();
     final details = [formatRuntime(episode.raw['RunTimeTicks']), _airDate].whereType<String>().join(' · ');
-    final thumbWidth = isPhone ? 140.0 : 240.0;
 
-    return ScrollIntoViewOnFocus(
-      alignment: 0.4, // episodes are tall rows: settle a little lower so the previous one stays visible
-      child: HoverLift(
-        builder: (context, active) => Tappable(
-          onPress: () => context.push('/play/${episode.id}'),
-          onLongPress: () => showItemMenu(context, episode),
-          child: AnimatedScale(
-            scale: active ? 1.0 : 0.98, // a gentle lift: rows are wide, so a small scale is plenty
-            duration: const Duration(milliseconds: 150),
-            curve: Curves.easeOut,
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              spacing: 16,
-              children: [
-                // ── Thumbnail ──
-                AnimatedContainer(
+    return HoverLift(
+      builder: (context, active) => Tappable(
+        onPress: () => context.push('/play/${episode.id}'),
+        onLongPress: () => showItemMenu(context, episode),
+        child: SizedBox(
+          width: width,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // ── Thumbnail ──
+              AnimatedScale(
+                scale: active ? 1.0 : 0.96,
+                duration: const Duration(milliseconds: 150),
+                curve: Curves.easeOut,
+                child: AnimatedContainer(
                   duration: const Duration(milliseconds: 150),
                   decoration: BoxDecoration(
                     borderRadius: BorderRadius.circular(8),
@@ -616,95 +656,109 @@ class _EpisodeTile extends StatelessWidget {
                   ),
                   foregroundDecoration: BoxDecoration(
                     border: Border.all(
-                      color: active ? colors.primary : colors.primary.withValues(alpha: 0),
+                      color: active && !FocusSlotRow.ownsBorder(context) ? colors.primary : colors.primary.withValues(alpha: 0),
                       width: 2.5,
                     ),
                     borderRadius: BorderRadius.circular(8),
                   ),
                   child: ClipRRect(
                     borderRadius: BorderRadius.circular(8),
-                    child: SizedBox(
-                      width: thumbWidth,
-                      child: AspectRatio(
-                        aspectRatio: 16 / 9,
-                        child: Stack(
-                          fit: StackFit.expand,
-                          children: [
-                            tag == null
-                                ? ColoredBox(
-                              color: colors.surfaceContainerHighest,
-                              child: Icon(
-                                appIcons.play,
-                                color: colors.onSurfaceVariant,
-                                fill: 1,
-                              ),
-                            )
-                                : Image.network(
-                              jellyfin.client!.images.url(
-                                itemId: episode.id,
-                                type: JellyfinImagesApi.typePrimary,
-                                tag: tag,
-                                fillWidth: (thumbWidth * 2).round(),
-                                quality: 90,
-                              ),
-                              fit: BoxFit.cover,
+                    child: AspectRatio(
+                      aspectRatio: 16 / 9,
+                      child: Stack(
+                        fit: StackFit.expand,
+                        children: [
+                          tag == null
+                              ? ColoredBox(
+                            color: colors.surfaceContainerHighest,
+                            child: Icon(
+                              appIcons.play,
+                              color: colors.onSurfaceVariant,
+                              fill: 1,
                             ),
-                            if (watchProgress(episode) case final progress?)
-                              Positioned(
-                                left: 6,
-                                right: 6,
-                                bottom: 6,
-                                child: WatchProgressBar(progress),
-                              ),
-                            if (isWatched(episode))
-                              const Positioned(
-                                top: 6,
-                                right: 6,
-                                child: WatchedBadge(size: 20),
-                              ),
-                          ],
-                        ),
+                          )
+                              : Image.network(
+                            jellyfin.client!.images.url(
+                              itemId: episode.id,
+                              type: JellyfinImagesApi.typePrimary,
+                              tag: tag,
+                              fillWidth: (width * 2).round(),
+                              quality: 90,
+                            ),
+                            fit: BoxFit.cover,
+                          ),
+                          if (watchProgress(episode) case final progress?)
+                            Positioned(
+                              left: 6,
+                              right: 6,
+                              bottom: 6,
+                              child: WatchProgressBar(progress),
+                            ),
+                          if (isWatched(episode))
+                            const Positioned(
+                              top: 6,
+                              right: 6,
+                              child: WatchedBadge(size: 20),
+                            ),
+                        ],
                       ),
                     ),
                   ),
                 ),
+              ),
+              const SizedBox(height: 8),
 
-                // ── Text ──
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    spacing: 4,
-                    children: [
-                      Text(
-                        number != null
-                            ? '$number. ${episode.name}'
-                            : episode.name,
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                        style: context.text.bodyLarge?.copyWith(
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                      if (details.isNotEmpty)
-                        Text(
-                          details,
-                          style: context.text.bodySmall?.copyWith(
-                            color: colors.onSurfaceVariant,
-                          ),
-                        ),
-                      if (overview != null && overview.isNotEmpty)
-                        Text(
-                          overview,
-                          maxLines: isPhone ? 2 : 3,
-                          overflow: TextOverflow.ellipsis,
-                          style: context.text.bodyMedium,
-                        ),
-                    ],
+              // ── Text ──
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      number != null
+                          ? '$number. ${episode.name}'
+                          : episode.name,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: _titleStyle(context),
+                    ),
                   ),
+                  if (DownloadsController.supported)
+                    SizedBox(
+                      height: _buttonHeight,
+                      child: DownloadButton(item: episode, compact: true),
+                    ),
+                ],
+              ),
+              const SizedBox(height: 4),
+              // Runtime and air date, then its score with a star.
+              Text.rich(
+                TextSpan(
+                  children: [
+                    TextSpan(text: details),
+                    if (episode.raw['CommunityRating'] case final num score) ...[
+                      TextSpan(text: details.isEmpty ? '' : ' · '),
+                      WidgetSpan(
+                        alignment: PlaceholderAlignment.middle,
+                        child: Icon(appIcons.star, size: 12, color: colors.primary, fill: 1),
+                      ),
+                      TextSpan(text: ' ${score.toStringAsFixed(1)}'),
+                    ],
+                  ],
                 ),
-                DownloadButton(item: episode, compact: true),
-              ],
-            ),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: context.text.bodySmall?.copyWith(
+                  color: colors.onSurfaceVariant,
+                ),
+              ),
+              const SizedBox(height: 4),
+              if (overview != null && overview.isNotEmpty)
+                Text(
+                  overview,
+                  maxLines: _overviewLines(context),
+                  overflow: TextOverflow.ellipsis,
+                  style: context.text.bodyMedium,
+                ),
+            ],
           ),
         ),
       ),
@@ -718,11 +772,15 @@ class _CastTile extends StatelessWidget {
 
   final Map<String, dynamic> person;
 
-  /// Its height: the photo, then up to two lines of name and one of character or job, measured
+  /// Its width, and its photo's.
+  static const width = 110.0;
+  static const photo = 96.0;
+
+  /// Its height: the photo, then a line of name and one of character or job, measured
   /// in the font and text size in use (so nothing's cut off with larger text).
   static double heightOf(BuildContext context) {
     final small = context.text.bodySmall;
-    return 96 + 4 + 2 * lineHeightOf(context, small) + 4 + lineHeightOf(context, small) + 2;
+    return photo + 4 + lineHeightOf(context, small) + 4 + lineHeightOf(context, small) + 2;
   }
 
   @override
@@ -738,7 +796,7 @@ class _CastTile extends StatelessWidget {
       builder: (context, active) => Tappable(
         onPress: () => openPerson(context, id),
         child: SizedBox(
-          width: 110,
+          width: width,
           child: Column(
             spacing: 4,
             children: [
@@ -752,13 +810,13 @@ class _CastTile extends StatelessWidget {
                   foregroundDecoration: BoxDecoration(
                     shape: BoxShape.circle,
                     border: Border.all(
-                      color: active ? colors.primary : colors.primary.withValues(alpha: 0),
+                      color: active && !FocusSlotRow.ownsBorder(context) ? colors.primary : colors.primary.withValues(alpha: 0),
                       width: 2.5,
                     ),
                   ),
                   child: ClipOval(
                     child: SizedBox.square(
-                      dimension: 96,
+                      dimension: photo,
                       child: tag == null
                           ? ColoredBox(
                         color: colors.surfaceContainerHighest,
@@ -783,10 +841,12 @@ class _CastTile extends StatelessWidget {
                   ),
                 ),
               ),
+              // One line each, cut short with "…" if it's longer.
               Text(
                 name,
                 textAlign: TextAlign.center,
-                maxLines: 2,
+                maxLines: 1,
+                softWrap: false,
                 overflow: TextOverflow.ellipsis,
                 style: context.text.bodySmall,
               ),
@@ -795,6 +855,7 @@ class _CastTile extends StatelessWidget {
                   role,
                   textAlign: TextAlign.center,
                   maxLines: 1,
+                  softWrap: false,
                   overflow: TextOverflow.ellipsis,
                   style: context.text.bodySmall?.copyWith(
                     color: colors.onSurfaceVariant,
@@ -855,9 +916,8 @@ class _FavoriteButtonState extends State<_FavoriteButton> {
       color: _favorite ? context.colors.primary : null,
       fill: _favorite ? 1 : 0,
     );
-    final label = Text(_favorite ? 'Favorited' : 'Favorite');
     // Filled, like the banner's More info: an outline alone gets lost on a busy backdrop.
-    return FilledButton.tonalIcon(style: actionButtonStyle, onPressed: _toggle, icon: icon, label: label);
+    return _action(context, icon: icon, label: _favorite ? 'Favorited' : 'Favorite', onPressed: _toggle);
   }
 }
 
@@ -901,13 +961,68 @@ class _WatchedButtonState extends State<_WatchedButton> {
 
 /// Mark as watched (or unwatched, when [watched]): filled, like Favorite, as an outline alone
 /// gets lost on a busy backdrop.
-Widget _watchedButton(BuildContext context, {required bool watched, required VoidCallback? onPressed}) =>
-    FilledButton.tonalIcon(
-      style: actionButtonStyle,
-      onPressed: onPressed,
-      icon: Icon(appIcons.check, size: 18, color: watched ? context.colors.primary : null, fill: 1),
-      label: Text(watched ? 'Mark as unwatched' : 'Mark as watched'),
-    );
+Widget _watchedButton(BuildContext context, {required bool watched, required VoidCallback? onPressed}) => _action(
+  context,
+  icon: Icon(appIcons.check, size: 18, color: watched ? context.colors.primary : null, fill: 1),
+  label: watched ? 'Mark as unwatched' : 'Mark as watched',
+  onPressed: onPressed,
+);
+
+/// Inside it (beside a title's logo on TVs and tablets: see _SplitHero), Play, Trailer, Favorite,
+/// Mark as watched and the like show just their icons, with no fill, so they stay on one line.
+class _IconActions extends InheritedWidget {
+  const _IconActions({required super.child});
+
+  static bool of(BuildContext context) => context.dependOnInheritedWidgetOfExactType<_IconActions>() != null;
+
+  @override
+  bool updateShouldNotify(_IconActions old) => false;
+}
+
+/// One of a page's buttons (Favorite, Mark as watched, ...): filled, as an outline alone gets lost
+/// on a busy backdrop, with its [label]; in [_IconActions], just its [icon], on nothing until it's
+/// focused or hovered.
+Widget _action(BuildContext context, {required Widget icon, required String label, required VoidCallback? onPressed}) {
+  if (!_IconActions.of(context)) {
+    return FilledButton.tonalIcon(style: actionButtonStyle, onPressed: onPressed, icon: icon, label: Text(label));
+  }
+  return Semantics(
+    label: label,
+    button: true,
+    excludeSemantics: true,
+    child: FilledButton.tonal(style: _iconActionStyle(context.colors), onPressed: onPressed, child: icon),
+  );
+}
+
+/// A page's Play: filled, with its [label] ("Play", "Continue"); in [_IconActions], just its icon,
+/// on nothing until it's focused or hovered, as the buttons beside it.
+Widget _playButton(BuildContext context, {required String label, required VoidCallback? onPressed}) {
+  final icon = Icon(appIcons.play, size: 18, fill: 1);
+  if (_IconActions.of(context)) {
+    return _action(context, icon: Icon(appIcons.play, size: 20, fill: 1), label: label, onPressed: onPressed);
+  }
+  return FilledButton(
+    style: actionButtonStyle,
+    onPressed: onPressed,
+    child: Row(mainAxisSize: MainAxisSize.min, spacing: 8, children: [icon, Text(label)]),
+  );
+}
+
+/// [actionButtonStyle] around just an icon, see-through, in the page's text color: as tall as
+/// Play and the genre buttons (the theme's height), and about as wide.
+ButtonStyle _iconActionStyle(ColorScheme colors) => actionButtonStyle.copyWith(
+  backgroundColor: WidgetStateProperty.resolveWith(
+    (states) => colors.onSurface.withValues(
+      alpha: states.contains(WidgetState.focused) || states.contains(WidgetState.hovered) ? 0.16 : 0,
+    ),
+  ),
+  foregroundColor: WidgetStatePropertyAll(colors.onSurface),
+  // Straight to the new one's fill, rather than the last one's fading out under it: two at once.
+  animationDuration: Duration.zero,
+  padding: const WidgetStatePropertyAll(EdgeInsets.symmetric(horizontal: 10)),
+  // A button's usual height (the theme's density applies to it, as to Play's), and as wide.
+  minimumSize: const WidgetStatePropertyAll(Size(40, 40)),
+);
 
 /// Plays the title's trailer in the app: one on the server in the app's player, a YouTube one
 /// full screen in YouTube's player (in the browser on desktops). Only there once a trailer
@@ -939,13 +1054,7 @@ class _TrailerButton extends StatelessWidget {
     builder: (context, snap) {
       final trailer = snap.data;
       if (trailer == null) return const SizedBox.shrink();
-      // Filled, like the banner's More info: an outline alone gets lost on a busy backdrop.
-      return FilledButton.tonalIcon(
-        style: actionButtonStyle,
-        onPressed: () => _play(context, trailer),
-        icon: Icon(appIcons.trailer, size: 18, fill: 1),
-        label: const Text('Trailer'),
-      );
+      return _action(context, icon: Icon(appIcons.trailer, size: 18, fill: 1), label: 'Trailer', onPressed: () => _play(context, trailer));
     },
   );
 }
@@ -989,8 +1098,9 @@ class _SeriesPlayButtonState extends State<_SeriesPlayButton> {
     final next = _next?.episode;
     final label = _next?.started ?? false ? 'Continue' : 'Play';
 
-    return FilledButton(
-      style: actionButtonStyle,
+    return _playButton(
+      context,
+      label: label,
       // Usable straight away (so the page can open with focus on it): pressed before the next
       // episode is found, it waits for it.
       onPressed: _next != null && next == null
@@ -1000,11 +1110,6 @@ class _SeriesPlayButtonState extends State<_SeriesPlayButton> {
               final episode = next ?? (await _nextEpisodeOf(widget.series, widget.seasons)).episode;
               if (episode != null) router.push('/play/${episode.id}');
             },
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        spacing: 8,
-        children: [Icon(appIcons.play, size: 18, fill: 1), Text(label)],
-      ),
     );
   }
 }

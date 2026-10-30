@@ -13,9 +13,9 @@ class _BackdropScope extends InheritedWidget {
   bool updateShouldNotify(_BackdropScope oldWidget) => false;
 }
 
-/// [item]'s backdrop across the top of the page, behind everything, fading into the page at the
-/// bottom and darkened on the left where the details sit. It scrolls up more slowly than the
-/// page ([scroll]).
+/// [item]'s backdrop behind the whole page. The picture stays put as the page scrolls; its fade
+/// scrolls with the page ([scroll]), so the details always sit on it, however light the picture
+/// is: clear at the top, darkening down to the details, and dimmed behind everything under them.
 class _PageBackdrop extends StatelessWidget {
   const _PageBackdrop({required this.item, required this.scroll, this.blurred = false});
 
@@ -26,10 +26,12 @@ class _PageBackdrop extends StatelessWidget {
   /// it sets a mood rather than showing a scene.
   final bool blurred;
 
-  static const _speed = 0.5; // how fast it moves with the page: 0 stays put, 1 scrolls with it
+  /// How much of the page's color is over the picture under the details: enough for any text to
+  /// read, with the picture still faintly there.
+  static const _dim = 0.9;
 
-  /// How tall the artwork is in a page [size]: 16:9 across its width, but no more than most
-  /// of its height.
+  /// How tall the artwork is on a phone [size]: 16:9 across its width, but no more than most of
+  /// its height. Elsewhere it fills the page.
   static double heightIn(Size size) => math.min(size.width * 9 / 16, size.height * 0.9);
 
   @override
@@ -37,9 +39,12 @@ class _PageBackdrop extends StatelessWidget {
     final tag = (item.raw['BackdropImageTags'] as List?)?.firstOrNull as String?;
     final background = Theme.of(context).scaffoldBackgroundColor;
     if (tag == null) return const SizedBox.shrink();
+    final (:top, :length) = _fade(context);
     return LayoutBuilder(
       builder: (context, constraints) {
-        final height = heightIn(constraints.biggest);
+        // The whole page (the top half, on a phone), the picture zoomed in as far as it needs to
+        // fill it.
+        final height = ScreenType.of(context).isPhone ? constraints.maxHeight / 2 : constraints.maxHeight;
         final pixels = View.of(context).physicalSize.width / MediaQuery.sizeOf(context).width;
         final image = Image.network(
           jellyfin.client!.images.url(
@@ -54,82 +59,109 @@ class _PageBackdrop extends StatelessWidget {
           alignment: Alignment.topCenter,
           errorBuilder: (_, _, _) => const SizedBox.shrink(),
         );
-        return AnimatedBuilder(
-          animation: scroll,
-          builder: (context, child) {
-            final offset = scroll.hasClients ? scroll.offset : 0.0;
-            return Transform.translate(offset: Offset(0, -offset * _speed), child: child);
-          },
-          // Only moved while scrolling, not rebuilt.
-          child: Align(
-            alignment: Alignment.topCenter,
-            child: SizedBox(
-              height: height,
-              width: double.infinity,
-              child: Stack(
-                fit: StackFit.expand,
-                children: [
-                  // The picture stops a little short of the fade's end, so no sliver of it can
-                  // show below (a fractional height or scroll offset can leave one).
-                  if (blurred)
-                    // A small picture, blurred a little and dimmed: light enough for a TV to draw.
-                    // Clipped: a blur spreads past the picture's edges, which would show below
-                    // the fade as a band.
-                    Positioned.fill(
-                      bottom: 4,
-                      child: ClipRect(
+        return Stack(
+          fit: StackFit.expand,
+          children: [
+            // ── The picture, staying put ──
+            Align(
+              alignment: Alignment.topCenter,
+              child: SizedBox(
+                height: height,
+                width: double.infinity,
+                child: Stack(
+                  fit: StackFit.expand,
+                  children: [
+                    if (blurred)
+                      // A small picture, blurred a little and dimmed: light enough for a TV to draw.
+                      // Clipped: a blur spreads past the picture's edges.
+                      ClipRect(
                         child: ImageFiltered(
                           imageFilter: ImageFilter.blur(sigmaX: 12, sigmaY: 12, tileMode: TileMode.clamp),
                           child: image,
                         ),
-                      ),
-                    )
-                  else
-                    Positioned.fill(bottom: 4, child: image),
-                  if (blurred) ColoredBox(color: background.withValues(alpha: 0.35)),
-                  // Fading into the page at the bottom only: a long, gentle fade, so its end
-                  // never shows as an edge. It starts halfway down the title's logo (where its
-                  // bottom half is the fade's lightest part), so it doesn't wash out the picture
-                  // above it: on a light theme, especially, that showed as a haze over the top.
-                  DecoratedBox(
-                    decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        begin: Alignment.topCenter,
-                        end: Alignment.bottomCenter,
-                        stops: _fadeStops(_fadeStart(context, height)),
-                        colors: [
-                          background.withValues(alpha: 0),
-                          background.withValues(alpha: 0.3),
-                          background.withValues(alpha: 0.7),
-                          background.withValues(alpha: 0.93),
-                          background.withValues(alpha: 0.99),
-                          background,
-                        ],
+                      )
+                    else
+                      image,
+                    if (blurred) ColoredBox(color: background.withValues(alpha: 0.35)),
+                    // Its foot fades into the page, so where a short one ends never shows as an edge.
+                    DecoratedBox(
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          begin: Alignment.topCenter,
+                          end: Alignment.bottomCenter,
+                          stops: const [0.75, 1],
+                          colors: [background.withValues(alpha: 0), background],
+                        ),
                       ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
             ),
-          ),
+
+            // ── The fade, scrolling with the page ──
+            AnimatedBuilder(
+              animation: scroll,
+              builder: (context, _) {
+                final start = top - (scroll.hasClients ? scroll.offset : 0.0);
+                if (start >= constraints.maxHeight) return const SizedBox.shrink();
+                // One box from the fade's start to the bottom (two meeting would leave a seam): the
+                // fade over its first [length], then the dim on down.
+                final box = constraints.maxHeight - start;
+                final end = (length / box).clamp(0.0, 1.0);
+                return Stack(
+                  children: [
+                    Positioned(
+                      top: start,
+                      left: 0,
+                      right: 0,
+                      bottom: 0,
+                      child: DecoratedBox(
+                        decoration: BoxDecoration(
+                          gradient: LinearGradient(
+                            begin: Alignment.topCenter,
+                            end: Alignment.bottomCenter,
+                            // A long, gentle fade, so its start never shows as an edge.
+                            stops: [
+                              for (final t in const [0.0, 0.3, 0.55, 0.75, 1.0]) t * end,
+                              1,
+                            ],
+                            colors: [
+                              background.withValues(alpha: 0),
+                              background.withValues(alpha: 0.25),
+                              background.withValues(alpha: 0.55),
+                              background.withValues(alpha: 0.75),
+                              background.withValues(alpha: _dim),
+                              background.withValues(alpha: _dim),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                );
+              },
+            ),
+          ],
         );
       },
     );
   }
 }
 
-/// Where the backdrop's fade starts, as a share of its [height]: about halfway down a title's
-/// logo (its box is at the bottom of the room above the details: see [_heroRoom]; a logo is
-/// usually wider than its box is, so shorter, and sits at its bottom).
-double _fadeStart(BuildContext context, double height) {
-  final logoMiddle = _heroTop + _heroRoom(context) - _HeroTitle.logoBox(context) * 0.4;
-  return (logoMiddle / height).clamp(0.1, 0.8);
+/// Where the backdrop's fade starts, down the page (before it scrolls), and how long it is. Over
+/// the room above the details, so the picture shows clearly there, and as dark as it gets a
+/// little below where the details start.
+({double top, double length}) _fade(BuildContext context) {
+  // A phone's: down the lower half of its half-page picture, as dark as it gets at its foot.
+  if (ScreenType.of(context).isPhone) {
+    final half = MediaQuery.sizeOf(context).height / 2;
+    return (top: half * 0.5, length: half * 0.5);
+  }
+  // The details' top (see _SplitHero): the fade 3/4 of the way by then.
+  final details = _heroTop + _splitTop(context);
+  return (top: details - 200, length: 280.0);
 }
-
-/// The fade's stops, from [start] to the end: the same gentle curve, wherever it starts.
-List<double> _fadeStops(double start) => [
-  for (final t in const [0.0, 0.35, 0.62, 0.83, 0.94, 1.0]) start + t * (0.97 - start),
-];
 
 /// Above the first part of a title's page (DetailLayout.topPadding), and under its logo.
 const _heroTop = 24.0;
@@ -164,12 +196,11 @@ class _HeroTitle extends StatelessWidget {
   /// The tallest a logo gets (a season's poster and a person's photo start where its top would be).
   static double logoBox(BuildContext context) => TitleLogo.hero(ScreenType.of(context).isPhone).height;
 
-  @override
-  Widget build(BuildContext context) {
+  /// The title's logo, or its name where it has none, at the size a page's top has it, or as big
+  /// as [room] allows.
+  static Widget mark(BuildContext context, JellyfinItem item, {Size? room}) {
     final isPhone = ScreenType.of(context).isPhone;
     final logoTag = item.imageTags['Logo'];
-    final hasBackdrop = ((item.raw['BackdropImageTags'] as List?)?.isNotEmpty ?? false);
-    final height = _heroRoom(context, hasBackdrop: hasBackdrop);
     final name = Text(
       item.name,
       maxLines: 2,
@@ -179,19 +210,195 @@ class _HeroTitle extends StatelessWidget {
         shadows: const [Shadow(blurRadius: 8, color: Color(0x99000000))],
       ),
     );
+    if (logoTag == null) {
+      return ConstrainedBox(
+        constraints: BoxConstraints(maxWidth: room?.width ?? (isPhone ? 220 : 400)),
+        child: name,
+      );
+    }
+    return room == null
+        ? TitleLogo(itemId: item.id, tag: logoTag, size: TitleLogo.hero(isPhone), fallback: name)
+        : TitleLogo.upTo(
+            itemId: item.id,
+            tag: logoTag,
+            size: room,
+            fallback: name,
+            // In the middle, on a phone (see _SplitHero).
+            alignment: isPhone ? Alignment.topCenter : Alignment.topLeft,
+          );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final hasBackdrop = ((item.raw['BackdropImageTags'] as List?)?.isNotEmpty ?? false);
+    final height = _heroRoom(context, hasBackdrop: hasBackdrop);
     return Padding(
       padding: pageSides(context, extra: 12).copyWith(bottom: _heroBottom),
       child: ConstrainedBox(
         constraints: BoxConstraints(minHeight: height),
-        child: Align(
-          alignment: Alignment.bottomLeft,
-          child: logoTag == null
-              ? ConstrainedBox(constraints: BoxConstraints(maxWidth: isPhone ? 220 : 400), child: name)
-              : TitleLogo(itemId: item.id, tag: logoTag, size: TitleLogo.hero(isPhone), fallback: name),
-        ),
+        child: Align(alignment: Alignment.bottomLeft, child: mark(context, item)),
       ),
     );
   }
+}
+
+/// Where a title's details end (see [_SplitHero]): on TVs and tablets their buttons most of the way
+/// down the screen, so the artwork has the rest, and the next row's heading just shows below; on
+/// phones, just clear of the bottom bar.
+double _splitBottom(BuildContext context) {
+  final height = MediaQuery.sizeOf(context).height;
+  return (ScreenType.of(context).isPhone ? height - pageBottom(context, 24) : height * 0.83) - _heroTop;
+}
+
+/// About where a title's details start: [_splitBottom], less a logo at its tallest and the rest
+/// at their usual size. For the backdrop's fade.
+double _splitTop(BuildContext context) {
+  // A phone's: its logo (or picture) over the foot of the half-page picture.
+  if (ScreenType.of(context).isPhone) {
+    final half = MediaQuery.sizeOf(context).height / 2;
+    return math.max(half - _SplitHero.logoHeight(context) * 0.6, _clearOfTopBar(context));
+  }
+  return math.max(_splitBottom(context) - _SplitHero.logoHeight(context) - 20 - 40, _clearOfTopBar(context));
+}
+
+/// The top of a title's page on TVs and tablets, over its backdrop, in two rows:
+///
+///     LOGO                 | 2024  1h 34m  R  ★ 6.7
+///                          | Description...
+///     ▶ Play  ♡  ▶▶  ✓     | Genre  Genre  Genre
+///
+/// The logo (or a season's poster: [title], given the most room it can have) and what the title
+/// is start along the same line; the buttons and the genres along the next. The buttons show
+/// just their icons, so they stay on one line.
+class _SplitHero extends StatelessWidget {
+  const _SplitHero({
+    required this.title,
+    required this.about,
+    this.description,
+    this.titleSize,
+    this.buttons,
+    this.genres,
+  });
+
+  final Widget Function(Size room) title;
+  final Widget? buttons; // none on a person's page
+  final List<Widget> about; // what it is
+  final Widget? genres;
+
+  /// Under [about], filling the rest of the room beside [title] with as much as fits; "Read
+  /// more" scrolls the rest in the same room (see [ExpandableText.fill]).
+  final String? description;
+
+  /// How big [title] is (a season's poster, a person's photo), if not a logo at its biggest: the
+  /// details start just past it, and [about] and [description] have at most its height.
+  final Size? titleSize;
+
+  static const _gap = 48.0;
+
+  /// The tallest a logo gets: a fifth of the page. On a phone, a season's poster and a person's
+  /// photo are this tall too.
+  static double logoHeight(BuildContext context) => MediaQuery.sizeOf(context).height * 0.2;
+
+  /// On a phone, the most room the description has under the rest, before "Read more".
+  static double descriptionHeight(BuildContext context) => MediaQuery.sizeOf(context).height * 0.18;
+
+  @override
+  Widget build(BuildContext context) => ScreenType.of(context).isPhone
+      // A phone's: from the foot of the picture down.
+      ? Padding(
+          // A picture taller than a logo (a season's poster) ends where the logo would, so it
+          // reaches further up the backdrop instead.
+          padding: pageSides(context, extra: 12).copyWith(
+            top: math.max(
+              _splitTop(context) - math.max(0.0, (titleSize?.height ?? 0) - logoHeight(context)),
+              _clearOfTopBar(context),
+            ),
+            bottom: 8,
+          ),
+          child: _stacked(context),
+        )
+      : Padding(
+    padding: pageSides(context, extra: 12).copyWith(top: _clearOfTopBar(context), bottom: 8),
+    // Down to [_splitBottom], from the bottom up (a taller description runs on down instead).
+    child: ConstrainedBox(
+      constraints: BoxConstraints(minHeight: _splitBottom(context) - _clearOfTopBar(context)),
+      child: Align(alignment: Alignment.bottomLeft, child: _rows(context)),
+    ),
+  );
+
+  /// A phone's: one under another, as wide as the page. The logo (or picture) in the middle, then
+  /// what it is, the buttons, the description, the genres.
+  Widget _stacked(BuildContext context) => LayoutBuilder(
+    builder: (context, constraints) => _IconActions(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        spacing: 12,
+        children: [
+          Center(child: title(titleSize ?? Size(constraints.maxWidth * 0.85, logoHeight(context)))),
+          ...about,
+          ?buttons,
+          if (description case final text? when text.isNotEmpty)
+            ConstrainedBox(
+              constraints: BoxConstraints(maxHeight: descriptionHeight(context)),
+              child: ExpandableText.fill(text, style: context.text.bodyLarge),
+            ),
+          ?genres,
+        ],
+      ),
+    ),
+  );
+
+  Widget _rows(BuildContext context) => LayoutBuilder(
+    builder: (context, constraints) {
+      final left = titleSize?.width ?? (constraints.maxWidth - _gap) / 3;
+      // As big as fits beside the description, and no taller than [logoHeight].
+      final room = titleSize ?? Size(left, logoHeight(context));
+      // [bottom]: both along the row's foot (what a title is, right above its genres).
+      Widget row(Widget a, Widget? b, {bool bottom = false}) => Row(
+        crossAxisAlignment: bottom ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+        spacing: _gap,
+        children: [
+          SizedBox(
+            width: left,
+            child: Align(alignment: bottom ? Alignment.bottomLeft : Alignment.topLeft, child: a),
+          ),
+          Expanded(child: b ?? const SizedBox.shrink()),
+        ],
+      );
+      return _IconActions(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          spacing: 20,
+          children: [
+            // One row for a remote: ↑/↓ go past it (the photo to the titles under it), → from the
+            // picture reaches "Read more".
+            FocusRow(
+              child: row(
+                title(room),
+                // Only as tall as it needs, up to the picture's height (a longer description
+                // then ends in "Read more"), and down at the foot of the row.
+                bottom: true,
+                ConstrainedBox(
+                  constraints: BoxConstraints(maxHeight: room.height),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    spacing: 12,
+                    children: [
+                      ...about,
+                      if (description case final text? when text.isNotEmpty)
+                        Flexible(child: ExpandableText.fill(text, style: context.text.bodyLarge)),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+            if (buttons != null || genres != null) row(buttons ?? const SizedBox.shrink(), genres),
+          ],
+        ),
+      );
+    },
+  );
 }
 
 /// The top of a season's page over its show's backdrop: room to see the artwork, with the
@@ -202,23 +409,31 @@ class _SeasonHero extends StatelessWidget {
   final JellyfinItem season;
   final JellyfinItem series;
 
+  /// How tall [poster] is.
+  static double posterHeight(BuildContext context, JellyfinItem series) {
+    final hasBackdrop = ((series.raw['BackdropImageTags'] as List?)?.isNotEmpty ?? false);
+    return _heroPoster(context, _artworkRoom(context, hasBackdrop: hasBackdrop)).posterHeight;
+  }
+
+  /// The season's poster (or the show's, if it has none), lifted off the artwork.
+  static Widget poster(BuildContext context, JellyfinItem season, JellyfinItem series) {
+    final posterHeight = _SeasonHero.posterHeight(context, series);
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(8),
+        boxShadow: const [BoxShadow(color: Color(0x66000000), blurRadius: 18, offset: Offset(0, 6))],
+      ),
+      child: DetailPoster(item: season.imageTags['Primary'] != null ? season : series, width: posterHeight * 2 / 3),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final hasBackdrop = ((series.raw['BackdropImageTags'] as List?)?.isNotEmpty ?? false);
-    final poster = season.imageTags['Primary'] != null ? season : series;
-    final (:above, :posterHeight) = _heroPoster(context, _artworkRoom(context, hasBackdrop: hasBackdrop));
+    final (:above, posterHeight: _) = _heroPoster(context, _artworkRoom(context, hasBackdrop: hasBackdrop));
     return Padding(
       padding: pageSides(context, extra: 12).copyWith(top: above, bottom: 8),
-      child: Align(
-          alignment: Alignment.bottomLeft,
-          child: DecoratedBox(
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(8),
-              boxShadow: const [BoxShadow(color: Color(0x66000000), blurRadius: 18, offset: Offset(0, 6))],
-            ),
-            child: DetailPoster(item: poster, width: posterHeight * 2 / 3),
-          ),
-      ),
+      child: Align(alignment: Alignment.bottomLeft, child: poster(context, season, series)),
     );
   }
 }
@@ -231,7 +446,11 @@ class _SeasonHero extends StatelessWidget {
   final isPhone = ScreenType.of(context).isPhone;
   return (
     above: math.max(room - _HeroTitle.logoBox(context), _clearOfTopBar(context)),
-    posterHeight: isPhone ? 150.0 : (room * 0.85).clamp(180.0, 300.0),
+    // On a phone, 300 tall (less on a short screen): it ends where a logo would, growing up from
+    // there (see _SplitHero).
+    posterHeight: isPhone
+        ? math.min(300.0, MediaQuery.sizeOf(context).height * 0.4)
+        : (room * 0.85).clamp(180.0, 300.0),
   );
 }
 
@@ -289,45 +508,31 @@ class _PersonHero extends StatelessWidget {
       if (movies > 0) '$movies ${movies == 1 ? 'movie' : 'movies'}',
       if (shows > 0) '$shows ${shows == 1 ? 'show' : 'shows'}',
     ];
-    // The photo sized and placed as a season's poster is, where a title's logo goes.
-    final (:above, :posterHeight) = _heroPoster(context, _artworkRoom(context));
+    // The photo sized as a season's poster is, where a title's logo goes.
+    final (above: _, :posterHeight) = _heroPoster(context, _artworkRoom(context));
     final shadow = const [Shadow(blurRadius: 8, color: Color(0x99000000))];
 
-    return Padding(
-      padding: pageSides(context, extra: 12).copyWith(top: above, bottom: 8),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        spacing: 12,
-        children: [
-          // ── Photo, and the name beside its foot ──
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.end,
-            spacing: isPhone ? 14 : 20,
-            children: [
-              // Where the page starts with a remote; selecting it shows the photo full size.
-              _StartsHere(child: _PersonPortrait(person: person, height: posterHeight)),
-              Expanded(
-                child: Text(
-                  person.name,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  style: (isPhone ? context.text.headlineMedium : context.text.displaySmall)?.copyWith(
-                    color: const Color(0xFFFFFFFF),
-                    shadows: shadow,
-                  ),
-                ),
-              ),
-            ],
+    // Their photo where a title's logo goes, their name and details beside it (under it, on a
+    // phone).
+    return _SplitHero(
+        // Where the page starts with a remote; selecting it shows the photo full size.
+        title: (_) => _StartsHere(child: _PersonPortrait(person: person, height: posterHeight)),
+        titleSize: Size(posterHeight * 2 / 3, posterHeight),
+        about: [
+          Text(
+            person.name,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: (isPhone ? context.text.headlineMedium : context.text.displaySmall)?.copyWith(
+              color: const Color(0xFFFFFFFF),
+              shadows: shadow,
+            ),
           ),
-
-          // ── Their details, as a title's are ──
-          for (final line in _lifeLines) Text(line, style: muted),
+          for (final line in _lifeLines) Text(line, style: muted, maxLines: 1, overflow: TextOverflow.ellipsis),
           if (counts.isNotEmpty) Text('${counts.join(' · ')} in your library', style: muted),
-          if (bio != null && bio.isNotEmpty)
-            ExpandableText(bio, limit: isPhone ? 150 : 400, style: context.text.bodyLarge),
         ],
-      ),
-    );
+        description: bio,
+      );
   }
 }
 
@@ -626,19 +831,6 @@ class _ItemRowState extends State<_ItemRow> {
   /// The row's padding at its ends, as Home's rows have.
   EdgeInsets _sides(BuildContext context) => CardRows.sides(context);
 
-  /// With a remote, scrolls the row so card [index] sits in the last slot that fits whole (or
-  /// as far as the row goes), as Home's rows do.
-  void _keepInSlot(BuildContext context, int index, double width) {
-    if (FocusManager.instance.highlightMode != FocusHighlightMode.traditional) return;
-    if (!_scroll.hasClients) return;
-    final position = _scroll.position;
-    final step = width + _gap;
-    final slot = math.max(0, ((position.viewportDimension - _sides(context).left - width) / step).floor());
-    final offset = ((index - slot) * step).clamp(position.minScrollExtent, position.maxScrollExtent);
-    if ((offset - position.pixels).abs() < 0.5) return;
-    position.animateTo(offset, duration: const Duration(milliseconds: 200), curve: Curves.easeOutCubic);
-  }
-
   @override
   Widget build(BuildContext context) {
     final view = widget.view ?? libraryViewFor(context);
@@ -651,59 +843,50 @@ class _ItemRowState extends State<_ItemRow> {
     // A line of text and the room above it.
     final captionHeight = widget.captioned ? 6 + lineHeightOf(context, captionStyle) + 1 : 0.0;
     final heading = Text(widget.title, style: context.text.titleLarge);
-    Widget row = FocusRow(
-      child: ListView.separated(
-        controller: _scroll,
-        scrollDirection: Axis.horizontal,
-        // Inside the list, so the first card lines up with the page but cards still scroll
-        // right to the screen's edge.
-        padding: _sides(context),
-        itemCount: items.length,
-        separatorBuilder: (_, _) => const SizedBox(width: _gap),
-        itemBuilder: (context, i) => SizedBox(
-          width: width,
-          child: Focus(
-            // Doesn't take focus itself: notices the card getting it, and scrolls the row.
-            canRequestFocus: false,
-            skipTraversal: true,
-            onFocusChange: (focused) {
-              if (focused) _keepInSlot(context, i, width);
-            },
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                SizedBox(
-                  height: height,
-                  child: PosterCard(
-                    item: items[i],
-                    view: view,
-                    // The first card grows away from the screen's left edge, the last away from its right.
-                    anchor: i == 0
-                        ? Alignment.centerLeft
-                        : i == items.length - 1
-                        ? Alignment.centerRight
-                        : Alignment.center,
-                    onPress: () => openItem(context, items[i]),
+    Widget row = FocusSlotRow(
+      controller: _scroll,
+      // Inside the list, so the first card lines up with the page but cards still scroll
+      // right to the screen's edge.
+      padding: _sides(context),
+      itemCount: items.length,
+      itemWidth: width,
+      frameFor: (_) => SlotFrame(width: width, height: height, borderWidth: PosterCard.borderWidth),
+      separatorBuilder: (_, _) => const SizedBox(width: _gap),
+      itemBuilder: (context, i) => SizedBox(
+        width: width,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            SizedBox(
+              height: height,
+              child: PosterCard(
+                item: items[i],
+                view: view,
+                // The first card grows away from the screen's left edge, the last away from its right.
+                anchor: i == 0
+                    ? Alignment.centerLeft
+                    : i == items.length - 1
+                    ? Alignment.centerRight
+                    : Alignment.center,
+                onPress: () => openItem(context, items[i]),
+              ),
+            ),
+            if (widget.captioned)
+              Padding(
+                // Centered under the card's picture, which rests in from its edges.
+                padding: const EdgeInsets.only(top: 6, left: 8, right: 8),
+                child: SizedBox(
+                  width: double.infinity,
+                  child: Text(
+                    items[i].name,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    textAlign: TextAlign.center,
+                    style: captionStyle,
                   ),
                 ),
-                if (widget.captioned)
-                  Padding(
-                    // Centered under the card's picture, which rests in from its edges.
-                    padding: const EdgeInsets.only(top: 6, left: 8, right: 8),
-                    child: SizedBox(
-                      width: double.infinity,
-                      child: Text(
-                        items[i].name,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        textAlign: TextAlign.center,
-                        style: captionStyle,
-                      ),
-                    ),
-                  ),
-              ],
-            ),
-          ),
+              ),
+          ],
         ),
       ),
     );
