@@ -28,6 +28,10 @@ class LayeredImage extends StatefulWidget {
 class _LayeredImageState extends State<LayeredImage> {
   int _tried = 0; // how many have failed
 
+  /// Whether a picture has shown. A new one (the same logo fetched again, say) then loads behind
+  /// it, rather than the fallback flashing up while it does.
+  bool _shown = false;
+
   @override
   void didUpdateWidget(LayeredImage old) {
     super.didUpdateWidget(old);
@@ -45,11 +49,20 @@ class _LayeredImageState extends State<LayeredImage> {
       width: widget.width,
       height: widget.height,
       filterQuality: FilterQuality.medium,
-      // Until it's in: the next thing down, so nothing pops in empty.
-      frameBuilder: (context, child, frame, loaded) => loaded || frame != null ? child : widget.fallback,
+      gaplessPlayback: true, // the last picture stays up while a new one loads
+      // Until the first is in: the next thing down, so nothing pops in empty.
+      frameBuilder: (context, child, frame, loaded) {
+        if (loaded || frame != null) _shown = true;
+        return _shown ? child : widget.fallback;
+      },
       errorBuilder: (context, _, _) {
         WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (mounted) setState(() => _tried++);
+          if (mounted) {
+            setState(() {
+              _tried++;
+              _shown = false; // (what showed was the one that failed)
+            });
+          }
         });
         return widget.fallback;
       },
