@@ -147,7 +147,8 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
   static const _subtitleSides = 0.06;
 
   /// While the controls show, subtitles move up above the seek bar and buttons. Those are a
-  /// fixed size, so this is in pixels: at least this far from the bottom.
+  /// fixed size, so this is in pixels: at least this far from the bottom (plus the chapter
+  /// row while it's open).
   static const _controlsClearance = 150.0;
   static const _controlsClearancePhone = 146.0;
 
@@ -163,7 +164,8 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
     lifted = lifted && playbackSettings.liftSubtitles; // "Move up when controls show" in Settings
     final size = MediaQuery.sizeOf(context);
     final raise = size.height * playbackSettings.subtitleRaise;
-    final clearance = _isPhone ? _controlsClearancePhone : _controlsClearance;
+    final clearance = (_isPhone ? _controlsClearancePhone : _controlsClearance) +
+        (_chaptersOpen ? _chapterRowHeight(context, compact: _isPhone) : 0);
     final sides = size.width * _subtitleSides;
     return EdgeInsets.fromLTRB(sides, 0, sides, lifted ? math.max(raise, clearance) : raise);
   }
@@ -1948,8 +1950,10 @@ builder: (context) => Dialog(child: Padding(
                   //    height on a phone as on a TV. ──
                   IgnorePointer(
                     child: AnimatedPadding(
-                      duration: const Duration(milliseconds: 200), // the same speed as the controls' fade
-                      curve: Curves.easeOut,
+                      // The same speed and curve as the chapter row opening (see _PlayerControls), so
+                      // they rise together.
+                      duration: const Duration(milliseconds: 220),
+                      curve: Curves.easeOutCubic,
                       padding: _subtitlePadding(lifted: _controlsVisible),
                       child: Align(
                         alignment: Alignment.bottomCenter,
