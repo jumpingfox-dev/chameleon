@@ -46,3 +46,7 @@ app.*.map.json
 
 # Widget Preview related
 .widget_preview/
+
+# Local notes, kept out of the repo
+handoff.md
+docs/app-store-listing.md
